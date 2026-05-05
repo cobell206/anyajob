@@ -1,0 +1,40 @@
+{
+  "profile": {
+    "name": "FILL IN",
+    "currentRole": "FILL IN — current job title and employer",
+    "yearsOutOfUndergrad": 0,
+    "gpaRange": "FILL IN — e.g. 3.7-3.9",
+    "undergradSchool": "FILL IN",
+    "lsatStatus": "FILL IN — e.g. 'studying, target test date Sept 2026' or 'taken: 168'",
+    "targetSchools": ["Columbia Law", "NYU Law"],
+    "interestAreas": ["FILL IN — e.g. public interest, litigation, corporate"],
+    "geo": "NYC",
+    "additionalContext": "FILL IN — volunteer work, languages, prior legal exposure, etc."
+  },
+  "keywords": {
+    "boost": ["paralegal", "judicial", "pro bono", "policy", "research", "legal assistant"],
+    "exclude": ["unpaid", "commission only", "MLM"],
+    "minSalary": 55000
+  },
+  "companies": {
+    "alwaysShow": [
+      "Cravath",
+      "Davis Polk",
+      "Sullivan & Cromwell",
+      "Wachtell",
+      "Skadden",
+      "Cleary Gottlieb",
+      "Paul Weiss",
+      "Simpson Thacher",
+      "ACLU",
+      "NAACP Legal Defense Fund",
+      "Legal Aid Society"
+    ],
+    "neverShow": []
+  },
+  "notifications": {
+    "to": ["FILL IN — her email address"],
+    "morningEmail": true,
+    "weeklyEmail": true
+  }
+}

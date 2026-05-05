@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# bin/lawbound-logs
+# Fetch redacted logs and diagnostic bundles from a deployed Lawbound
+# instance, for debugging and pasting into chats.
+#
+# Setup (one-time, on your laptop):
+#   1. Create a Cloudflare Access service token:
+#      Cloudflare dash → Zero Trust → Access → Service Auth → Create token
+#      Save the Client ID and Client Secret.
+#   2. Add the service token to the Cloudflare Access policy that protects
+#      jobs.yourdomain.com (Include rule → Service Auth → your token).
+#   3. Set these env vars (e.g., in ~/.zshrc or ~/.bashrc):
+#        export LAWBOUND_HOST=https://jobs.yourdomain.com
+#        export LAWBOUND_CF_CLIENT_ID=<your-client-id>
+#        export LAWBOUND_CF_CLIENT_SECRET=<your-client-secret>
+#
+# Usage:
+#   lawbound-logs                          # diagnostic bundle (text)
+#   lawbound-logs --json                   # diagnostic bundle (json)
+#   lawbound-logs daily                    # last 500 lines of daily.log
+#   lawbound-logs daily 1h                 # last hour of daily.log
+#   lawbound-logs discover --error         # only errors from discover.log
+#   lawbound-logs sources                  # what log files exist
+#   lawbound-logs --copy daily 1h          # fetch + pipe to clipboard
+#
+# Tip: pipe the output through `jq` for richer filtering:
+#   lawbound-logs daily --json | jq 'select(.level >= 40)'
+
+set -euo pipefail
+
+HOST="${LAWBOUND_HOST:-}"
+CF_ID="${LAWBOUND_CF_CLIENT_ID:-}"
+CF_SECRET="${LAWBOUND_CF_CLIENT_SECRET:-}"
+
+if [[ -z "$HOST" ]]; then
+  echo "Error: LAWBOUND_HOST not set. See setup notes at the top of this script." >&2
+  exit 2
+fi
+
+# Build curl args. CF Access service token headers are required.
+auth_args=()
+if [[ -n "$CF_ID" && -n "$CF_SECRET" ]]; then
+  auth_args=(-H "CF-Access-Client-Id: $CF_ID" -H "CF-Access-Client-Secret: $CF_SECRET")
+fi
+
+# Parse args
+copy_to_clipboard=false
+json_mode=false
+level_filter=""
+positional=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --copy|-c) copy_to_clipboard=true; shift ;;
+    --json|-j) json_mode=true; shift ;;
+    --error|-e) level_filter="error"; shift ;;
+    --warn|-w) level_filter="warn"; shift ;;
+    --debug|-d) level_filter="debug"; shift ;;
+    --help|-h)
+      sed -n '2,30p' "$0" | sed 's/^# \?//'
+      exit 0
+      ;;
+    -*)
+      echo "Unknown flag: $1" >&2
+      exit 2
+      ;;
+    *) positional+=("$1"); shift ;;
+  esac
+done
+
+# Pipe output to clipboard if --copy was given. Pick the right tool per OS.
+clip_tool=""
+if [[ "$copy_to_clipboard" == "true" ]]; then
+  if command -v pbcopy >/dev/null 2>&1; then clip_tool="pbcopy"
+  elif command -v xclip >/dev/null 2>&1; then clip_tool="xclip -selection clipboard"
+  elif command -v wl-copy >/dev/null 2>&1; then clip_tool="wl-copy"
+  else
+    echo "Warning: --copy requested but no clipboard tool found (pbcopy/xclip/wl-copy)." >&2
+    copy_to_clipboard=false
+  fi
+fi
+
+# Decide which endpoint to hit.
+url=""
+case "${positional[0]:-}" in
+  ""|"diagnostic"|"diag")
+    url="$HOST/api/diagnostic"
+    if [[ "$json_mode" != "true" ]]; then
+      url="$url?format=text"
+    fi
+    ;;
+  "sources")
+    url="$HOST/api/logs/sources"
+    json_mode=true # always JSON for sources listing
+    ;;
+  "daily"|"weekly"|"discover"|"backup"|"server")
+    src="${positional[0]}"
+    since="${positional[1]:-}"
+    qs=()
+    [[ -n "$since" ]] && qs+=("since=$since")
+    [[ -n "$level_filter" ]] && qs+=("level=$level_filter")
+    if [[ ${#qs[@]} -gt 0 ]]; then
+      url="$HOST/api/logs/$src?$(IFS='&'; echo "${qs[*]}")"
+    else
+      url="$HOST/api/logs/$src"
+    fi
+    json_mode=true # logs endpoint is always JSON
+    ;;
+  *)
+    echo "Unknown command: ${positional[0]}" >&2
+    echo "Try: lawbound-logs --help" >&2
+    exit 2
+    ;;
+esac
+
+# Fetch
+response=$(curl -sS --fail-with-body "${auth_args[@]}" "$url" 2>&1) || {
+  echo "Error fetching $url:" >&2
+  echo "$response" >&2
+  exit 1
+}
+
+# Format output
+if [[ "$json_mode" == "true" ]]; then
+  if command -v jq >/dev/null 2>&1; then
+    formatted=$(echo "$response" | jq .)
+  else
+    formatted="$response"
+  fi
+else
+  formatted="$response"
+fi
+
+# Output (and optionally pipe to clipboard)
+if [[ "$copy_to_clipboard" == "true" ]]; then
+  echo "$formatted" | eval "$clip_tool"
+  byte_count=$(echo -n "$formatted" | wc -c | tr -d ' ')
+  echo "Copied $byte_count bytes to clipboard."
+else
+  echo "$formatted"
+fi

@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+
+# Runtime data (her actual data — keep private even in a private repo)
+data/listings.json
+data/feedback.json
+data/seen.json
+data/spend.json
+data/summaries.json
+data/documents.json
+data/documents/
+data/notifications.json
+data/discoveries.json
+data/preferences.json
+# data/preferences.example.json  IS committed as the template
+
+# Restore artifacts
+data.before-restore.*/
+
+# Logs
+*.log
+logs/
+
+# OS noise
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Local-only setup notes
+NOTES.md
+TODO.md
+
+# Build artifacts
+dist/
+build/

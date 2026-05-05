@@ -1,0 +1,124 @@
+name: Deploy to EC2
+
+# Triggered by push to main, or manually via "Run workflow" button in GitHub UI.
+# Skips deploys for commits that only touch docs (README, DEPLOY.md, .github).
+#
+# Tests run first; deploy only runs if tests pass. The test step also fires
+# on every PR to main so issues surface before merge.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'DEPLOY.md'
+      - 'GITHUB.md'
+      - '*.md'
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Don't run multiple deploys at once
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        # CI install — matches package-lock.json exactly.
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  deploy:
+    needs: test
+    # Only deploy on push to main, never on PRs (PRs run tests but don't deploy).
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
+          REPO_PATH: ${{ secrets.REPO_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" bash -se <<EOF
+            set -euo pipefail
+            cd "$REPO_PATH"
+
+            echo "▸ Fetching from origin..."
+            git fetch --quiet origin main
+
+            BEFORE=\$(git rev-parse HEAD)
+            AFTER=\$(git rev-parse origin/main)
+
+            if [ "\$BEFORE" = "\$AFTER" ]; then
+              echo "✓ Already up to date (\$BEFORE)"
+              exit 0
+            fi
+
+            echo "▸ Updating \$BEFORE → \$AFTER"
+
+            # Take the deploy lock — wait up to 2 minutes for any active cron job
+            # (daily scrape, weekly digest, S3 backup) to finish before swapping
+            # files underneath it. This prevents the rare-but-ugly case where the
+            # cron job's process loads modules from the new code mid-run, or
+            # writes a partially-rewritten data file.
+            (
+              /usr/bin/flock -w 120 9 || { echo "✗ Could not acquire deploy lock within 120s"; exit 1; }
+
+              echo "  ✓ deploy lock acquired"
+              git reset --hard origin/main
+
+              # Reinstall deps if package.json changed
+              if git diff --name-only "\$BEFORE" "\$AFTER" | grep -qE '^(package(-lock)?\.json)$'; then
+                echo "▸ package.json changed, running npm install..."
+                npm install --production
+              fi
+
+              # If setup.sh changed, warn but don't auto-run (could break things)
+              if git diff --name-only "\$BEFORE" "\$AFTER" | grep -q '^setup\.sh$'; then
+                echo "! setup.sh changed — review and run manually if needed"
+              fi
+
+              echo "▸ Restarting service..."
+              sudo systemctl restart lawbound
+            ) 9>/tmp/lawbound.lock
+
+            sleep 2
+            if systemctl is-active --quiet lawbound; then
+              echo "✓ Service is running"
+            else
+              echo "✗ Service failed to start — check journalctl -u lawbound"
+              exit 1
+            fi
+          EOF
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

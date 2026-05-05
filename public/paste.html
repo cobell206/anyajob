@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paste a JD · Job Tracker</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <a href="/" class="brand">
+        <span class="brand-mark">L</span>
+        <span>Lawbound</span>
+      </a>
+      <nav>
+        <a href="/">Roles</a>
+        <a href="/profile.html">Profile</a>
+        <a href="/paste.html" class="active">Paste JD</a>
+        <a href="/settings.html">Settings</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Score a listing</h1>
+        <div class="page-sub">Found something on LinkedIn or Indeed? Paste it here for the same scoring.</div>
+      </div>
+    </div>
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;box-shadow:var(--shadow-sm);max-width:680px">
+      <label>Title</label>
+      <input type="text" id="title" placeholder="e.g. Litigation Paralegal">
+
+      <div class="field-grid">
+        <div>
+          <label>Company</label>
+          <input type="text" id="company" placeholder="e.g. Davis Polk">
+        </div>
+        <div>
+          <label>Location</label>
+          <input type="text" id="location" placeholder="e.g. New York, NY">
+        </div>
+      </div>
+
+      <label>URL (optional)</label>
+      <input type="url" id="url" placeholder="https://…">
+
+      <label>Description</label>
+      <textarea id="description" rows="10" placeholder="Paste the full job description here…"></textarea>
+
+      <button class="btn primary" id="submit" style="width:100%; padding:12px; font-size:15px; margin-top:16px; justify-content:center">Score it</button>
+    </div>
+
+    <div id="result"></div>
+  </main>
+
+  <script type="module">
+    import { $, escapeHtml, fmtSalary, scoreClass } from './app.js';
+
+    const btn = $('#submit');
+    const result = $('#result');
+
+    btn.addEventListener('click', async () => {
+      const body = {
+        title: $('#title').value.trim(),
+        company: $('#company').value.trim(),
+        location: $('#location').value.trim(),
+        url: $('#url').value.trim(),
+        description: $('#description').value.trim(),
+      };
+      if (!body.title || !body.description) {
+        alert('Title and description are required.');
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Scoring…';
+      try {
+        const res = await fetch('/api/score-paste', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        const s = data.score;
+        result.innerHTML = `
+          <div class="result-card">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px">
+              <div>
+                <div class="cell-title" style="font-size:18px">${escapeHtml(body.title)}</div>
+                <div class="cell-company">${escapeHtml(body.company)}</div>
+              </div>
+              <div class="score-num ${scoreClass(s.overallScore)}" style="font-size:36px">${s.overallScore}</div>
+            </div>
+            <div class="rationale-box">${escapeHtml(s.rationale || '')}</div>
+            <div class="modal-grid" style="margin-top:16px">
+              <div class="modal-stat">
+                <div class="modal-stat-label">Qualification fit</div>
+                <div class="modal-stat-value">${s.qualificationFit}/10</div>
+              </div>
+              <div class="modal-stat">
+                <div class="modal-stat-label">Law school value</div>
+                <div class="modal-stat-value">${s.lawSchoolValue}/10</div>
+              </div>
+              <div class="modal-stat">
+                <div class="modal-stat-label">Salary</div>
+                <div class="modal-stat-value">${fmtSalary(s.salaryMin, s.salaryMax)}</div>
+              </div>
+              <div class="modal-stat">
+                <div class="modal-stat-label">Closes</div>
+                <div class="modal-stat-value">${s.closesDate || '—'}</div>
+              </div>
+            </div>
+            ${s.strengths?.length ? `
+              <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin:20px 0 8px">Strengths</h3>
+              <ul class="bullet-list">${s.strengths.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+            ` : ''}
+            ${s.concerns?.length ? `
+              <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin:20px 0 8px">Concerns</h3>
+              <ul class="bullet-list concerns">${s.concerns.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+            ` : ''}
+            ${s.applicationAngle ? `
+              <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin:20px 0 8px">Personal statement angle</h3>
+              <p style="font-size:14px; color: var(--ink-2)">${escapeHtml(s.applicationAngle)}</p>
+            ` : ''}
+            <p style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)">Saved — appears in your roles list.</p>
+            <div style="margin-top:12px">
+              <a class="btn primary" href="/">View all roles →</a>
+            </div>
+          </div>
+        `;
+      } catch (err) {
+        result.innerHTML = `<div class="result-card"><p style="color:var(--bad)">Error: ${err.message}</p></div>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Score it';
+      }
+    });
+  </script>
+
+  <nav class="tab-bar" aria-label="Main">
+    <div class="tab-bar-inner">
+      <a href="/">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <span>Roles</span>
+      </a>
+      <a href="/profile.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span>Profile</span>
+      </a>
+      <a href="/paste.html" class="active" aria-current="page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        <span>Paste</span>
+      </a>
+      <a href="/notifications.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        <span>Notify</span>
+      </a>
+      <a href="/settings.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </a>
+    </div>
+  </nav>
+</body>
+</html>

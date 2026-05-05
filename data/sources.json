@@ -1,0 +1,76 @@
+{
+  "sources": [
+    {
+      "id": "gh-davispolk",
+      "kind": "greenhouse",
+      "name": "Davis Polk",
+      "config": {
+        "slug": "davispolk"
+      },
+      "enabled": true,
+      "builtIn": true
+    },
+    {
+      "id": "gh-cravath",
+      "kind": "greenhouse",
+      "name": "Cravath",
+      "config": {
+        "slug": "cravath"
+      },
+      "enabled": true,
+      "builtIn": true
+    },
+    {
+      "id": "gh-sullcrom",
+      "kind": "greenhouse",
+      "name": "Sullivan & Cromwell",
+      "config": {
+        "slug": "sullcrom"
+      },
+      "enabled": true,
+      "builtIn": true
+    },
+    {
+      "id": "gh-paulweiss",
+      "kind": "greenhouse",
+      "name": "Paul Weiss",
+      "config": {
+        "slug": "paulweiss"
+      },
+      "enabled": true,
+      "builtIn": true
+    },
+    {
+      "id": "usajobs-ny",
+      "kind": "usajobs",
+      "name": "USAJobs (NYC area)",
+      "config": {},
+      "enabled": true,
+      "builtIn": true
+    },
+    {
+      "id": "idealist-ny",
+      "kind": "idealist",
+      "name": "Idealist (NYC legal/policy)",
+      "config": {},
+      "enabled": true,
+      "builtIn": true
+    },
+    {
+      "id": "nycbar",
+      "kind": "nycbar",
+      "name": "NYC Bar Career Center",
+      "config": {},
+      "enabled": true,
+      "builtIn": true
+    },
+    {
+      "id": "psjd",
+      "kind": "psjd",
+      "name": "PSJD (Public Service Jobs)",
+      "config": {},
+      "enabled": true,
+      "builtIn": true
+    }
+  ]
+}
