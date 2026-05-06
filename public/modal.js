@@ -180,15 +180,21 @@ export function openModal(listing, onUpdate) {
 
   $('#m-status').addEventListener('change', async (e) => {
     const status = e.target.value;
-    await api(`/api/feedback/${fp}/status`, { method: 'POST', body: { status } });
-    currentListing.status = status;
-    if (status === 'applied' && !currentListing.appliedDate) {
-      const today = new Date().toISOString().slice(0, 10);
-      currentListing.appliedDate = today;
-      $('#m-applied-date').value = today;
+    const prev = currentListing.status;
+    try {
+      await api(`/api/feedback/${fp}/status`, { method: 'POST', body: { status } });
+      currentListing.status = status;
+      if (status === 'applied' && !currentListing.appliedDate) {
+        const today = new Date().toISOString().slice(0, 10);
+        currentListing.appliedDate = today;
+        $('#m-applied-date').value = today;
+      }
+      showMsg('Saved');
+      onUpdateCallback?.(currentListing);
+    } catch (err) {
+      e.target.value = prev || 'new';
+      showMsg(`Failed to save: ${err.message}`, 'error');
     }
-    showMsg('Status updated');
-    onUpdateCallback?.(currentListing);
   });
 
   $('#m-applied-date').addEventListener('change', async (e) => {
