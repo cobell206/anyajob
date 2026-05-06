@@ -30,7 +30,6 @@
         <h1 class="page-title">Roles</h1>
         <div class="page-sub" id="sub">Loading…</div>
       </div>
-      <div class="filters" id="filters"></div>
     </div>
 
     <!-- Daily brief -->
@@ -53,6 +52,16 @@
     </details>
 
     <div class="stats" id="stats"></div>
+
+    <div class="table-toolbar">
+      <div class="table-toolbar-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="search" id="t-search" placeholder="Search title, company, or location" autocomplete="off">
+      </div>
+      <div class="filters" id="filters"></div>
+    </div>
 
     <div class="table-wrap">
       <table>
@@ -366,13 +375,6 @@
             </div>
 
             <div class="filter-section">
-              <label class="filter-section-label" for="f-search">Search</label>
-              <input type="search" id="f-search" class="filter-text-input"
-                     placeholder="Title, company, or location"
-                     value="${escapeHtml(filters.search)}">
-            </div>
-
-            <div class="filter-section">
               <span class="filter-section-label">Status</span>
               <div class="filter-pill-row">
                 ${statusOptions.map((o) => `
@@ -457,20 +459,10 @@
 
       $('#filter-reset').addEventListener('click', () => {
         filters = { ...DEFAULT_FILTERS };
+        $('#t-search').value = '';
         render();
         renderFilters(stats);
         openFilterPopup();
-      });
-
-      // Search — debounced so typing doesn't thrash the table.
-      let searchTimer;
-      $('#f-search').addEventListener('input', (e) => {
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => {
-          filters.search = e.target.value;
-          render();
-          updateTriggerState(stats);
-        }, 200);
       });
 
       // Status pills
@@ -641,6 +633,21 @@
         }
         render();
       });
+    });
+
+    // Toolbar search — primary filter affordance, debounced 200ms.
+    let toolbarSearchTimer;
+    $('#t-search').addEventListener('input', (e) => {
+      clearTimeout(toolbarSearchTimer);
+      toolbarSearchTimer = setTimeout(() => {
+        filters.search = e.target.value;
+        render();
+        if ($('#filter-trigger')) {
+          // The popup may not be rendered yet on first load. Guard it.
+          // Use a no-op stats when we don't have one cached.
+          updateTriggerState({ byStatus: {} });
+        }
+      }, 200);
     });
 
     load();

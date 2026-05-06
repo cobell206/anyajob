@@ -504,12 +504,63 @@ main {
   opacity: 0.7;
 }
 
+/* ============ TABLE TOOLBAR ============ */
+
+/* Sits flush against the top of the table — same surface, same border,
+   no gap. Visual signal that the controls inside operate on the table. */
+.table-toolbar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: var(--shadow-sm);
+  padding: 10px 14px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.table-toolbar-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  max-width: 480px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.table-toolbar-search:focus-within {
+  border-color: var(--blue);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+.table-toolbar-search svg {
+  width: 16px; height: 16px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.table-toolbar-search input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  outline: 0;
+  font-size: 14px;
+  color: var(--ink);
+  font-family: inherit;
+  min-width: 0;
+}
+.table-toolbar-search input::placeholder { color: var(--muted); }
+
 /* ============ TABLE (DESKTOP) ============ */
 
 .table-wrap {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
