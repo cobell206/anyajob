@@ -27,6 +27,10 @@ function fmtRel(iso) {
   return days + 'd ago';
 }
 
+function isRepairable(s) {
+  return /403|404/.test(s.lastError || '');
+}
+
 function renderSource(s) {
   let configLine = '';
   if (s.kind === 'greenhouse' || s.kind === 'lever') configLine = 'slug: ' + (s.config?.slug || '?');
@@ -49,6 +53,9 @@ function renderSource(s) {
   // Bookmarks don't fetch — runOne short-circuits — so no "Run now" button.
   const runBtn = s.kind === 'bookmark' ? '' :
     `<button class="icon-btn-sm run-btn" data-run="${s.id}" title="Run now">▶ Run</button>`;
+  const repairBtn = isRepairable(s)
+    ? `<button class="repair-btn" data-repair="${s.id}" title="Use AI web search to find the new URL">🔍 Find URL</button>`
+    : '';
 
   return `
     <div class="source-card ${s.enabled ? '' : 'disabled'}">
@@ -59,6 +66,7 @@ function renderSource(s) {
         <div class="run-result" data-run-result="${s.id}" style="display:none"></div>
       </div>
       <div class="source-actions">
+        ${repairBtn}
         ${runBtn}
         <button class="icon-btn-sm" data-toggle="${s.id}" title="${s.enabled ? 'Disable' : 'Enable'}">${s.enabled ? '⏸' : '▶'}</button>
         <button class="icon-btn-sm danger" data-delete="${s.id}" title="Delete">×</button>
@@ -161,6 +169,123 @@ async function runSourceNow(s, btn) {
   }
 }
 
+// ===== Repair modal =====
+// Lightweight modal kept local to settings.js — modal.js is listing-specific.
+let _repairBackdrop = null;
+function getRepairBackdrop() {
+  if (_repairBackdrop) return _repairBackdrop;
+  _repairBackdrop = document.createElement('div');
+  _repairBackdrop.className = 'modal-backdrop repair-backdrop';
+  _repairBackdrop.innerHTML = `
+    <div class="modal repair-modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <div class="modal-title">Find replacement URL</div>
+        <button class="modal-close" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body" id="repair-body"></div>
+    </div>
+  `;
+  document.body.appendChild(_repairBackdrop);
+  _repairBackdrop.addEventListener('click', (e) => {
+    if (e.target === _repairBackdrop) closeRepair();
+  });
+  _repairBackdrop.querySelector('.modal-close').addEventListener('click', closeRepair);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && _repairBackdrop.classList.contains('open')) closeRepair();
+  });
+  return _repairBackdrop;
+}
+function openRepair() {
+  getRepairBackdrop().classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeRepair() {
+  if (_repairBackdrop) _repairBackdrop.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+async function runRepair(source) {
+  openRepair();
+  const body = $('#repair-body');
+  body.innerHTML = `
+    <div class="repair-loading">
+      <div class="repair-spinner"></div>
+      <div>Searching for <strong>${escapeHtml(source.name)}</strong>'s current careers page…</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">This usually takes 20–40 seconds.</div>
+    </div>
+  `;
+
+  try {
+    const res = await fetch(`/api/sources/${source.id}/repair`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+    const conf = data.confidence || 'medium';
+    const url = data.suggestedUrl || '';
+    const kind = data.suggestedKind || source.kind;
+    const rationale = data.rationale || '';
+
+    body.innerHTML = `
+      <div class="repair-result">
+        <div class="repair-rationale">${escapeHtml(rationale)}</div>
+        <div class="repair-suggestion">
+          <div class="repair-suggestion-label">Suggested URL</div>
+          <div class="repair-suggestion-url"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></div>
+          <div class="repair-meta">
+            <span class="kind-badge kind-${escapeHtml(kind)}">${escapeHtml(kind)}</span>
+            <span class="confidence-badge confidence-${conf}">${conf} confidence</span>
+          </div>
+        </div>
+        <div class="repair-actions">
+          <button class="btn ghost" id="repair-cancel">Cancel</button>
+          <button class="btn primary" id="repair-apply" ${url ? '' : 'disabled'}>Apply</button>
+        </div>
+        <div class="status-message" id="repair-status"></div>
+      </div>
+    `;
+
+    $('#repair-cancel').addEventListener('click', closeRepair);
+    $('#repair-apply').addEventListener('click', async () => {
+      const btn = $('#repair-apply');
+      const status = $('#repair-status');
+      btn.disabled = true;
+      btn.textContent = 'Applying…';
+      try {
+        const newConfig = { ...(source.config || {}), url };
+        await api(`/api/sources/${source.id}`, {
+          method: 'PATCH',
+          body: { config: newConfig, kind },
+        });
+        status.textContent = '✓ Updated';
+        status.className = 'status-message success';
+        setTimeout(() => {
+          closeRepair();
+          loadSources();
+        }, 600);
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Apply';
+        status.textContent = 'Update failed: ' + err.message;
+        status.className = 'status-message error';
+      }
+    });
+  } catch (err) {
+    body.innerHTML = `
+      <div class="repair-error">
+        <div class="status-message error">Search failed: ${escapeHtml(err.message)}</div>
+        <div class="repair-actions" style="margin-top:14px">
+          <button class="btn" id="repair-cancel">Close</button>
+        </div>
+      </div>
+    `;
+    $('#repair-cancel').addEventListener('click', closeRepair);
+  }
+}
+
 async function loadSources() {
   sourcesData = await api('/api/sources');
   const enabled = sourcesData.sources.filter((s) => s.enabled).length;
@@ -188,6 +313,13 @@ async function loadSources() {
       const res = await fetch(`/api/sources/${b.dataset.delete}`, { method: 'DELETE' });
       await res.json();
       loadSources();
+    });
+  });
+
+  $$('[data-repair]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const s = sourcesData.sources.find((x) => x.id === b.dataset.repair);
+      if (s) runRepair(s);
     });
   });
 }

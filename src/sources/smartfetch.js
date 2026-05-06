@@ -59,6 +59,78 @@ function stripPage(html, baseUrl) {
   return out;
 }
 
+// Parse Claude's extraction response. Tolerates leading/trailing prose
+// (`indexOf('{')` / `lastIndexOf('}')`). Falls back to recovery if the slice
+// is mid-JSON corrupt: when Haiku occasionally emits a truncated `]` partway
+// through the listings array, find the last complete object before the array
+// close, reconstruct `{"listings": [...valid entries...]}`, and retry. If
+// recovery still fails, return whatever listings we extracted rather than
+// throwing — partial data is more useful than an error to the caller.
+function parseExtractionJson(text) {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end < start) {
+    throw new Error('Could not parse extraction response: no JSON object found in response');
+  }
+  const slice = text.slice(start, end + 1);
+  try {
+    return JSON.parse(slice);
+  } catch (firstErr) {
+    // Recovery: find the array, walk through it collecting top-level objects
+    // (tracking string state and brace depth), stop on first malformed one.
+    const arrStart = slice.indexOf('[');
+    if (arrStart < 0) {
+      try {
+        return { listings: extractObjectsLoosely(slice) };
+      } catch {
+        return { listings: [] };
+      }
+    }
+    const objects = extractObjectsLoosely(slice.slice(arrStart + 1));
+    if (objects.length > 0) return { listings: objects };
+    return { listings: [] };
+  }
+}
+
+// Walk a string and pull out every JSON object literal that parses cleanly,
+// stopping at the first malformed one. Tracks string state and escape
+// characters so that braces inside strings don't throw off the depth count.
+function extractObjectsLoosely(s) {
+  const out = [];
+  let i = 0;
+  while (i < s.length) {
+    if (s[i] !== '{') { i++; continue; }
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    let j = i;
+    for (; j < s.length; j++) {
+      const c = s[j];
+      if (escape) { escape = false; continue; }
+      if (inString) {
+        if (c === '\\') escape = true;
+        else if (c === '"') inString = false;
+        continue;
+      }
+      if (c === '"') { inString = true; continue; }
+      if (c === '{') depth++;
+      else if (c === '}') {
+        depth--;
+        if (depth === 0) { j++; break; }
+      }
+    }
+    if (depth !== 0) break; // truncated object — stop here
+    const candidate = s.slice(i, j);
+    try {
+      out.push(JSON.parse(candidate));
+      i = j;
+    } catch {
+      break; // first un-parseable object means we hit the corruption
+    }
+  }
+  return out;
+}
+
 export async function fetchSmart(url, { name = 'Source' } = {}) {
   if (!url) throw new Error('smartfetch requires a url');
 
@@ -104,17 +176,7 @@ Return JSON only.`;
 
   const text = response.content
     .filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
-  // Robust parser: tolerates leading prose ("I'll extract…") before the JSON
-  // object, and trailing prose after it. Same approach as src/score.js.
-  let parsed;
-  try {
-    const start = text.indexOf('{');
-    const end = text.lastIndexOf('}');
-    if (start < 0 || end < start) throw new Error('no JSON object found in response');
-    parsed = JSON.parse(text.slice(start, end + 1));
-  } catch (err) {
-    throw new Error('Could not parse extraction response: ' + err.message);
-  }
+  const parsed = parseExtractionJson(text);
 
   const listings = (parsed.listings || []).map((l) => ({
     source: 'smartfetch',

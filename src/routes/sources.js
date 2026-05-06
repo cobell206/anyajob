@@ -131,6 +131,29 @@ router.post('/:id/run', async (req, res) => {
   }
 });
 
+// Suggest a replacement URL for a source that's been failing with 404/403.
+// Calls Claude with web_search; ~$0.05–0.15 per call, ~30–60s.
+router.post('/:id/repair', async (req, res) => {
+  req.setTimeout(60_000);
+  res.setTimeout(60_000);
+  try {
+    const data = await loadSources();
+    const source = data.sources.find((s) => s.id === req.params.id);
+    if (!source) return res.status(404).json({ error: 'Source not found' });
+    const err = source.lastError || '';
+    if (!/404|403/.test(err)) {
+      return res.status(400).json({ error: 'Source does not have a 404/403 error to repair' });
+    }
+    const { repairSourceUrl } = await import('../repair.js');
+    const suggestion = await repairSourceUrl(source);
+    log.info({ id: source.id, name: source.name, suggestion }, 'repair suggestion');
+    res.json(suggestion);
+  } catch (err) {
+    log.error({ err }, 'repair failed');
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.patch('/:id', async (req, res) => {
   try {
     const updated = await updateSource(req.params.id, req.body);

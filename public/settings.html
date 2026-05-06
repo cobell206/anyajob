@@ -72,6 +72,82 @@
     .icon-btn-sm:hover { background: var(--surface); color: var(--ink); }
     .icon-btn-sm.danger:hover { color: var(--bad); border-color: var(--bad); }
 
+    /* Repair button — shown when a source is failing with 404/403 */
+    .repair-btn {
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      color: #c2410c;
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .repair-btn:hover { background: #ffedd5; border-color: #fdba74; }
+    .repair-btn:active { background: #fed7aa; }
+
+    /* Repair modal */
+    .repair-modal { max-width: 540px; }
+    .repair-loading {
+      padding: 28px 8px;
+      text-align: center;
+      font-size: 14px;
+      color: var(--ink-2);
+    }
+    .repair-spinner {
+      width: 28px; height: 28px;
+      margin: 0 auto 14px;
+      border: 3px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: repair-spin 0.8s linear infinite;
+    }
+    @keyframes repair-spin { to { transform: rotate(360deg); } }
+    .repair-result { display: flex; flex-direction: column; gap: 14px; }
+    .repair-rationale {
+      font-size: 14px; line-height: 1.55; color: var(--ink-2);
+      font-style: italic;
+    }
+    .repair-suggestion {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+    }
+    .repair-suggestion-label {
+      font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--muted);
+      font-weight: 600; margin-bottom: 4px;
+    }
+    .repair-suggestion-url {
+      font-family: var(--font-mono);
+      font-size: 12px; word-break: break-all;
+      margin-bottom: 8px;
+    }
+    .repair-suggestion-url a { color: var(--blue-ink); }
+    .repair-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .repair-actions {
+      display: flex; gap: 8px; justify-content: flex-end;
+      margin-top: 4px;
+    }
+
+    /* Confidence badges */
+    .confidence-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .confidence-high { background: var(--green-soft); color: var(--green-ink); }
+    .confidence-medium { background: var(--warn-soft); color: #92400e; }
+    .confidence-low { background: var(--bad-soft); color: var(--bad); }
+
     .kind-badge {
       display: inline-block;
       padding: 2px 7px;
