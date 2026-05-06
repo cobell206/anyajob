@@ -40,43 +40,35 @@ const SOURCES_PATH = join(__dirname, '..', '..', 'data', 'sources.json');
 
 // ---------- Default sources seeded on first run ----------
 
+// Seeded only on first run (when data/sources.json doesn't yet exist). After
+// that the file is the user's source of truth — we never auto-add or auto-
+// remove based on this list. Add via Discovery or the Settings UI.
+//
+// Removed from earlier defaults: BigLaw Greenhouse slugs (davispolk, cravath,
+// sullcrom, paulweiss) — all 404, BigLaw uses Workday. And the HTML scrapers
+// (idealist, nycbar, psjd) — TODO selectors, never worked. Replace via
+// smartfetch on the actual URLs if you want them.
 const DEFAULT_SOURCES = [
-  // Integrations: Greenhouse boards
-  { id: 'gh-davispolk', kind: 'greenhouse', name: 'Davis Polk', config: { slug: 'davispolk' }, enabled: true, builtIn: true },
-  { id: 'gh-cravath', kind: 'greenhouse', name: 'Cravath', config: { slug: 'cravath' }, enabled: true, builtIn: true },
-  { id: 'gh-sullcrom', kind: 'greenhouse', name: 'Sullivan & Cromwell', config: { slug: 'sullcrom' }, enabled: true, builtIn: true },
-  { id: 'gh-paulweiss', kind: 'greenhouse', name: 'Paul Weiss', config: { slug: 'paulweiss' }, enabled: true, builtIn: true },
-
-  // USAJobs (federal)
+  // Federal legal/policy roles. Needs USAJOBS_API_KEY in .env to fetch.
   { id: 'usajobs-ny', kind: 'usajobs', name: 'USAJobs (NYC area)', config: {}, enabled: true, builtIn: true },
 
-  // HTML-scraped sites (these are the ones with TODO selectors in their modules)
-  { id: 'idealist-ny', kind: 'idealist', name: 'Idealist (NYC legal/policy)', config: {}, enabled: true, builtIn: true },
-  { id: 'nycbar', kind: 'nycbar', name: 'NYC Bar Career Center', config: {}, enabled: true, builtIn: true },
-  { id: 'psjd', kind: 'psjd', name: 'PSJD (Public Service Jobs)', config: {}, enabled: true, builtIn: true },
+  // ACLU national office — verified Greenhouse customer, ~40 active roles
+  // including paralegals on Immigrants' Rights and Voting Rights projects.
+  { id: 'gh-aclu', kind: 'greenhouse', name: 'ACLU', config: { slug: 'aclu' }, enabled: true, builtIn: true },
 ];
 
 // ---------- Storage ----------
 
 export async function loadSources() {
   if (!existsSync(SOURCES_PATH)) {
-    // First run: seed from defaults
+    // First run only: seed from defaults. Never auto-backfill on subsequent
+    // reads — once the file exists, the user owns it. Otherwise deletions
+    // wouldn't stick across restarts.
     const seeded = { sources: DEFAULT_SOURCES };
     await writeJsonAtomic(SOURCES_PATH, seeded);
     return seeded;
   }
-  const data = JSON.parse(await readFile(SOURCES_PATH, 'utf-8'));
-  // Make sure all built-in defaults still exist (in case a future version adds new ones).
-  const ids = new Set(data.sources.map((s) => s.id));
-  let added = false;
-  for (const def of DEFAULT_SOURCES) {
-    if (!ids.has(def.id)) {
-      data.sources.push(def);
-      added = true;
-    }
-  }
-  if (added) await writeJsonAtomic(SOURCES_PATH, data);
-  return data;
+  return JSON.parse(await readFile(SOURCES_PATH, 'utf-8'));
 }
 
 export async function saveSources(data) {
@@ -112,15 +104,9 @@ export async function updateSource(id, patch) {
 
 export async function deleteSource(id) {
   const data = await loadSources();
-  const source = data.sources.find((s) => s.id === id);
-  if (!source) return false;
-  if (source.builtIn) {
-    // Don't allow deleting built-ins; disable instead.
-    source.enabled = false;
-    await saveSources(data);
-    return false;
-  }
+  const before = data.sources.length;
   data.sources = data.sources.filter((s) => s.id !== id);
+  if (data.sources.length === before) return false;
   await saveSources(data);
   return true;
 }
