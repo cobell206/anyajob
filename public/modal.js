@@ -146,6 +146,8 @@ export function openModal(listing, onUpdate) {
         <div id="m-docs-mount"></div>
       </div>
     </div>
+
+    <hr class="modal-footer-divider">
   `;
 
   // Wire up handlers.

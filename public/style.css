@@ -666,6 +666,14 @@ td {
 
 .modal-body { padding: 20px 24px 32px; }
 
+/* Full-width divider that anchors the bottom of the modal body, sits below
+   the two-column split. Visual breathing room before the modal edge. */
+.modal-footer-divider {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 24px -24px 0;
+}
+
 .modal-section { margin-bottom: 24px; }
 
 .modal-section h3 {
