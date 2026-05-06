@@ -849,7 +849,7 @@ td {
   background: var(--surface);
   width: 100%;
   max-width: 960px;
-  max-height: 92vh;
+  max-height: 92dvh;
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
@@ -880,7 +880,7 @@ td {
   .modal {
     border-radius: var(--radius-xl);
     transform: translateY(20px) scale(0.98);
-    max-height: 86vh;
+    max-height: 86dvh;
   }
   .modal-backdrop.open .modal { transform: translateY(0) scale(1); }
 }
