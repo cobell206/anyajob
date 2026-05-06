@@ -33,7 +33,13 @@ const app = express();
 // of seeing every request as coming from 127.0.0.1.
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
-app.use(express.static(join(ROOT, 'public')));
+app.use(express.static(join(ROOT, 'public'), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  },
+}));
 
 // Global API rate limit. Discovery has its own tighter limit on top of this.
 const apiLimiter = rateLimit({

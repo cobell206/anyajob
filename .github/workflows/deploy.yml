@@ -95,6 +95,12 @@ jobs:
               echo "  ✓ deploy lock acquired"
               git reset --hard origin/main
 
+              # Cache-busting: stamp the current commit SHA into HTML files so
+              # browsers fetch fresh JS/CSS on every deploy. The placeholder
+              # comes back fresh on each \`git reset --hard\` above.
+              COMMIT_SHA=\$(git rev-parse --short HEAD)
+              find public -name "*.html" -exec sed -i "s/__CACHE_VERSION__/\$COMMIT_SHA/g" {} \;
+
               # Reinstall deps if package.json changed
               if git diff --name-only "\$BEFORE" "\$AFTER" | grep -qE '^(package(-lock)?\.json)$'; then
                 echo "▸ package.json changed, running npm install..."
