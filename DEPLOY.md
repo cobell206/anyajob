@@ -21,7 +21,7 @@ End-to-end setup, ~30-45 minutes if you've never done it before.
 
 1. AWS Console → EC2 → Launch Instance
 2. Name: `job-tracker`
-3. AMI: Ubuntu Server 22.04 LTS
+3. AMI: Ubuntu Server 24.04 LTS (Noble Numbat) — recommended. 26.04 also works on free tier; 24.04 is the safer LTS pick (supported through 2029, more battle-tested).
 4. Instance type: `t3.micro` (free tier)
 5. Key pair: create new, download `.pem`, save somewhere safe
 6. Network: default VPC, default subnet
@@ -45,8 +45,8 @@ The repo includes `setup.sh` which installs everything (Node, LibreOffice, pdfto
 ```bash
 # Clone (see GITHUB.md for setting up the deploy key first)
 cd ~
-git clone git@github.com:YOUR_USERNAME/lawbound.git
-cd lawbound
+git clone git@github.com:<your-github-user>/anyajob.git
+cd anyajob
 
 # Run setup
 ./setup.sh
@@ -66,14 +66,14 @@ libreoffice --version   # 7.x
 pdftotext -v            # any version
 aws --version           # 2.x
 cloudflared --version   # any version
-crontab -l              # should show 3 lawbound entries
-sudo systemctl status lawbound  # should show "loaded" (not started yet)
+crontab -l              # should show 3 anyajob entries
+sudo systemctl status anyajob  # should show "loaded" (not started yet)
 ```
 
 ### S3 backup setup (one-time, in AWS console)
 
-1. **S3 → Create bucket** — name it like `lawbound-backup-<random>`. Block all public access (default). Enable versioning. Region same as your EC2.
-2. **IAM → Users → Add user** — name `lawbound-backup`, attach inline policy:
+1. **S3 → Create bucket** — name it like `anyajob-backup-<random>`. Block all public access (default). Enable versioning. Region same as your EC2.
+2. **IAM → Users → Add user** — name `anyajob-backup`, attach inline policy:
    ```json
    {
      "Version": "2012-10-17",
@@ -81,8 +81,8 @@ sudo systemctl status lawbound  # should show "loaded" (not started yet)
        "Effect": "Allow",
        "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket", "s3:DeleteObject"],
        "Resource": [
-         "arn:aws:s3:::lawbound-backup-<random>",
-         "arn:aws:s3:::lawbound-backup-<random>/*"
+         "arn:aws:s3:::anyajob-backup-<random>",
+         "arn:aws:s3:::anyajob-backup-<random>/*"
        ]
      }]
    }
@@ -91,7 +91,7 @@ sudo systemctl status lawbound  # should show "loaded" (not started yet)
    ```bash
    aws configure  # paste access key / secret / region
    ```
-4. Set `BACKUP_BUCKET=s3://lawbound-backup-<random>/job-tracker` in `.env`
+4. Set `BACKUP_BUCKET=s3://anyajob-backup-<random>/job-tracker` in `.env`
 5. Test: `npm run backup` — should sync `data/` to S3.
 
 ## Part 5: Test the daily run (2 min)
@@ -141,14 +141,14 @@ tunnel: <YOUR_TUNNEL_ID>
 credentials-file: /home/ubuntu/.cloudflared/<YOUR_TUNNEL_ID>.json
 
 ingress:
-  - hostname: jobs.yourdomain.com
+  - hostname: jobs.anyalawgirly.com
     service: http://localhost:3000
   - service: http_status:404
 ```
 
 ```bash
 # Route DNS
-cloudflared tunnel route dns job-tracker jobs.yourdomain.com
+cloudflared tunnel route dns job-tracker jobs.anyalawgirly.com
 
 # Run as a service
 sudo cloudflared service install
@@ -163,40 +163,40 @@ In Cloudflare Zero Trust dashboard:
 1. Access → Applications → Add an application → Self-hosted
 2. Application name: `Job Tracker`
 3. Session duration: 24 hours
-4. Application domain: `jobs` + `yourdomain.com`
+4. Application domain: `jobs` + `anyalawgirly.com`
 5. Identity providers: enable "One-time PIN" (works without setup) and/or Google
 6. Add policy: Name "Allow her and me", Action: Allow, Include: Emails: her email, your email
 7. Save
 
-Now visiting `jobs.yourdomain.com` shows a Cloudflare login page. After her email gets the one-time PIN (or Google login), she's in for 24 hours.
+Now visiting `jobs.anyalawgirly.com` shows a Cloudflare login page. After her email gets the one-time PIN (or Google login), she's in for 24 hours.
 
 ## Part 8: Start the service (1 min)
 
 `setup.sh` already created the systemd unit and the cron entries. Start it:
 
 ```bash
-sudo systemctl start lawbound
-sudo systemctl status lawbound   # should show "active (running)"
+sudo systemctl start anyajob
+sudo systemctl status anyajob   # should show "active (running)"
 
 # Cron entries are already installed; verify:
 crontab -l
-# You should see 3 entries marked with "lawbound managed entries"
+# You should see 3 entries marked with "anyajob managed entries"
 ```
 
 The cron schedule is:
 
 ```cron
 # Daily scrape + morning email at 6am ET (10am UTC)
-0 10 * * * cd /home/ubuntu/lawbound && node src/daily.js >> daily.log 2>&1
+0 10 * * * cd /home/ubuntu/anyajob && node src/daily.js >> daily.log 2>&1
 
 # Discovery: find new sources Mon + Thu at 7am ET (11am UTC) — uses Claude web_search, ~$0.50/run
-0 11 * * 1,4 cd /home/ubuntu/lawbound && node scripts/discover.js >> discover.log 2>&1
+0 11 * * 1,4 cd /home/ubuntu/anyajob && node scripts/discover.js >> discover.log 2>&1
 
 # Weekly digest Sunday 9am ET (1pm UTC)
-0 13 * * 0 cd /home/ubuntu/lawbound && node scripts/weekly.js >> weekly.log 2>&1
+0 13 * * 0 cd /home/ubuntu/anyajob && node scripts/weekly.js >> weekly.log 2>&1
 
 # Nightly S3 backup at 2am ET (6am UTC)
-0 6 * * * cd /home/ubuntu/lawbound && node scripts/backup.js >> backup.log 2>&1
+0 6 * * * cd /home/ubuntu/anyajob && node scripts/backup.js >> backup.log 2>&1
 ```
 
 To re-install or update them (e.g., after editing the script), re-run:
@@ -210,7 +210,7 @@ To re-install or update them (e.g., after editing the script), re-run:
 Confirm the S3 backup ran:
 
 ```bash
-aws s3 ls s3://lawbound-backup-<random>/job-tracker/
+aws s3 ls s3://anyajob-backup-<random>/job-tracker/
 # Should show a date-stamped folder with feedback.json, listings.json, documents/, etc
 ```
 
@@ -221,12 +221,12 @@ This is what enables the morning brief, closing-soon, and weekly digest emails. 
 ### Stage 1: Verify your sending domain
 
 1. AWS Console → SES (Simple Email Service) → make sure you're in the same region as your `AWS_REGION` env var (default `us-east-1`)
-2. Verified identities → Create identity → Domain → enter `yourdomain.com`
+2. Verified identities → Create identity → Domain → enter `anyalawgirly.com`
 3. Enable DKIM (default settings are fine — Easy DKIM with RSA_2048_BIT)
 4. SES will give you 3 CNAME records to add to DNS
 5. Since DNS is on Cloudflare: Cloudflare dashboard → your domain → DNS → add the 3 CNAMEs **with the proxy turned OFF (gray cloud)** — SES needs direct DNS, not proxied
 6. Back in SES, refresh — should switch to "Verified" within a few minutes
-7. Also create a verified sender identity for `alerts@yourdomain.com` (you don't need to set up a real mailbox — SES just needs to confirm you control the domain, which the domain verification already covers)
+7. Also create a verified sender identity for `alerts@anyalawgirly.com` (you don't need to set up a real mailbox — SES just needs to confirm you control the domain, which the domain verification already covers)
 
 ### Stage 2: Move out of SES sandbox
 
@@ -234,7 +234,7 @@ By default SES only lets you send to verified email addresses. To send to her ar
 
 1. SES → Account dashboard → Request production access
 2. Mail type: Transactional
-3. Website URL: your Lawbound URL (`https://jobs.yourdomain.com`)
+3. Website URL: your Lawbound URL (`https://jobs.anyalawgirly.com`)
 4. Use case description: "Personal job-search tracking app sending application reminder emails to one user (the applicant) — daily morning briefs, closing-soon alerts, and weekly digests for myself."
 5. Acknowledge the AWS Acceptable Use Policy
 6. Submit. Approval typically arrives in 12-24 hours via email.
@@ -261,8 +261,8 @@ AWS_SECRET_ACCESS_KEY=...
 In `.env`:
 ```
 AWS_REGION=us-east-1
-NOTIFY_FROM="Lawbound <alerts@yourdomain.com>"
-PUBLIC_URL=https://jobs.yourdomain.com
+NOTIFY_FROM="Lawbound <alerts@anyalawgirly.com>"
+PUBLIC_URL=https://jobs.anyalawgirly.com
 ```
 
 In `data/preferences.json`:
@@ -288,11 +288,11 @@ She should get a "It works ✓" email within a minute. If it fails, common issue
 
 ### Stage 5: Preview emails
 
-Visit `https://jobs.yourdomain.com/notifications.html` to preview the three email templates and send tests. This is the safest way to tune copy before turning on the cron jobs.
+Visit `https://jobs.anyalawgirly.com/notifications.html` to preview the three email templates and send tests. This is the safest way to tune copy before turning on the cron jobs.
 
 ## Verification checklist
 
-- [ ] `https://jobs.yourdomain.com` shows Cloudflare Access login
+- [ ] `https://jobs.anyalawgirly.com` shows Cloudflare Access login
 - [ ] After login, you see "Today's Roles" page
 - [ ] Cron is set: `crontab -l` shows daily + backup entries
 - [ ] Service running: `systemctl status job-tracker`
@@ -308,7 +308,7 @@ Visit `https://jobs.yourdomain.com/notifications.html` to preview the three emai
 
 ## Troubleshooting
 
-**"jobs.yourdomain.com" hangs or 502s** — Cloudflared can't reach localhost:3000. Check `systemctl status job-tracker` and `journalctl -u job-tracker -n 50`.
+**"jobs.anyalawgirly.com" hangs or 502s** — Cloudflared can't reach localhost:3000. Check `systemctl status job-tracker` and `journalctl -u job-tracker -n 50`.
 
 **Daily cron didn't run** — Check `daily.log` in the project dir. Cron's environment is minimal; if you see "command not found" for node, replace `/usr/bin/node` with the output of `which node`.
 
@@ -328,18 +328,18 @@ The app uses [pino](https://github.com/pinojs/pino) for structured logging. Ever
 
 **The web server** (running under systemd) logs to journald:
 ```bash
-sudo journalctl -u lawbound -n 100             # last 100 lines
-sudo journalctl -u lawbound -f                  # follow live
-sudo journalctl -u lawbound --since '1 hour ago' -p err   # errors only
-sudo journalctl -u lawbound | grep '"component":"sources"' # one subsystem
+sudo journalctl -u anyajob -n 100             # last 100 lines
+sudo journalctl -u anyajob -f                  # follow live
+sudo journalctl -u anyajob --since '1 hour ago' -p err   # errors only
+sudo journalctl -u anyajob | grep '"component":"sources"' # one subsystem
 ```
 
 **Cron jobs** log to `*.log` files in the project directory:
 ```bash
-tail -f ~/lawbound/daily.log         # daily scrape + scoring
-tail -f ~/lawbound/discover.log      # twice-weekly source discovery
-tail -f ~/lawbound/weekly.log        # Sunday digest
-tail -f ~/lawbound/backup.log        # nightly S3 sync
+tail -f ~/anyajob/daily.log         # daily scrape + scoring
+tail -f ~/anyajob/discover.log      # twice-weekly source discovery
+tail -f ~/anyajob/weekly.log        # Sunday digest
+tail -f ~/anyajob/backup.log        # nightly S3 sync
 ```
 
 **Filtering JSON logs.** In production, logs are JSON. To pretty-print on demand:
@@ -372,11 +372,11 @@ All output passes through `src/redact.js` server-side. API keys, AWS keys, GitHu
 1. Create a Cloudflare Access service token in the Zero Trust dashboard:
    - Zero Trust → Access → Service Auth → Create token
    - Save the Client ID and Client Secret
-2. Edit your Access policy for `jobs.yourdomain.com` to include the service token (Include rule → Service Auth → your token)
+2. Edit your Access policy for `jobs.anyalawgirly.com` to include the service token (Include rule → Service Auth → your token)
 3. Copy `bin/lawbound-logs` to `/usr/local/bin/` (or anywhere on your PATH)
 4. Set environment variables in `~/.zshrc` or `~/.bashrc`:
    ```bash
-   export LAWBOUND_HOST=https://jobs.yourdomain.com
+   export LAWBOUND_HOST=https://jobs.anyalawgirly.com
    export LAWBOUND_CF_CLIENT_ID=<service-token-id>
    export LAWBOUND_CF_CLIENT_SECRET=<service-token-secret>
    ```

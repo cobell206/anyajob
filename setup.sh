@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh — provisions a fresh Ubuntu 22.04 instance to run Lawbound.
+# setup.sh — provisions a fresh Ubuntu 24.04 (or 26.04) instance to run Lawbound.
 # Idempotent: safe to re-run. Halts on errors.
 #
 # Usage:
@@ -16,7 +16,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_USER="${SUDO_USER:-$(whoami)}"
 NODE_MAJOR=20
-SERVICE_NAME="lawbound"
+SERVICE_NAME="anyajob"
 
 # ---------- flags ----------
 SKIP_SYSTEM=false
@@ -178,17 +178,17 @@ EOF
 install_cron() {
   log "Installing cron entries..."
 
-  local cron_marker="# >>> lawbound managed entries >>>"
-  local cron_end="# <<< lawbound managed entries <<<"
+  local cron_marker="# >>> anyajob managed entries >>>"
+  local cron_end="# <<< anyajob managed entries <<<"
   local node_bin
   node_bin="$(which node)"
 
   # Build the new block
-  # The lock file (/tmp/lawbound.lock) is shared with the deploy workflow.
+  # The lock file (/tmp/anyajob.lock) is shared with the deploy workflow.
   # `flock -n` skips this run if a deploy is in progress, rather than queueing
   # — a missed daily is recoverable on the next day; a corrupted run is not.
   # The S3 backup also takes the lock so it never sees a partial mid-deploy state.
-  local lock_file="/tmp/lawbound.lock"
+  local lock_file="/tmp/anyajob.lock"
   local new_block
   new_block=$(cat <<EOF
 $cron_marker
@@ -211,11 +211,11 @@ EOF
     log "Replacing existing managed cron block..."
     echo "$current_cron" \
       | sed "/$cron_marker/,/$cron_end/d" \
-      > /tmp/lawbound-cron.txt
-    echo "" >> /tmp/lawbound-cron.txt
-    echo "$new_block" >> /tmp/lawbound-cron.txt
-    crontab /tmp/lawbound-cron.txt
-    rm /tmp/lawbound-cron.txt
+      > /tmp/anyajob-cron.txt
+    echo "" >> /tmp/anyajob-cron.txt
+    echo "$new_block" >> /tmp/anyajob-cron.txt
+    crontab /tmp/anyajob-cron.txt
+    rm /tmp/anyajob-cron.txt
   else
     log "Appending managed cron block..."
     (echo "$current_cron"; echo ""; echo "$new_block") | crontab -

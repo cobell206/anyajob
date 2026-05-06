@@ -162,13 +162,13 @@ See `GITHUB.md` for repo setup and optional push-to-deploy via GitHub Actions.
 Quickstart:
 
 ```bash
-# On a fresh Ubuntu 22.04 EC2:
-git clone git@github.com:YOUR_USERNAME/lawbound.git
-cd lawbound
+# On a fresh Ubuntu 24.04 (or 26.04) EC2:
+git clone git@github.com:<your-github-user>/anyajob.git
+cd anyajob
 ./setup.sh                # installs Node, LibreOffice, AWS CLI, cloudflared, systemd, cron
 nano .env                 # add Anthropic API key, AWS region, NOTIFY_FROM, BACKUP_BUCKET
 nano data/preferences.json  # her actual profile
-sudo systemctl start lawbound
+sudo systemctl start anyajob
 ```
 
 ## Cost

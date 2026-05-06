@@ -13,7 +13,7 @@ git add .
 git commit -m "initial commit"
 
 # Create a private repo on github.com/new, then:
-git remote add origin git@github.com:YOUR_USERNAME/lawbound.git
+git remote add origin git@github.com:<your-github-user>/anyajob.git
 git branch -M main
 git push -u origin main
 ```
@@ -49,8 +49,8 @@ chmod 600 ~/.ssh/config
 
 # Now clone
 cd ~
-git clone git@github.com:YOUR_USERNAME/lawbound.git lawbound
-cd lawbound
+git clone git@github.com:<your-github-user>/anyajob.git anyajob
+cd anyajob
 
 # Run setup
 ./setup.sh
@@ -64,13 +64,13 @@ nano data/preferences.json         # add her actual profile
 ./scripts/restore.sh
 
 # Start it
-sudo systemctl start lawbound
-sudo systemctl status lawbound
+sudo systemctl start anyajob
+sudo systemctl status anyajob
 ```
 
 ## 3. Optional: push-to-deploy via GitHub Actions
 
-This makes `git push origin main` from your laptop automatically deploy to EC2. Skip this if you'd rather `ssh ec2; cd lawbound; git pull; sudo systemctl restart lawbound` manually — that works fine too.
+This makes `git push origin main` from your laptop automatically deploy to EC2. Skip this if you'd rather `ssh ec2; cd anyajob; git pull; sudo systemctl restart anyajob` manually — that works fine too.
 
 ### Generate a deploy SSH key (laptop → EC2)
 
@@ -78,21 +78,21 @@ This is a separate key from your personal `~/.ssh/id_*` — it lives in GitHub A
 
 ```bash
 # On your laptop:
-ssh-keygen -t ed25519 -f /tmp/lawbound_deploy -N "" -C "github-actions-deploy"
+ssh-keygen -t ed25519 -f /tmp/anyajob_deploy -N "" -C "github-actions-deploy"
 
 # The PUBLIC key (.pub) goes onto EC2:
-cat /tmp/lawbound_deploy.pub
+cat /tmp/anyajob_deploy.pub
 # SSH into EC2, append to ~/.ssh/authorized_keys:
 ssh ubuntu@<your-ec2-ip>
 echo "PASTE_PUBLIC_KEY_HERE" >> ~/.ssh/authorized_keys
 exit
 
 # The PRIVATE key (no extension) goes into GitHub Actions secrets:
-cat /tmp/lawbound_deploy
+cat /tmp/anyajob_deploy
 # Copy the entire output (BEGIN/END lines included)
 
 # THEN delete it from your laptop:
-shred -u /tmp/lawbound_deploy /tmp/lawbound_deploy.pub
+shred -u /tmp/anyajob_deploy /tmp/anyajob_deploy.pub
 ```
 
 ### Add GitHub Actions secrets
@@ -104,20 +104,20 @@ Repo → Settings → Secrets and variables → Actions → New repository secre
 | `EC2_SSH_KEY` | The private key contents | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
 | `EC2_HOST` | EC2 public IP or hostname | `52.12.345.67` |
 | `EC2_USER` | SSH user on EC2 | `ubuntu` |
-| `REPO_PATH` | Absolute path on EC2 | `/home/ubuntu/lawbound` |
+| `REPO_PATH` | Absolute path on EC2 | `/home/ubuntu/anyajob` |
 
 ### Allow EC2 sudo for systemctl restart (passwordless)
 
-The deploy workflow runs `sudo systemctl restart lawbound`. By default sudo asks for a password — we need to allow this one specific command without one.
+The deploy workflow runs `sudo systemctl restart anyajob`. By default sudo asks for a password — we need to allow this one specific command without one.
 
 ```bash
 # On EC2:
-sudo visudo -f /etc/sudoers.d/lawbound-deploy
+sudo visudo -f /etc/sudoers.d/anyajob-deploy
 ```
 
 Paste:
 ```
-ubuntu ALL=(root) NOPASSWD: /bin/systemctl restart lawbound, /bin/systemctl status lawbound
+ubuntu ALL=(root) NOPASSWD: /bin/systemctl restart anyajob, /bin/systemctl status anyajob
 ```
 
 (Replace `ubuntu` with `EC2_USER` value.)
@@ -139,7 +139,7 @@ Open the Actions tab on GitHub. You should see the workflow running. Within 30 s
 If it fails:
 - "Permission denied (publickey)" → public key not added to `authorized_keys` on EC2
 - "sudo: a password is required" → sudoers file not configured correctly
-- "Service failed to start" → SSH in and check `journalctl -u lawbound -n 50`
+- "Service failed to start" → SSH in and check `journalctl -u anyajob -n 50`
 
 ## 4. Day-to-day workflow
 
@@ -165,19 +165,19 @@ If you skip GitHub Actions and prefer manual:
 ```bash
 # After pushing from your laptop:
 ssh ubuntu@<your-ec2-ip>
-cd lawbound
+cd anyajob
 git pull
-sudo systemctl restart lawbound
+sudo systemctl restart anyajob
 ```
 
 ## 5. Rolling back
 
 ```bash
 # On EC2:
-cd ~/lawbound
+cd ~/anyajob
 git log --oneline -10                # see recent commits
 git reset --hard <commit-sha>        # roll back to a known-good one
-sudo systemctl restart lawbound
+sudo systemctl restart anyajob
 
 # Then on your laptop, undo the bad commit:
 git revert <bad-sha>
