@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f7faf9">
+  <title>Ignored · AnyaJob</title>
+  <link rel="stylesheet" href="/style.css?v=__CACHE_VERSION__">
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <a href="/" class="brand">
+        <span class="brand-mark">L</span>
+        <span>AnyaJob</span>
+      </a>
+      <nav>
+        <a href="/">Roles</a>
+        <a href="/profile.html">Profile</a>
+        <a href="/paste.html">Paste JD</a>
+        <a href="/settings.html">Settings</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="page-head">
+      <div>
+        <a href="/" class="page-back">← Back to roles</a>
+        <h1 class="page-title">Ignored listings</h1>
+        <div class="page-sub" id="sub">Loading…</div>
+      </div>
+    </div>
+
+    <div id="empty" class="empty" style="display:none">
+      <div class="empty-icon">○</div>
+      <div class="empty-title">Nothing ignored yet</div>
+      <div class="empty-sub">Listings you mark as Ignore will collect here as a learnings log.</div>
+    </div>
+
+    <div class="ignored-list" id="list"></div>
+  </main>
+
+  <script type="module">
+    import { $, $$, escapeHtml, api, fmtSalary, fmtDateLong, scoreClass } from './app.js?v=__CACHE_VERSION__';
+    import { openModal } from './modal.js?v=__CACHE_VERSION__';
+
+    // Labels for both reject-reason vocabularies (modal chips + card chips).
+    const REASON_LABELS = {
+      'not-a-fit': 'Not a fit',
+      'salary': 'Salary too low',
+      'location': 'Location',
+      'too-senior': 'Too senior',
+      'too-junior': 'Too junior',
+      'already-applied': 'Already applied',
+      'wrong-location': 'Wrong location',
+      'wrong-seniority': 'Wrong level',
+      'not-interested': 'Not interested',
+      'other': 'Other',
+    };
+
+    let allListings = [];
+
+    function reasonLabel(reason) {
+      if (!reason) return null;
+      return REASON_LABELS[reason] || reason;
+    }
+
+    function rowHtml(l) {
+      const overall = l.score?.overallScore ?? 0;
+      const reason = reasonLabel(l.rejectReason);
+      const id = l.dedupKey || l.fingerprint;
+      return `
+        <article class="ignored-row" data-id="${escapeHtml(id)}">
+          <div class="ignored-row-main">
+            <div class="ignored-row-head">
+              <div class="ignored-row-title">
+                <div class="cell-title">${escapeHtml(l.title)}</div>
+                <div class="cell-company">${escapeHtml(l.company)}${l.location ? ' · ' + escapeHtml(l.location) : ''}</div>
+              </div>
+              <div class="score-num ${scoreClass(overall)}">${overall}</div>
+            </div>
+            <div class="ignored-row-meta">
+              <span>${fmtSalary(l.score?.salaryMin, l.score?.salaryMax)}</span>
+              ${l.rejectAt ? `<span>Ignored ${fmtDateLong(l.rejectAt)}</span>` :
+                l.ingestedAt ? `<span>Seen ${fmtDateLong(l.ingestedAt)}</span>` : ''}
+              ${l.source ? `<span>${escapeHtml(l.source)}</span>` : ''}
+            </div>
+            ${reason || l.rejectNote ? `
+              <div class="ignored-row-reason">
+                ${reason ? `<span class="reason-tag reason-tag-${escapeHtml(l.rejectReason)}">${escapeHtml(reason)}</span>` : ''}
+                ${l.rejectNote ? `<span class="reason-note">${escapeHtml(l.rejectNote)}</span>` : ''}
+              </div>
+            ` : ''}
+            ${l.note ? `<div class="ignored-row-note">${escapeHtml(l.note)}</div>` : ''}
+          </div>
+        </article>
+      `;
+    }
+
+    function render() {
+      const list = $('#list');
+      const empty = $('#empty');
+      if (allListings.length === 0) {
+        list.style.display = 'none';
+        empty.style.display = '';
+        $('#sub').textContent = '0 listings';
+        return;
+      }
+      list.style.display = '';
+      empty.style.display = 'none';
+
+      // Group by reason (with a tail bucket for entries with no reason set).
+      const groups = new Map();
+      const NO_REASON = '__none__';
+      for (const l of allListings) {
+        const k = l.rejectReason || NO_REASON;
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k).push(l);
+      }
+
+      // Order: sized buckets desc, "no reason" last.
+      const entries = Array.from(groups.entries())
+        .filter(([k]) => k !== NO_REASON)
+        .sort((a, b) => b[1].length - a[1].length);
+      if (groups.has(NO_REASON)) entries.push([NO_REASON, groups.get(NO_REASON)]);
+
+      list.innerHTML = entries.map(([reason, items]) => {
+        const label = reason === NO_REASON ? 'No reason given' : reasonLabel(reason);
+        return `
+          <section class="ignored-group">
+            <h2 class="ignored-group-head">
+              <span>${escapeHtml(label)}</span>
+              <span class="ignored-group-count">${items.length}</span>
+            </h2>
+            <div class="ignored-group-body">
+              ${items.map(rowHtml).join('')}
+            </div>
+          </section>
+        `;
+      }).join('');
+
+      $$('.ignored-row', list).forEach((row) => {
+        row.addEventListener('click', () => {
+          const id = row.dataset.id;
+          const listing = allListings.find((l) => (l.dedupKey || l.fingerprint) === id);
+          if (listing) openModal(listing, onListingUpdated);
+        });
+      });
+
+      $('#sub').textContent = `${allListings.length} listing${allListings.length === 1 ? '' : 's'}`;
+    }
+
+    function onListingUpdated(updated) {
+      const updatedKey = updated.dedupKey || updated.fingerprint;
+      const idx = allListings.findIndex((l) => (l.dedupKey || l.fingerprint) === updatedKey);
+      if (idx < 0) return;
+      // If user moved it back out of "rejected", drop from this view.
+      if ((updated.status || 'new') !== 'rejected') {
+        allListings.splice(idx, 1);
+      } else {
+        allListings[idx] = { ...allListings[idx], ...updated };
+      }
+      render();
+    }
+
+    async function load() {
+      try {
+        const data = await api('/api/listings/ignored');
+        allListings = data.listings || [];
+        render();
+      } catch (err) {
+        $('#sub').textContent = `Failed to load: ${err.message}`;
+      }
+    }
+
+    load();
+  </script>
+
+  <nav class="tab-bar" aria-label="Main">
+    <div class="tab-bar-inner">
+      <a href="/">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <span>Roles</span>
+      </a>
+      <a href="/profile.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span>Profile</span>
+      </a>
+      <a href="/paste.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        <span>Paste</span>
+      </a>
+      <a href="/settings.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </a>
+    </div>
+  </nav>
+</body>
+</html>

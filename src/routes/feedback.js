@@ -19,6 +19,7 @@ const VALID_REJECT_REASONS = [
   'salary',
   'location',
   'too-senior',
+  'too-junior',
 ];
 
 function setRejectReason(feedback, fp, reason, note) {

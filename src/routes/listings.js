@@ -23,6 +23,7 @@ function hydrate(listing, feedback) {
     closesDate: feedback.closesDate[key] || listing.score?.closesDate || null,
     rejectReason: reject?.reason || null,
     rejectNote: reject?.note || null,
+    rejectAt: reject?.at || null,
   };
 }
 
@@ -60,6 +61,25 @@ router.get('/listings', async (req, res) => {
   }
 
   out.sort((a, b) => (b.score?.overallScore || 0) - (a.score?.overallScore || 0));
+
+  res.json({ count: out.length, listings: out });
+});
+
+router.get('/listings/ignored', async (req, res) => {
+  const { listings } = await readJson('listings.json');
+  const feedback = await readJson('feedback.json');
+
+  const out = listings
+    .map((l) => hydrate(l, feedback))
+    .filter((l) => l.status === 'rejected');
+
+  // Most recently ignored first; fall back to ingestedAt for entries
+  // ignored before we tracked the timestamp.
+  out.sort((a, b) => {
+    const at = a.rejectAt || a.ingestedAt || '';
+    const bt = b.rejectAt || b.ingestedAt || '';
+    return bt.localeCompare(at);
+  });
 
   res.json({ count: out.length, listings: out });
 });

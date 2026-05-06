@@ -122,7 +122,8 @@ export function openModal(listing, onUpdate) {
               <button type="button" class="reason-chip" data-reason="not-a-fit">Not a fit</button>
               <button type="button" class="reason-chip" data-reason="salary">Salary too low</button>
               <button type="button" class="reason-chip" data-reason="location">Location</button>
-              <button type="button" class="reason-chip" data-reason="too-senior">Too senior/junior</button>
+              <button type="button" class="reason-chip" data-reason="too-senior">Too senior</button>
+              <button type="button" class="reason-chip" data-reason="too-junior">Too junior</button>
               <button type="button" class="reason-chip" data-reason="already-applied">Already applied</button>
               <button type="button" class="reason-chip" data-reason="other">Other…</button>
             </div>

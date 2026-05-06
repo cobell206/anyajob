@@ -30,6 +30,9 @@
         <h1 class="page-title">Roles</h1>
         <div class="page-sub" id="sub">Loading…</div>
       </div>
+      <a href="/ignored.html" class="ignored-link" id="ignored-link" hidden>
+        Ignored <span class="ignored-link-count" id="ignored-link-count"></span> →
+      </a>
     </div>
 
     <!-- Daily brief -->
@@ -690,6 +693,16 @@
     });
 
     function renderStats(stats) {
+      const ignored = stats.byStatus?.rejected || 0;
+      const link = $('#ignored-link');
+      const count = $('#ignored-link-count');
+      if (ignored > 0) {
+        link.hidden = false;
+        count.textContent = `(${ignored})`;
+      } else {
+        link.hidden = true;
+      }
+
       $('#stats').innerHTML = `
         <div class="stat">
           <div class="stat-label">Total roles</div>
