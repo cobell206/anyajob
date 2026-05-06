@@ -1237,6 +1237,7 @@ textarea { resize: vertical; min-height: 80px; }
   border: 1px solid transparent;
   transition: color 0.12s, border-color 0.12s, background 0.12s;
 }
+.ignored-link[hidden] { display: none; }
 .ignored-link:hover {
   color: var(--ink-2);
   background: var(--surface-2);

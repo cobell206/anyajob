@@ -696,11 +696,16 @@
       const ignored = stats.byStatus?.rejected || 0;
       const link = $('#ignored-link');
       const count = $('#ignored-link-count');
-      if (ignored > 0) {
-        link.hidden = false;
-        count.textContent = `(${ignored})`;
-      } else {
-        link.hidden = true;
+      // Guard the element lookups so a stale-cached HTML without the
+      // ignored-link element can't crash this function and leave the
+      // page stuck on "Loading…".
+      if (link && count) {
+        if (ignored > 0) {
+          link.hidden = false;
+          count.textContent = `(${ignored})`;
+        } else {
+          link.hidden = true;
+        }
       }
 
       $('#stats').innerHTML = `

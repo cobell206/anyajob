@@ -34,8 +34,14 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(join(ROOT, 'public'), {
-  setHeaders: (res) => {
-    if (res.req.path.endsWith('.html')) {
+  // `path` is the resolved file path on disk (express.static's second
+  // setHeaders arg). Don't read res.req.path here — that's the URL path,
+  // and for `/` it's `/` (not `/index.html`), which would mis-classify
+  // the served index.html as a non-HTML asset and apply the immutable
+  // long-cache header. With Cloudflare in front, that pins stale HTML
+  // at the edge for a year.
+  setHeaders: (res, path) => {
+    if (path.endsWith('.html')) {
       res.setHeader('Cache-Control', 'no-cache');
     } else {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
