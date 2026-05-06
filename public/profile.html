@@ -147,12 +147,13 @@
       padding: 4px;
     }
 
-    /* Save bar */
+    /* Save bar — sits at the natural end of the page. With auto-save on,
+       the buttons are an escape hatch, not a primary action, so they don't
+       earn sticky real estate. */
     .save-bar {
-      position: sticky; bottom: 80px; z-index: 5;
       display: flex; justify-content: flex-end; align-items: center;
       gap: 12px;
-      margin: 16px 0 0;
+      margin: 16px 0 24px;
     }
     .save-status { font-size: 13px; color: var(--muted); }
     .save-status.dirty { color: var(--warn); }
