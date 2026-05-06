@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#f7faf9">
-  <title>Roles · Lawbound</title>
+  <title>Roles · AnyaJob</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
     <div class="header-inner">
       <a href="/" class="brand">
         <span class="brand-mark">L</span>
-        <span>Lawbound</span>
+        <span>AnyaJob</span>
       </a>
       <nav>
         <a href="/" class="active">Roles</a>
@@ -87,9 +87,19 @@
     import { openModal } from './modal.js';
 
     let allListings = [];
-    let activeStatus = 'all';
     let sortKey = 'score';
     let sortDir = 'desc';
+
+    const DEFAULT_FILTERS = {
+      status: 'all',     // 'all' | one of STATUSES values
+      search: '',        // matches title/company/location, case-insensitive
+      minScore: 0,       // 0-10
+      minSalary: 0,      // dollars; matches against salaryMax || salaryMin
+      sources: [],       // empty = all sources; otherwise listing.source must be in list
+      rating: 'any',     // 'any' | 'up' | 'down' | 'unrated'
+      closingSoon: false,// saved/applied/interview with closesDate within 7 days
+    };
+    let filters = { ...DEFAULT_FILTERS };
 
     function getSortValue(l, key) {
       switch (key) {
@@ -105,8 +115,47 @@
 
     function applyFiltersAndSort(listings) {
       let out = listings.slice();
-      if (activeStatus !== 'all') {
-        out = out.filter((l) => (l.status || 'new') === activeStatus);
+      if (filters.status !== 'all') {
+        out = out.filter((l) => (l.status || 'new') === filters.status);
+      }
+      if (filters.search) {
+        const q = filters.search.toLowerCase();
+        out = out.filter((l) =>
+          (l.title || '').toLowerCase().includes(q) ||
+          (l.company || '').toLowerCase().includes(q) ||
+          (l.location || '').toLowerCase().includes(q)
+        );
+      }
+      if (filters.minScore > 0) {
+        out = out.filter((l) => (l.score?.overallScore ?? 0) >= filters.minScore);
+      }
+      if (filters.minSalary > 0) {
+        out = out.filter((l) => {
+          const sal = l.score?.salaryMax ?? l.score?.salaryMin ?? 0;
+          return sal >= filters.minSalary;
+        });
+      }
+      if (filters.sources.length > 0) {
+        const set = new Set(filters.sources);
+        out = out.filter((l) => set.has(l.source));
+      }
+      if (filters.rating !== 'any') {
+        out = out.filter((l) => {
+          if (filters.rating === 'unrated') return !l.rating;
+          return l.rating === filters.rating;
+        });
+      }
+      if (filters.closingSoon) {
+        const now = Date.now();
+        const cutoff = now + 7 * 86400000;
+        out = out.filter((l) => {
+          const status = l.status || 'new';
+          if (!['saved', 'applied', 'interview'].includes(status)) return false;
+          const closes = l.closesDate || l.score?.closesDate;
+          if (!closes) return false;
+          const t = new Date(closes).getTime();
+          return !isNaN(t) && t >= now && t <= cutoff;
+        });
       }
       out.sort((a, b) => {
         const av = getSortValue(a, sortKey);
@@ -116,6 +165,24 @@
         return 0;
       });
       return out;
+    }
+
+    function activeFilterCount() {
+      let n = 0;
+      if (filters.status !== 'all') n++;
+      if (filters.search) n++;
+      if (filters.minScore > 0) n++;
+      if (filters.minSalary > 0) n++;
+      if (filters.sources.length > 0) n++;
+      if (filters.rating !== 'any') n++;
+      if (filters.closingSoon) n++;
+      return n;
+    }
+
+    function fmtKShort(n) {
+      if (!n) return '0';
+      if (n >= 1000) return Math.round(n / 1000) + 'k';
+      return String(n);
     }
 
     function scoreCell(l) {
@@ -255,38 +322,133 @@
       trigger.setAttribute('aria-expanded', 'true');
     }
 
+    function uniqueSources() {
+      const set = new Set();
+      for (const l of allListings) if (l.source) set.add(l.source);
+      return Array.from(set).sort();
+    }
+
+    function maxSalaryInListings() {
+      let max = 0;
+      for (const l of allListings) {
+        const s = l.score?.salaryMax || l.score?.salaryMin || 0;
+        if (s > max) max = s;
+      }
+      // Round up to nearest 25k for a sensible slider ceiling.
+      return Math.max(150000, Math.ceil(max / 25000) * 25000);
+    }
+
     function renderFilters(stats) {
       const counts = stats.byStatus || {};
       const total = Object.values(counts).reduce((a, b) => a + b, 0);
-      const options = [
+      const statusOptions = [
         { value: 'all', label: 'All', count: total },
         ...STATUSES.map((s) => ({ ...s, count: counts[s.value] || 0 })),
       ];
-      const active = options.find((o) => o.value === activeStatus) || options[0];
-      const isFiltered = activeStatus !== 'all';
+      const activeCount = activeFilterCount();
+      const isFiltered = activeCount > 0;
+      const sources = uniqueSources();
+      const maxSal = maxSalaryInListings();
 
       $('#filters').innerHTML = `
         <div class="filter-trigger-wrap">
           <button type="button" class="filter-trigger ${isFiltered ? 'is-active' : ''}"
-                  id="filter-trigger" aria-haspopup="listbox" aria-expanded="false">
+                  id="filter-trigger" aria-haspopup="dialog" aria-expanded="false">
             ${FILTER_ICON}
-            <span class="filter-trigger-label">${active.label}</span>
-            <span class="filter-trigger-count">${active.count}</span>
+            <span class="filter-trigger-label">${isFiltered ? 'Filtered' : 'Filter'}</span>
+            ${isFiltered ? `<span class="filter-trigger-count">${activeCount}</span>` : ''}
             ${CHEVRON_ICON}
           </button>
-          <div class="filter-popup" id="filter-popup" role="listbox" hidden>
-            ${options.map((o) => `
-              <button type="button" role="option"
-                      class="filter-option ${o.value === activeStatus ? 'active' : ''}"
-                      aria-selected="${o.value === activeStatus}"
-                      data-filter="${o.value}">
-                <span class="filter-option-label">${o.label}</span>
-                <span class="filter-option-count">${o.count}</span>
-              </button>
-            `).join('')}
+          <div class="filter-popup filter-panel" id="filter-popup" role="dialog" hidden>
+            <div class="filter-panel-head">
+              <span class="filter-panel-title">Filter ${total} listings</span>
+              <button type="button" class="filter-reset" id="filter-reset"
+                      ${isFiltered ? '' : 'disabled'}>Reset</button>
+            </div>
+
+            <div class="filter-section">
+              <label class="filter-section-label" for="f-search">Search</label>
+              <input type="search" id="f-search" class="filter-text-input"
+                     placeholder="Title, company, or location"
+                     value="${escapeHtml(filters.search)}">
+            </div>
+
+            <div class="filter-section">
+              <span class="filter-section-label">Status</span>
+              <div class="filter-pill-row">
+                ${statusOptions.map((o) => `
+                  <button type="button"
+                          class="filter-mini-pill ${o.value === filters.status ? 'active' : ''}"
+                          data-status="${o.value}">
+                    ${o.label}<span class="filter-mini-pill-count">${o.count}</span>
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+
+            <div class="filter-section">
+              <div class="filter-section-row">
+                <span class="filter-section-label">Min score</span>
+                <span class="filter-section-value" id="f-min-score-val">${filters.minScore || 'any'}</span>
+              </div>
+              <input type="range" id="f-min-score" min="0" max="10" step="1"
+                     value="${filters.minScore}" class="filter-slider">
+            </div>
+
+            <div class="filter-section">
+              <div class="filter-section-row">
+                <span class="filter-section-label">Min salary</span>
+                <span class="filter-section-value" id="f-min-salary-val">${filters.minSalary ? '$' + fmtKShort(filters.minSalary) : 'any'}</span>
+              </div>
+              <input type="range" id="f-min-salary" min="0" max="${maxSal}" step="5000"
+                     value="${filters.minSalary}" class="filter-slider">
+            </div>
+
+            ${sources.length > 1 ? `
+              <div class="filter-section">
+                <span class="filter-section-label">Source</span>
+                <div class="filter-pill-row">
+                  ${sources.map((src) => `
+                    <button type="button"
+                            class="filter-mini-pill ${filters.sources.includes(src) ? 'active' : ''}"
+                            data-source="${escapeHtml(src)}">
+                      ${escapeHtml(src)}
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+
+            <div class="filter-section">
+              <span class="filter-section-label">Rating</span>
+              <div class="filter-pill-row">
+                ${[
+                  { v: 'any', l: 'Any' },
+                  { v: 'up', l: '👍 Liked' },
+                  { v: 'down', l: '👎 Disliked' },
+                  { v: 'unrated', l: 'Unrated' },
+                ].map((o) => `
+                  <button type="button"
+                          class="filter-mini-pill ${o.v === filters.rating ? 'active' : ''}"
+                          data-rating="${o.v}">${o.l}</button>
+                `).join('')}
+              </div>
+            </div>
+
+            <div class="filter-section">
+              <label class="filter-toggle-row">
+                <span>
+                  <span class="filter-section-label" style="display:block">Closing soon</span>
+                  <span class="filter-toggle-sub">Saved/applied/interview, deadline ≤ 7 days</span>
+                </span>
+                <input type="checkbox" id="f-closing-soon" ${filters.closingSoon ? 'checked' : ''}>
+              </label>
+            </div>
           </div>
         </div>
       `;
+
+      // ---- Wire up controls ----
 
       $('#filter-trigger').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -294,14 +456,105 @@
         if (popup.hidden) openFilterPopup(); else closeFilterPopup();
       });
 
-      $$('.filter-option').forEach((opt) => {
-        opt.addEventListener('click', () => {
-          activeStatus = opt.dataset.filter;
-          closeFilterPopup();
+      $('#filter-reset').addEventListener('click', () => {
+        filters = { ...DEFAULT_FILTERS };
+        render();
+        renderFilters(stats);
+        openFilterPopup();
+      });
+
+      // Search — debounced so typing doesn't thrash the table.
+      let searchTimer;
+      $('#f-search').addEventListener('input', (e) => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          filters.search = e.target.value;
           render();
-          renderFilters(stats);
+          updateTriggerState(stats);
+        }, 200);
+      });
+
+      // Status pills
+      $$('[data-status]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          filters.status = btn.dataset.status;
+          $$('[data-status]').forEach((x) => x.classList.toggle('active', x.dataset.status === filters.status));
+          render();
+          updateTriggerState(stats);
         });
       });
+
+      // Min score slider
+      $('#f-min-score').addEventListener('input', (e) => {
+        filters.minScore = parseInt(e.target.value, 10);
+        $('#f-min-score-val').textContent = filters.minScore || 'any';
+        render();
+        updateTriggerState(stats);
+      });
+
+      // Min salary slider
+      $('#f-min-salary').addEventListener('input', (e) => {
+        filters.minSalary = parseInt(e.target.value, 10);
+        $('#f-min-salary-val').textContent = filters.minSalary ? '$' + fmtKShort(filters.minSalary) : 'any';
+        render();
+        updateTriggerState(stats);
+      });
+
+      // Source chips (multi-select)
+      $$('[data-source]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const src = btn.dataset.source;
+          if (filters.sources.includes(src)) {
+            filters.sources = filters.sources.filter((x) => x !== src);
+          } else {
+            filters.sources = [...filters.sources, src];
+          }
+          btn.classList.toggle('active');
+          render();
+          updateTriggerState(stats);
+        });
+      });
+
+      // Rating pills (single-select)
+      $$('[data-rating]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          filters.rating = btn.dataset.rating;
+          $$('[data-rating]').forEach((x) => x.classList.toggle('active', x.dataset.rating === filters.rating));
+          render();
+          updateTriggerState(stats);
+        });
+      });
+
+      // Closing-soon toggle
+      $('#f-closing-soon').addEventListener('change', (e) => {
+        filters.closingSoon = e.target.checked;
+        render();
+        updateTriggerState(stats);
+      });
+    }
+
+    // Update only the trigger button label/count without rebuilding the
+    // popup (so sliders, focus, and search-input state survive interaction).
+    function updateTriggerState(stats) {
+      const trigger = $('#filter-trigger');
+      const reset = $('#filter-reset');
+      if (!trigger) return;
+      const activeCount = activeFilterCount();
+      const isFiltered = activeCount > 0;
+      trigger.classList.toggle('is-active', isFiltered);
+      const label = trigger.querySelector('.filter-trigger-label');
+      const countEl = trigger.querySelector('.filter-trigger-count');
+      if (label) label.textContent = isFiltered ? 'Filtered' : 'Filter';
+      if (countEl && !isFiltered) countEl.remove();
+      else if (!countEl && isFiltered) {
+        const span = document.createElement('span');
+        span.className = 'filter-trigger-count';
+        span.textContent = activeCount;
+        label.after(span);
+      } else if (countEl && isFiltered) {
+        countEl.textContent = activeCount;
+      }
+      if (reset) reset.disabled = !isFiltered;
     }
 
     document.addEventListener('click', (e) => {
