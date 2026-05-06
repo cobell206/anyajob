@@ -17,6 +17,7 @@ data/documents/
 data/notifications.json
 data/discoveries.json
 data/preferences.json
+data/sources.json
 # data/preferences.example.json  IS committed as the template
 
 # Restore artifacts
