@@ -14,13 +14,16 @@ import Anthropic from '@anthropic-ai/sdk';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { loadSources } from './sources/registry.js';
 import { DISCOVERY_SYSTEM } from './prompts.js';
 import { findOverlap, smartfetchSources } from './discover-overlap.js';
 import { getProfileResumeText } from './documents.js';
+import { writeJsonAtomic } from './atomic.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PREFS_PATH = join(__dirname, '..', 'data', 'preferences.json');
+const DISCOVERIES_PATH = join(__dirname, '..', 'data', 'discoveries.json');
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
@@ -147,6 +150,84 @@ Return JSON only.`;
     candidates: filtered,
     summary: parsed.summary || '',
     usage: response.usage,
+  };
+}
+
+// =====================================================================
+// PERSISTENCE — shared by the Mon+Thu cron and the on-demand button on
+// the profile page. Single source of truth so the two paths can't drift.
+// =====================================================================
+
+export async function loadDiscoveries() {
+  try {
+    return JSON.parse(await readFile(DISCOVERIES_PATH, 'utf-8'));
+  } catch {
+    return { candidates: [], lastRunAt: null, history: [] };
+  }
+}
+
+// Drop candidates that are stale (dismissed > 30 days, pending > 60 days,
+// or already approved — approval moved them into sources.json).
+function pruneCandidates(candidates) {
+  const now = Date.now();
+  return candidates.filter((c) => {
+    if (c.status === 'approved') return false;
+    const seen = c.firstSeenAt ? new Date(c.firstSeenAt).getTime() : now;
+    const age = now - seen;
+    if (c.status === 'dismissed') return age < 30 * 86400000;
+    return age < 60 * 86400000;
+  });
+}
+
+// Merge fresh candidates into the existing list. Dedup by kind+slug-or-url.
+// Existing candidates keep their first-seen timestamp and review status —
+// we never overwrite a "dismissed" with a "pending" just because the model
+// re-suggested it.
+function mergeCandidates(existing, fresh) {
+  const key = (c) => c.kind + ':' + (c.config?.slug || c.config?.url || '').toLowerCase();
+  const seen = new Map(existing.map((c) => [key(c), c]));
+  const candidates = [...existing];
+  let added = 0;
+  for (const f of fresh) {
+    if (seen.has(key(f))) continue;
+    candidates.push({
+      id: 'cand-' + randomUUID().slice(0, 8),
+      ...f,
+      firstSeenAt: new Date().toISOString(),
+      status: 'pending',
+    });
+    added++;
+  }
+  return { candidates, added };
+}
+
+// Persist a discoverSources() result into data/discoveries.json. Returns
+// counts so the caller can log/respond meaningfully.
+export async function persistDiscoveryResult(result) {
+  const existing = await loadDiscoveries();
+  const pruned = pruneCandidates(existing.candidates || []);
+  const { candidates: merged, added } = mergeCandidates(pruned, result.candidates);
+
+  await writeJsonAtomic(DISCOVERIES_PATH, {
+    candidates: merged,
+    lastRunAt: new Date().toISOString(),
+    lastSummary: result.summary,
+    lastError: null,
+    history: [
+      ...(existing.history || []).slice(-9),
+      {
+        at: new Date().toISOString(),
+        added,
+        totalReturned: result.candidates.length,
+        usage: result.usage,
+      },
+    ],
+  });
+
+  return {
+    added,
+    totalReturned: result.candidates.length,
+    pendingTotal: merged.filter((c) => c.status === 'pending').length,
   };
 }
 

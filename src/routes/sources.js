@@ -86,16 +86,18 @@ router.post('/test', async (req, res) => {
   }
 });
 
-// Live discovery — wraps src/discover.js. Used by the "Find new sources"
-// button. Returned candidates are NOT persisted; the cron path in
-// scripts/discover.js is what writes to data/discoveries.json.
+// Live discovery — wraps src/discover.js. Used by the "Find sources" button.
+// Persists candidates the same way the Mon+Thu cron does, so they show up
+// on Settings for approve/dismiss instead of vanishing on page navigation.
 router.post('/discover', discoverLimiter, async (req, res) => {
   try {
-    const { discoverSources } = await import('../discover.js');
+    const { discoverSources, persistDiscoveryResult } = await import('../discover.js');
     const result = await discoverSources({
       maxCandidates: req.body?.maxCandidates || 12,
     });
-    res.json(result);
+    const persisted = await persistDiscoveryResult(result);
+    log.info({ ...persisted }, 'live discovery persisted');
+    res.json({ ...result, persisted });
   } catch (err) {
     log.error({ err }, 'live discovery failed');
     res.status(500).json({ error: err.message });
