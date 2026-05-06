@@ -50,94 +50,100 @@ export function openModal(listing, onUpdate) {
   const lsv = s.lawSchoolValue ?? 0;
 
   $('#m-body').innerHTML = `
-    <div class="modal-section">
-      <div class="modal-grid">
-        <div class="modal-stat">
-          <div class="modal-stat-label">Score</div>
-          <div class="modal-stat-value" style="color: var(--${overall >= 8 ? 'green' : 'blue'}-ink)">${overall}/10</div>
+    <div class="modal-cols">
+      <div class="modal-col-left">
+        <div class="modal-section">
+          <div class="modal-grid">
+            <div class="modal-stat">
+              <div class="modal-stat-label">Score</div>
+              <div class="modal-stat-value" style="color: var(--${overall >= 8 ? 'green' : 'blue'}-ink)">${overall}/10</div>
+            </div>
+            <div class="modal-stat">
+              <div class="modal-stat-label">Qualification fit</div>
+              <div class="modal-stat-value">${qual}/10</div>
+            </div>
+            <div class="modal-stat">
+              <div class="modal-stat-label">Law school value</div>
+              <div class="modal-stat-value">${lsv}/10</div>
+            </div>
+            <div class="modal-stat">
+              <div class="modal-stat-label">Salary</div>
+              <div class="modal-stat-value">${fmtSalary(s.salaryMin, s.salaryMax)}</div>
+            </div>
+          </div>
         </div>
-        <div class="modal-stat">
-          <div class="modal-stat-label">Qualification fit</div>
-          <div class="modal-stat-value">${qual}/10</div>
-        </div>
-        <div class="modal-stat">
-          <div class="modal-stat-label">Law school value</div>
-          <div class="modal-stat-value">${lsv}/10</div>
-        </div>
-        <div class="modal-stat">
-          <div class="modal-stat-label">Salary</div>
-          <div class="modal-stat-value">${fmtSalary(s.salaryMin, s.salaryMax)}</div>
-        </div>
-      </div>
-    </div>
 
-    ${s.rationale ? `
-      <div class="modal-section">
-        <h3>Why this score</h3>
-        <div class="rationale-box">${escapeHtml(s.rationale)}</div>
-      </div>
-    ` : ''}
+        ${s.rationale ? `
+          <div class="modal-section">
+            <h3>Why this score</h3>
+            <div class="rationale-box">${escapeHtml(s.rationale)}</div>
+          </div>
+        ` : ''}
 
-    ${s.strengths?.length ? `
-      <div class="modal-section">
-        <h3>Strengths</h3>
-        <ul class="bullet-list">${s.strengths.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
-      </div>
-    ` : ''}
+        ${s.strengths?.length ? `
+          <div class="modal-section">
+            <h3>Strengths</h3>
+            <ul class="bullet-list">${s.strengths.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+          </div>
+        ` : ''}
 
-    ${s.concerns?.length ? `
-      <div class="modal-section">
-        <h3>Concerns</h3>
-        <ul class="bullet-list concerns">${s.concerns.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
-      </div>
-    ` : ''}
+        ${s.concerns?.length ? `
+          <div class="modal-section">
+            <h3>Concerns</h3>
+            <ul class="bullet-list concerns">${s.concerns.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+          </div>
+        ` : ''}
 
-    ${s.applicationAngle ? `
-      <div class="modal-section">
-        <h3>Personal statement angle</h3>
-        <p style="font-size:14px; color: var(--ink-2); line-height: 1.55">${escapeHtml(s.applicationAngle)}</p>
-      </div>
-    ` : ''}
+        ${s.applicationAngle ? `
+          <div class="modal-section">
+            <h3>Personal statement angle</h3>
+            <p style="font-size:14px; color: var(--ink-2); line-height: 1.55">${escapeHtml(s.applicationAngle)}</p>
+          </div>
+        ` : ''}
 
-    <div id="m-docs-mount"></div>
-
-    <div class="modal-section">
-      <h3>Your decision</h3>
-      <div class="btn-row" style="margin-bottom: 8px">
-        <button class="btn btn-vote up ${listing.rating === 'up' ? 'active' : ''}" data-rate="up">👍</button>
-        <button class="btn btn-vote down ${listing.rating === 'down' ? 'active' : ''}" data-rate="down">👎</button>
-        ${listing.url ? `<a class="btn primary" href="${escapeHtml(listing.url)}" target="_blank" rel="noopener">Open original ↗</a>` : ''}
-      </div>
-
-      <label>Status</label>
-      <select id="m-status">
-        ${STATUSES.map((s) => `<option value="${s.value}" ${s.value === listing.status ? 'selected' : ''}>${s.label}</option>`).join('')}
-      </select>
-
-      <div class="field-grid">
-        <div>
-          <label>Applied date</label>
-          <input type="date" id="m-applied-date" value="${listing.appliedDate || ''}">
-        </div>
-        <div>
-          <label>Closes date</label>
-          <input type="date" id="m-closes-date" value="${listing.closesDate || ''}">
+        <div class="modal-section" style="padding-top: 16px; border-top: 1px solid var(--border)">
+          <h3>Listing details</h3>
+          <div style="font-size: 13px; color: var(--muted); line-height: 1.6">
+            <div>Source: ${escapeHtml(listing.source || '—')}</div>
+            <div>Posted: ${fmtDateLong(listing.postedAt)}</div>
+            <div>Ingested: ${fmtDateLong(listing.ingestedAt)}</div>
+            ${s.workMode ? `<div>Work mode: ${escapeHtml(s.workMode)}</div>` : ''}
+          </div>
         </div>
       </div>
 
-      <label>Notes</label>
-      <textarea id="m-note" placeholder="Application status, follow-ups, contacts…">${escapeHtml(listing.note || '')}</textarea>
+      <div class="modal-col-right">
+        <div class="modal-section">
+          <h3>Your decision</h3>
+          <div class="btn-row" style="margin-bottom: 8px">
+            <button class="btn btn-vote up ${listing.rating === 'up' ? 'active' : ''}" data-rate="up">👍</button>
+            <button class="btn btn-vote down ${listing.rating === 'down' ? 'active' : ''}" data-rate="down">👎</button>
+            ${listing.url ? `<a class="btn primary" href="${escapeHtml(listing.url)}" target="_blank" rel="noopener">Open original ↗</a>` : ''}
+          </div>
 
-      <div class="status-message" id="m-status-msg"></div>
-    </div>
+          <label>Status</label>
+          <select id="m-status">
+            ${STATUSES.map((s) => `<option value="${s.value}" ${s.value === listing.status ? 'selected' : ''}>${s.label}</option>`).join('')}
+          </select>
 
-    <div class="modal-section" style="margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border)">
-      <h3>Listing details</h3>
-      <div style="font-size: 13px; color: var(--muted); line-height: 1.6">
-        <div>Source: ${escapeHtml(listing.source || '—')}</div>
-        <div>Posted: ${fmtDateLong(listing.postedAt)}</div>
-        <div>Ingested: ${fmtDateLong(listing.ingestedAt)}</div>
-        ${s.workMode ? `<div>Work mode: ${escapeHtml(s.workMode)}</div>` : ''}
+          <div class="field-grid">
+            <div>
+              <label>Applied date</label>
+              <input type="date" id="m-applied-date" value="${listing.appliedDate || ''}">
+            </div>
+            <div>
+              <label>Closes date</label>
+              <input type="date" id="m-closes-date" value="${listing.closesDate || ''}">
+            </div>
+          </div>
+
+          <label>Notes</label>
+          <textarea id="m-note" placeholder="Application status, follow-ups, contacts…">${escapeHtml(listing.note || '')}</textarea>
+
+          <div class="status-message" id="m-status-msg"></div>
+        </div>
+
+        <div id="m-docs-mount"></div>
       </div>
     </div>
   `;
