@@ -179,14 +179,31 @@ export async function runOne(source) {
   }
 }
 
-// Run all enabled sources in parallel
+// Run all enabled sources. Non-smartfetch sources run in parallel (they hit
+// external APIs, not Claude). Smartfetch sources are serialized to stay under
+// Anthropic's 50k input-tokens/min rate limit — each call ships ~10–30k tokens
+// of cleaned HTML, so parallel fan-out reliably triggers 429s.
 export async function fetchAll() {
   const data = await loadSources();
   const enabled = data.sources.filter((s) => s.enabled && s.kind !== 'bookmark');
-  const results = await Promise.allSettled(enabled.map(runOne));
+
+  const fast = enabled.filter((s) => s.kind !== 'smartfetch');
+  const smart = enabled.filter((s) => s.kind === 'smartfetch');
+
+  // Run integrations in parallel
+  const fastResults = await Promise.allSettled(fast.map(runOne));
+
+  // Run smartfetch sources one at a time
+  const smartResults = [];
+  for (const source of smart) {
+    smartResults.push(await runOne(source).then(
+      (v) => ({ status: 'fulfilled', value: v }),
+      (e) => ({ status: 'rejected', reason: e }),
+    ));
+  }
 
   const all = [];
-  for (const r of results) {
+  for (const r of [...fastResults, ...smartResults]) {
     if (r.status !== 'fulfilled') continue;
     const { id, name, listings, error, durationMs, skipped } = r.value;
     if (skipped) {

@@ -90,6 +90,10 @@ router.post('/test', async (req, res) => {
 // Persists candidates the same way the Mon+Thu cron does, so they show up
 // on Settings for approve/dismiss instead of vanishing on page navigation.
 router.post('/discover', discoverLimiter, async (req, res) => {
+  // Discovery calls Claude with web_search — can take 60–120s. Guard against
+  // Cloudflare's 100s upstream timeout by setting an explicit server timeout.
+  req.setTimeout(110_000);
+  res.setTimeout(110_000);
   try {
     const { discoverSources, persistDiscoveryResult } = await import('../discover.js');
     const result = await discoverSources({

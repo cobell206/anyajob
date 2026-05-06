@@ -66,7 +66,7 @@ export async function fetchSmart(url, { name = 'Source' } = {}) {
   const res = await fetch(url, {
     timeout: 20000,
     headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; LawboundBot/0.1; +https://lawbound.local)',
+      'User-Agent': 'Mozilla/5.0 (compatible; AnyaJobBot/0.1; +https://anyajob.local)',
       'Accept': 'text/html,application/xhtml+xml',
     },
     redirect: 'follow',
@@ -104,11 +104,14 @@ Return JSON only.`;
 
   const text = response.content
     .filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
-  const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-
+  // Robust parser: tolerates leading prose ("I'll extract…") before the JSON
+  // object, and trailing prose after it. Same approach as src/score.js.
   let parsed;
   try {
-    parsed = JSON.parse(cleaned);
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start < 0 || end < start) throw new Error('no JSON object found in response');
+    parsed = JSON.parse(text.slice(start, end + 1));
   } catch (err) {
     throw new Error('Could not parse extraction response: ' + err.message);
   }
