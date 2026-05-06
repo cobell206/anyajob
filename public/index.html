@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#f7faf9">
   <title>Roles · AnyaJob</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=__CACHE_VERSION__">
 </head>
 <body>
   <header>
@@ -91,8 +91,8 @@
   </main>
 
   <script type="module">
-    import { $, $$, escapeHtml, api, fmtSalary, fmtDate, scoreClass, STATUSES } from './app.js';
-    import { openModal } from './modal.js';
+    import { $, $$, escapeHtml, api, fmtSalary, fmtDate, scoreClass, STATUSES } from './app.js?v=__CACHE_VERSION__';
+    import { openModal } from './modal.js?v=__CACHE_VERSION__';
 
     let allListings = [];
     let sortKey = 'score';
