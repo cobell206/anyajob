@@ -108,6 +108,29 @@ router.post('/discover', discoverLimiter, async (req, res) => {
   }
 });
 
+// Run a saved source by id. Same response shape as /test, plus the full
+// listings array so the UI can render the count without re-fetching.
+router.post('/:id/run', async (req, res) => {
+  // Smartfetch sources can take 5-15s and run sequentially with the cron's
+  // 429 mitigation, so give the request enough headroom past the default.
+  req.setTimeout(110_000);
+  res.setTimeout(110_000);
+  try {
+    const data = await loadSources();
+    const source = data.sources.find((s) => s.id === req.params.id);
+    if (!source) return res.status(404).json({ error: 'Source not found' });
+    const result = await runOne(source);
+    res.json({
+      listings: result.listings || [],
+      count: result.listings?.length || 0,
+      durationMs: result.durationMs,
+      error: result.error,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.patch('/:id', async (req, res) => {
   try {
     const updated = await updateSource(req.params.id, req.body);

@@ -46,19 +46,119 @@ function renderSource(s) {
     if (s.lastBriefedAt) stats += ` <span>last shown ${fmtRel(s.lastBriefedAt)}</span>`;
   }
 
+  // Bookmarks don't fetch — runOne short-circuits — so no "Run now" button.
+  const runBtn = s.kind === 'bookmark' ? '' :
+    `<button class="icon-btn-sm run-btn" data-run="${s.id}" title="Run now">▶ Run</button>`;
+
   return `
     <div class="source-card ${s.enabled ? '' : 'disabled'}">
       <div class="source-info">
         <div class="source-name">${kindBadge(s.kind)}${escapeHtml(s.name)}${s.builtIn ? ' <span style="color:var(--muted);font-weight:400;font-size:11px">· built-in</span>' : ''}</div>
         <div class="source-meta">${escapeHtml(configLine)}</div>
         <div class="source-stats">${stats}</div>
+        <div class="run-result" data-run-result="${s.id}" style="display:none"></div>
       </div>
       <div class="source-actions">
+        ${runBtn}
         <button class="icon-btn-sm" data-toggle="${s.id}" title="${s.enabled ? 'Disable' : 'Enable'}">${s.enabled ? '⏸' : '▶'}</button>
         <button class="icon-btn-sm danger" data-delete="${s.id}" title="Delete">×</button>
       </div>
     </div>
   `;
+}
+
+// Reusable confirmation modal. Reuses the existing .modal-backdrop + .modal
+// styles from style.css; the bottom-sheet → centered transition there works
+// for confirmations too. Resolves true on confirm, false on cancel/dismiss.
+function confirmDialog({ title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel' }) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop confirm-backdrop';
+    backdrop.innerHTML = `
+      <div class="modal confirm-modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <div class="modal-title">${escapeHtml(title)}</div>
+          <button class="modal-close" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:14px;color:var(--ink-2);line-height:1.5;margin:0 0 18px">${escapeHtml(message)}</p>
+          <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+            <button class="btn ghost" data-act="cancel">${escapeHtml(cancelLabel)}</button>
+            <button class="btn primary" data-act="confirm">${escapeHtml(confirmLabel)}</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+    document.body.style.overflow = 'hidden';
+    // Allow the transform/opacity transition to take effect.
+    requestAnimationFrame(() => backdrop.classList.add('open'));
+
+    const finish = (val) => {
+      backdrop.classList.remove('open');
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+      setTimeout(() => backdrop.remove(), 220);
+      resolve(val);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') finish(false); };
+
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) finish(false); });
+    backdrop.querySelector('.modal-close').addEventListener('click', () => finish(false));
+    backdrop.querySelector('[data-act="cancel"]').addEventListener('click', () => finish(false));
+    backdrop.querySelector('[data-act="confirm"]').addEventListener('click', () => finish(true));
+    document.addEventListener('keydown', onKey);
+    backdrop.querySelector('[data-act="confirm"]').focus();
+  });
+}
+
+async function runSourceNow(s, btn) {
+  const ok = await confirmDialog({
+    title: 'Run ' + s.name + ' now?',
+    message: 'This will fetch live listings.',
+    confirmLabel: 'Run',
+  });
+  if (!ok) return;
+
+  const resultEl = document.querySelector(`[data-run-result="${s.id}"]`);
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  if (resultEl) {
+    resultEl.style.display = 'none';
+    resultEl.className = 'run-result';
+    resultEl.textContent = '';
+  }
+
+  try {
+    const data = await api(`/api/sources/${s.id}/run`, { method: 'POST', body: {} });
+    if (resultEl) {
+      resultEl.style.display = '';
+      if (data.error) {
+        resultEl.className = 'run-result err';
+        resultEl.textContent = '✗ ' + data.error;
+      } else {
+        resultEl.className = 'run-result ok';
+        resultEl.textContent = `✓ Found ${data.count} listing${data.count === 1 ? '' : 's'}`;
+      }
+    }
+  } catch (err) {
+    if (resultEl) {
+      resultEl.style.display = '';
+      resultEl.className = 'run-result err';
+      resultEl.textContent = '✗ ' + err.message;
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
+    // Refresh stats (lastCount, lastRunAt, lastError) without nuking the
+    // inline result we just rendered.
+    try {
+      sourcesData = await api('/api/sources');
+      const enabled = sourcesData.sources.filter((x) => x.enabled).length;
+      $('#sources-sub').textContent = `${sourcesData.sources.length} configured · ${enabled} enabled`;
+    } catch { /* ignore */ }
+  }
 }
 
 async function loadSources() {
@@ -72,6 +172,13 @@ async function loadSources() {
       const s = sourcesData.sources.find((x) => x.id === b.dataset.toggle);
       await api(`/api/sources/${s.id}`, { method: 'PATCH', body: { enabled: !s.enabled } });
       loadSources();
+    });
+  });
+
+  $$('[data-run]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const s = sourcesData.sources.find((x) => x.id === b.dataset.run);
+      if (s) runSourceNow(s, b);
     });
   });
 
