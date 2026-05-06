@@ -82,7 +82,10 @@ Return JSON only.`;
 
   const response = await client().messages.create({
     model: MODEL,
-    max_tokens: 4000,
+    // Web search adds tool-use commentary between rounds, then the final JSON
+    // blob — needs more headroom than score.js. 8k is enough for 15 searches
+    // worth of commentary plus 12 candidates of structured output.
+    max_tokens: 8000,
     tools: [{
       type: 'web_search_20250305',
       name: 'web_search',
@@ -99,14 +102,17 @@ Return JSON only.`;
     .join('\n')
     .trim();
 
-  // Strip code fences if present
-  const cleaned = text
-    .replace(/^```(?:json)?\n?/, '')
-    .replace(/\n?```$/, '');
-
+  // Extract the first {...} block — tolerates leading "I'll search..."
+  // commentary the model emits between web_search rounds, plus any trailing
+  // prose after the JSON.
   let parsed;
   try {
-    parsed = JSON.parse(cleaned);
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start < 0 || end < start) {
+      throw new Error('no JSON object found in response (likely truncated by max_tokens)');
+    }
+    parsed = JSON.parse(text.slice(start, end + 1));
   } catch (err) {
     throw new Error('Could not parse discovery response: ' + err.message + '\nResponse was:\n' + text.slice(0, 500));
   }
