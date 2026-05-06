@@ -9,6 +9,23 @@ import { VALID_STATUSES } from '../constants.js';
 
 const router = Router();
 
+const VALID_REJECT_REASONS = [
+  'wrong-location',
+  'wrong-seniority',
+  'not-interested',
+  'already-applied',
+  'other',
+];
+
+function setRejectReason(feedback, fp, reason, note) {
+  if (!feedback.rejectReasons) feedback.rejectReasons = {};
+  feedback.rejectReasons[fp] = {
+    reason,
+    note: (note || '').slice(0, 500),
+    at: new Date().toISOString(),
+  };
+}
+
 router.post('/:fp/rating', async (req, res) => {
   const { fp } = req.params;
   const { rating } = req.body;
@@ -33,9 +50,12 @@ router.post('/:fp/note', async (req, res) => {
 
 router.post('/:fp/status', async (req, res) => {
   const { fp } = req.params;
-  const { status } = req.body;
+  const { status, rejectReason, rejectNote } = req.body;
   if (!VALID_STATUSES.includes(status)) {
     return res.status(400).json({ error: `status must be one of ${VALID_STATUSES.join(', ')}` });
+  }
+  if (rejectReason !== undefined && !VALID_REJECT_REASONS.includes(rejectReason)) {
+    return res.status(400).json({ error: `rejectReason must be one of ${VALID_REJECT_REASONS.join(', ')}` });
   }
   const feedback = await readJson('feedback.json');
   feedback.status[fp] = status;
@@ -43,6 +63,21 @@ router.post('/:fp/status', async (req, res) => {
   if (status === 'applied' && !feedback.appliedDate[fp]) {
     feedback.appliedDate[fp] = new Date().toISOString().slice(0, 10);
   }
+  if (rejectReason && (status === 'rejected' || status === 'pass')) {
+    setRejectReason(feedback, fp, rejectReason, rejectNote);
+  }
+  await writeJson('feedback.json', feedback);
+  res.json({ ok: true });
+});
+
+router.post('/:fp/reject-reason', async (req, res) => {
+  const { fp } = req.params;
+  const { reason, note } = req.body;
+  if (!VALID_REJECT_REASONS.includes(reason)) {
+    return res.status(400).json({ error: `reason must be one of ${VALID_REJECT_REASONS.join(', ')}` });
+  }
+  const feedback = await readJson('feedback.json');
+  setRejectReason(feedback, fp, reason, note);
   await writeJson('feedback.json', feedback);
   res.json({ ok: true });
 });

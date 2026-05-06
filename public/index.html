@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#f7faf9">
   <title>Roles · AnyaJob</title>
-  <link rel="stylesheet" href="/style.css?v=__CACHE_VERSION__">
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <header>
@@ -91,8 +91,8 @@
   </main>
 
   <script type="module">
-    import { $, $$, escapeHtml, api, fmtSalary, fmtDate, scoreClass, STATUSES } from './app.js?v=__CACHE_VERSION__';
-    import { openModal } from './modal.js?v=__CACHE_VERSION__';
+    import { $, $$, escapeHtml, api, fmtSalary, fmtDate, scoreClass, STATUSES } from './app.js';
+    import { openModal } from './modal.js';
 
     let allListings = [];
     let sortKey = 'score';
@@ -275,11 +275,131 @@
       }).join('');
 
       $$('.card', cards).forEach((card) => {
-        card.addEventListener('click', () => {
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('.reject-reason-bar')) return;
           const id = card.dataset.id;
           const listing = allListings.find((l) => (l.dedupKey || l.fingerprint) === id);
           if (listing) openModal(listing, onListingUpdated);
         });
+      });
+
+      // Re-attach any pending reject-reason bars (survives card re-render).
+      for (const fp of pendingRejectReason.keys()) {
+        const card = cards.querySelector(`.card[data-id="${cssEscape(fp)}"]`);
+        if (card) attachRejectReasonBar(card, fp);
+      }
+    }
+
+    // ----- Reject-reason bar -----
+
+    const REJECT_CHIPS = [
+      { value: 'wrong-location',  label: '📍 Wrong location' },
+      { value: 'wrong-seniority', label: '📊 Wrong level' },
+      { value: 'not-interested',  label: '😐 Not interested' },
+      { value: 'already-applied', label: '✅ Already applied' },
+      { value: 'other',           label: '✏️ Other…' },
+    ];
+
+    // fp -> { timeoutId } — listings whose cards should currently show the bar.
+    const pendingRejectReason = new Map();
+
+    function cssEscape(s) {
+      return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/"/g, '\\"');
+    }
+
+    function dismissRejectReason(fp) {
+      const entry = pendingRejectReason.get(fp);
+      if (entry?.timeoutId) clearTimeout(entry.timeoutId);
+      pendingRejectReason.delete(fp);
+      const bar = $(`.reject-reason-bar[data-fp="${cssEscape(fp)}"]`);
+      if (bar) bar.remove();
+    }
+
+    async function postRejectReason(fp, reason, note) {
+      try {
+        await api(`/api/feedback/${encodeURIComponent(fp)}/reject-reason`, {
+          method: 'POST',
+          body: { reason, note: note || '' },
+        });
+      } catch (err) {
+        console.error('reject-reason save failed', err);
+      }
+    }
+
+    function flashNotedThenDismiss(bar, fp) {
+      bar.innerHTML = '<span class="reject-noted">✓ noted</span>';
+      const t = setTimeout(() => dismissRejectReason(fp), 700);
+      const entry = pendingRejectReason.get(fp);
+      if (entry) {
+        if (entry.timeoutId) clearTimeout(entry.timeoutId);
+        entry.timeoutId = t;
+      }
+    }
+
+    function attachRejectReasonBar(card, fp) {
+      // Avoid duplicates if re-rendered while present.
+      const existing = card.querySelector('.reject-reason-bar');
+      if (existing) existing.remove();
+
+      const bar = document.createElement('div');
+      bar.className = 'reject-reason-bar';
+      bar.dataset.fp = fp;
+      bar.innerHTML = `
+        <span class="reject-reason-label">Why?</span>
+        <div class="reject-chip-row">
+          ${REJECT_CHIPS.map((c) => `
+            <button type="button" class="reject-chip" data-reason="${c.value}">${c.label}</button>
+          `).join('')}
+        </div>
+      `;
+      card.appendChild(bar);
+
+      // Auto-dismiss after 8s of no interaction.
+      const timeoutId = setTimeout(() => dismissRejectReason(fp), 8000);
+      const entry = pendingRejectReason.get(fp) || {};
+      if (entry.timeoutId) clearTimeout(entry.timeoutId);
+      entry.timeoutId = timeoutId;
+      pendingRejectReason.set(fp, entry);
+
+      const clearAutoDismiss = () => {
+        const e = pendingRejectReason.get(fp);
+        if (e?.timeoutId) {
+          clearTimeout(e.timeoutId);
+          e.timeoutId = null;
+        }
+      };
+
+      bar.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        clearAutoDismiss();
+        const chip = ev.target.closest('.reject-chip');
+        if (!chip) return;
+        const reason = chip.dataset.reason;
+        if (reason === 'other') {
+          // Replace chips with an inline text input.
+          bar.innerHTML = `
+            <span class="reject-reason-label">Other:</span>
+            <input type="text" class="reject-other-input" placeholder="What put you off?" maxlength="200" autofocus>
+            <button type="button" class="reject-chip reject-other-submit">Submit</button>
+          `;
+          const input = bar.querySelector('.reject-other-input');
+          const submit = bar.querySelector('.reject-other-submit');
+          input.focus();
+          const onSubmit = async () => {
+            const note = input.value.trim();
+            await postRejectReason(fp, 'other', note);
+            flashNotedThenDismiss(bar, fp);
+          };
+          submit.addEventListener('click', (e) => { e.stopPropagation(); onSubmit(); });
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); onSubmit(); }
+            if (e.key === 'Escape') { e.preventDefault(); dismissRejectReason(fp); }
+          });
+          return;
+        }
+        chip.classList.add('selected');
+        postRejectReason(fp, reason);
+        flashNotedThenDismiss(bar, fp);
       });
     }
 
@@ -306,7 +426,20 @@
     function onListingUpdated(updated) {
       const updatedKey = updated.dedupKey || updated.fingerprint;
       const idx = allListings.findIndex((l) => (l.dedupKey || l.fingerprint) === updatedKey);
+      const oldStatus = idx >= 0 ? (allListings[idx].status || 'new') : 'new';
+      const newStatus = updated.status || 'new';
       if (idx >= 0) allListings[idx] = { ...allListings[idx], ...updated };
+
+      const transitionedToReject = oldStatus !== newStatus &&
+        (newStatus === 'rejected' || newStatus === 'pass');
+      const movedAwayFromReject = newStatus !== 'rejected' && newStatus !== 'pass';
+
+      if (transitionedToReject && !pendingRejectReason.has(updatedKey)) {
+        pendingRejectReason.set(updatedKey, {});
+      } else if (movedAwayFromReject && pendingRejectReason.has(updatedKey)) {
+        dismissRejectReason(updatedKey);
+      }
+
       render();
       loadStats();
     }

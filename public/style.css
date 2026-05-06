@@ -286,7 +286,7 @@ main {
 .filter-popup {
   position: absolute;
   top: calc(100% + 6px);
-  right: 0;
+  left: 0;
   z-index: 20;
   min-width: 220px;
   background: var(--surface);
@@ -740,6 +740,89 @@ td {
   border-top: 1px solid var(--border);
 }
 
+/* ============ REJECT REASON BAR ============ */
+
+.reject-reason-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px -4px -4px;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius-md, 8px);
+  cursor: default;
+  animation: rejectBarFadeIn 160ms ease-out;
+}
+
+@keyframes rejectBarFadeIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.reject-reason-label {
+  font-size: 12px;
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.reject-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reject-chip {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+  line-height: 1.5;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.reject-chip:hover {
+  background: var(--blue-soft);
+  color: var(--blue-ink);
+  border-color: var(--blue-soft);
+}
+
+.reject-chip.selected {
+  background: var(--blue);
+  color: white;
+  border-color: var(--blue);
+}
+
+.reject-other-input {
+  flex: 1;
+  min-width: 140px;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  outline: none;
+}
+
+.reject-other-input:focus {
+  border-color: var(--blue);
+}
+
+.reject-other-submit {
+  background: var(--blue);
+  color: white;
+}
+
+.reject-noted {
+  font-size: 12px;
+  color: var(--green-ink);
+  font-weight: 500;
+}
+
 /* ============ MODAL ============ */
 
 .modal-backdrop {
@@ -1120,15 +1203,6 @@ textarea { resize: vertical; min-height: 80px; }
   .header-inner { padding: 12px 16px; }
   nav a { padding: 6px 10px; font-size: 13px; }
   .stats { grid-template-columns: repeat(2, 1fr); }
-  /* On mobile the toolbar floats above cards rather than sitting flush on
-     the table, so restore the bottom border and round all corners. A
-     slightly stronger shadow replaces the hard cutoff. */
-  .table-toolbar {
-    border-bottom: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-md);
-    margin-bottom: 12px;
-  }
 }
 
 /* Result card on paste page */
