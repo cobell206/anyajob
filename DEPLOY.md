@@ -234,7 +234,7 @@ By default SES only lets you send to verified email addresses. To send to her ar
 
 1. SES → Account dashboard → Request production access
 2. Mail type: Transactional
-3. Website URL: your Lawbound URL (`https://jobs.anyalawgirly.com`)
+3. Website URL: your AnyaJob URL (`https://jobs.anyalawgirly.com`)
 4. Use case description: "Personal job-search tracking app sending application reminder emails to one user (the applicant) — daily morning briefs, closing-soon alerts, and weekly digests for myself."
 5. Acknowledge the AWS Acceptable Use Policy
 6. Submit. Approval typically arrives in 12-24 hours via email.
@@ -261,7 +261,7 @@ AWS_SECRET_ACCESS_KEY=...
 In `.env`:
 ```
 AWS_REGION=us-east-1
-NOTIFY_FROM="Lawbound <alerts@anyalawgirly.com>"
+NOTIFY_FROM="AnyaJob <alerts@anyalawgirly.com>"
 PUBLIC_URL=https://jobs.anyalawgirly.com
 ```
 
@@ -367,30 +367,30 @@ For debugging without SSHing in, two HTTP endpoints expose redacted logs over th
 
 All output passes through `src/redact.js` server-side. API keys, AWS keys, GitHub tokens, JWTs, email addresses, file paths, and long opaque tokens are stripped.
 
-**Setup the laptop CLI** (`bin/lawbound-logs`):
+**Setup the laptop CLI** (`bin/anyajob-logs`):
 
 1. Create a Cloudflare Access service token in the Zero Trust dashboard:
    - Zero Trust → Access → Service Auth → Create token
    - Save the Client ID and Client Secret
 2. Edit your Access policy for `jobs.anyalawgirly.com` to include the service token (Include rule → Service Auth → your token)
-3. Copy `bin/lawbound-logs` to `/usr/local/bin/` (or anywhere on your PATH)
+3. Copy `bin/anyajob-logs` to `/usr/local/bin/` (or anywhere on your PATH)
 4. Set environment variables in `~/.zshrc` or `~/.bashrc`:
    ```bash
-   export LAWBOUND_HOST=https://jobs.anyalawgirly.com
-   export LAWBOUND_CF_CLIENT_ID=<service-token-id>
-   export LAWBOUND_CF_CLIENT_SECRET=<service-token-secret>
+   export ANYAJOB_HOST=https://jobs.anyalawgirly.com
+   export ANYAJOB_CF_CLIENT_ID=<service-token-id>
+   export ANYAJOB_CF_CLIENT_SECRET=<service-token-secret>
    ```
 
 **Usage:**
 
 ```bash
-lawbound-logs                        # diagnostic bundle (text format)
-lawbound-logs --json                 # diagnostic bundle (JSON)
-lawbound-logs daily                  # last 500 lines of daily.log
-lawbound-logs daily 1h               # last hour of daily.log
-lawbound-logs discover --error       # only errors from discover.log
-lawbound-logs sources                # list available log files
-lawbound-logs --copy daily 1h        # fetch + copy to clipboard (pbcopy/xclip)
+anyajob-logs                        # diagnostic bundle (text format)
+anyajob-logs --json                 # diagnostic bundle (JSON)
+anyajob-logs daily                  # last 500 lines of daily.log
+anyajob-logs daily 1h               # last hour of daily.log
+anyajob-logs discover --error       # only errors from discover.log
+anyajob-logs sources                # list available log files
+anyajob-logs --copy daily 1h        # fetch + copy to clipboard (pbcopy/xclip)
 ```
 
-For sharing with Claude during debugging, `lawbound-logs --copy` puts a redacted bundle on your clipboard ready to paste.
+For sharing with Claude during debugging, `anyajob-logs --copy` puts a redacted bundle on your clipboard ready to paste.

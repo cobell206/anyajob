@@ -18,7 +18,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const NOTIFY_LOG = join(__dirname, '..', 'data', 'notifications.json');
 
 const SES_REGION = process.env.AWS_REGION || 'us-east-1';
-const FROM_ADDRESS = process.env.NOTIFY_FROM; // e.g. "Lawbound <alerts@yourdomain.com>"
+const FROM_ADDRESS = process.env.NOTIFY_FROM; // e.g. "AnyaJob <alerts@yourdomain.com>"
 
 let sesClient = null;
 function ses() {
@@ -73,7 +73,7 @@ export function resolveRecipients(prefs) {
 
 export async function sendEmail({ to, subject, html, text }) {
   if (!process.env.NOTIFY_FROM) {
-    throw new Error('NOTIFY_FROM not set in .env (e.g., "Lawbound <alerts@yourdomain.com>")');
+    throw new Error('NOTIFY_FROM not set in .env (e.g., "AnyaJob <alerts@yourdomain.com>")');
   }
   const toList = Array.isArray(to) ? to : [to].filter(Boolean);
   if (toList.length === 0) throw new Error('No recipient');
@@ -151,7 +151,7 @@ function header() {
   return `
     <div class="brand">
       <span class="mark">L</span>
-      <span class="name">Lawbound</span>
+      <span class="name">AnyaJob</span>
     </div>
   `;
 }
@@ -160,7 +160,7 @@ function footer() {
   const url = process.env.PUBLIC_URL || 'http://localhost:3000';
   return `
     <div class="footer">
-      <a href="${url}">Open Lawbound</a> · <a href="${url}/settings.html">Notification settings</a>
+      <a href="${url}">Open AnyaJob</a> · <a href="${url}/settings.html">Notification settings</a>
     </div>
   `;
 }
@@ -203,8 +203,8 @@ export function buildMorningEmail({ summary, topListings, nudge, date, closingLi
 
   // Simple consistent subject — no urgency-based variations
   const subject = topListings.length
-    ? `Lawbound · ${topListings.length} new role${topListings.length === 1 ? '' : 's'} today`
-    : `Lawbound · daily brief · ${date}`;
+    ? `AnyaJob · ${topListings.length} new role${topListings.length === 1 ? '' : 's'} today`
+    : `AnyaJob · daily brief · ${date}`;
 
   // Render closing-soon section (only if any)
   const closingHtml = closingListings.length ? `
@@ -288,7 +288,7 @@ export function buildMorningEmail({ summary, topListings, nudge, date, closingLi
       <div class="card">
         ${topListings.slice(0, 5).map((l) => listingRow(l, url)).join('')}
       </div>
-      <a class="cta" href="${url}">Open Lawbound →</a>
+      <a class="cta" href="${url}">Open AnyaJob →</a>
     ` : '<p style="color:#6b7886;font-size:14px">No new roles today. The scraper runs again at 6am tomorrow.</p>'}
     ${footer()}
     </div></body></html>`;
@@ -299,7 +299,7 @@ export function buildMorningEmail({ summary, topListings, nudge, date, closingLi
 // Weekly Sunday digest
 export function buildWeeklyEmail({ digest, weekRange, stats, closingThisWeek }) {
   const url = process.env.PUBLIC_URL || 'http://localhost:3000';
-  const subject = `Lawbound · weekly review · ${weekRange}`;
+  const subject = `AnyaJob · weekly review · ${weekRange}`;
 
   const html = `<!doctype html><html><head><meta charset="utf-8">
     <style>${baseStyle}</style></head><body><div class="wrap">
@@ -322,7 +322,7 @@ export function buildWeeklyEmail({ digest, weekRange, stats, closingThisWeek }) 
         ${closingThisWeek.map((l) => listingRow(l, url)).join('')}
       </div>
     ` : ''}
-    <a class="cta" href="${url}">Open Lawbound →</a>
+    <a class="cta" href="${url}">Open AnyaJob →</a>
     ${footer()}
     </div></body></html>`;
 

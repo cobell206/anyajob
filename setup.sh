@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh — provisions a fresh Ubuntu 24.04 (or 26.04) instance to run Lawbound.
+# setup.sh — provisions a fresh Ubuntu 24.04 (or 26.04) instance to run AnyaJob.
 # Idempotent: safe to re-run. Halts on errors.
 #
 # Usage:
@@ -150,7 +150,7 @@ install_service() {
   local unit_file="/etc/systemd/system/${SERVICE_NAME}.service"
   sudo tee "$unit_file" > /dev/null <<EOF
 [Unit]
-Description=Lawbound Job Tracker
+Description=AnyaJob Job Tracker
 After=network.target
 
 [Service]
@@ -227,7 +227,7 @@ EOF
 # ---------- main ----------
 echo
 echo "╔══════════════════════════════════════════╗"
-echo "║      Lawbound setup                      ║"
+echo "║      AnyaJob setup                      ║"
 echo "╚══════════════════════════════════════════╝"
 echo
 log "Repo dir: $REPO_DIR"

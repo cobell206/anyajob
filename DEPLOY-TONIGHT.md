@@ -1,4 +1,4 @@
-# Lawbound — Deploy Tonight
+# AnyaJob — Deploy Tonight
 
 Step-by-step checklist. Do these in order. ~60–75 min total, then submit the SES request before bed and emails will be live in the morning.
 
@@ -13,7 +13,7 @@ Step-by-step checklist. Do these in order. ~60–75 min total, then submit the S
 3. Buy $10 in credits to start
 4. Go to **Settings → Limits** → set a monthly hard cap of $20
 5. Set email alerts at 50% and 80%
-6. Go to **API Keys** → Create key → name it `lawbound-prod`
+6. Go to **API Keys** → Create key → name it `anyajob-prod`
 7. **Copy the key now** — you won't see it again. Paste it somewhere temporary.
 
 ---
@@ -21,7 +21,7 @@ Step-by-step checklist. Do these in order. ~60–75 min total, then submit the S
 ## Step 2 — Domain via Cloudflare (10 min)
 
 1. Go to [cloudflare.com/products/registrar](https://cloudflare.com/products/registrar)
-2. Search for a domain — `.app` or `.xyz` runs ~$10/year. Something like `lawbound.app` or `anyajobs.app`
+2. Search for a domain — `.app` or `.xyz` runs ~$10/year. Something like `anyajob.app` or `anyajobs.app`
 3. Buy it — DNS is automatically on Cloudflare, which saves a step later
 4. After purchase, go to [one.dash.cloudflare.com](https://one.dash.cloudflare.com) → set up **Zero Trust** if prompted (free, no card needed for under 50 users)
 
@@ -32,14 +32,14 @@ Step-by-step checklist. Do these in order. ~60–75 min total, then submit the S
 ## Step 3 — GitHub repo (5 min)
 
 1. Go to [github.com/new](https://github.com/new)
-2. Create a **private** repo named `lawbound`
+2. Create a **private** repo named `anyajob`
 3. On your laptop, in the `anyaJob` folder:
 
 ```bash
 git init
 git add .
 git commit -m "initial commit"
-git remote add origin git@github.com:YOUR_USERNAME/lawbound.git
+git remote add origin git@github.com:YOUR_USERNAME/anyajob.git
 git branch -M main
 git push -u origin main
 ```
@@ -52,10 +52,10 @@ git push -u origin main
 
 1. Go to [AWS Console → EC2](https://console.aws.amazon.com/ec2) → **Launch Instance**
 2. Fill in:
-   - **Name:** `lawbound`
+   - **Name:** `anyajob`
    - **AMI:** Ubuntu Server 22.04 LTS
    - **Instance type:** `t3.micro` (free tier eligible)
-   - **Key pair:** Create new → name it `lawbound` → download the `.pem` file → save it somewhere safe (e.g. `~/.ssh/lawbound.pem`)
+   - **Key pair:** Create new → name it `anyajob` → download the `.pem` file → save it somewhere safe (e.g. `~/.ssh/anyajob.pem`)
 3. Under **Network settings** → Edit → create a new security group:
    - Add rule: SSH, port 22, source = **My IP** only
    - **Do not add port 80 or 3000** — Cloudflare Tunnel handles all ingress
@@ -66,8 +66,8 @@ git push -u origin main
 SSH in:
 
 ```bash
-chmod 400 ~/.ssh/lawbound.pem
-ssh -i ~/.ssh/lawbound.pem ubuntu@<EC2-PUBLIC-IP>
+chmod 400 ~/.ssh/anyajob.pem
+ssh -i ~/.ssh/anyajob.pem ubuntu@<EC2-PUBLIC-IP>
 ```
 
 If it connects, you're in. Leave this terminal open.
@@ -88,7 +88,7 @@ cat ~/.ssh/github_deploy.pub
 Copy the output (starts with `ssh-ed25519`).
 
 On GitHub:
-1. Go to your `lawbound` repo → **Settings → Deploy keys → Add deploy key**
+1. Go to your `anyajob` repo → **Settings → Deploy keys → Add deploy key**
 2. Title: `ec2`, paste the key, **Read-only** is fine
 3. Click **Add key**
 
@@ -118,8 +118,8 @@ On EC2:
 
 ```bash
 cd ~
-git clone git@github.com:YOUR_USERNAME/lawbound.git
-cd lawbound
+git clone git@github.com:YOUR_USERNAME/anyajob.git
+cd anyajob
 ./setup.sh
 ```
 
@@ -130,14 +130,14 @@ Verify when done:
 ```bash
 node --version       # should say v20.x
 cloudflared --version
-crontab -l           # should show 3 lawbound entries
+crontab -l           # should show 3 anyajob entries
 ```
 
 ---
 
 ## Step 7 — Configure .env and preferences (10 min)
 
-On EC2, still in `~/lawbound`:
+On EC2, still in `~/anyajob`:
 
 ```bash
 cp .env.example .env
@@ -150,7 +150,7 @@ Fill in these fields (leave others as-is for now):
 ANTHROPIC_API_KEY=sk-ant-...        ← your key from Step 1
 APP_ENV=production
 AWS_REGION=us-east-1
-NOTIFY_FROM="Lawbound <alerts@yourdomain.app>"
+NOTIFY_FROM="AnyaJob <alerts@yourdomain.app>"
 PUBLIC_URL=https://jobs.yourdomain.app
 BACKUP_BUCKET=                      ← leave blank for now, add after S3 setup
 ```
@@ -179,7 +179,7 @@ On EC2:
 cloudflared tunnel login
 
 # Create the tunnel
-cloudflared tunnel create lawbound
+cloudflared tunnel create anyajob
 # Note the tunnel ID it prints — you'll need it below
 ```
 
@@ -204,7 +204,7 @@ ingress:
 
 ```bash
 # Route DNS (adds a CNAME in Cloudflare automatically)
-cloudflared tunnel route dns lawbound jobs.yourdomain.app
+cloudflared tunnel route dns anyajob jobs.yourdomain.app
 
 # Install and start as a service
 sudo cloudflared service install
@@ -222,7 +222,7 @@ This is the login screen. Only whitelisted emails can get in.
 1. Go to [one.dash.cloudflare.com](https://one.dash.cloudflare.com) → **Access → Applications → Add an application**
 2. Choose **Self-hosted**
 3. Fill in:
-   - **Application name:** Lawbound
+   - **Application name:** AnyaJob
    - **Session duration:** 24 hours
    - **Subdomain:** `jobs` / **Domain:** `yourdomain.app`
 4. Click Next → **Add a policy**
@@ -240,11 +240,11 @@ Now visiting `https://jobs.yourdomain.app` will show a Cloudflare login screen. 
 On EC2:
 
 ```bash
-cd ~/lawbound
+cd ~/anyajob
 
 # Start the service
-sudo systemctl start lawbound
-sudo systemctl status lawbound    # should say "active (running)"
+sudo systemctl start anyajob
+sudo systemctl status anyajob    # should say "active (running)"
 
 # Run the daily pipeline once manually to seed listings
 npm run daily
@@ -282,8 +282,8 @@ After everything above is working, this makes `git push` auto-deploy to EC2.
 **Generate a deploy key (on your laptop, not EC2):**
 
 ```bash
-ssh-keygen -t ed25519 -f /tmp/lawbound_deploy -N "" -C "github-actions"
-cat /tmp/lawbound_deploy.pub    # copy this
+ssh-keygen -t ed25519 -f /tmp/anyajob_deploy -N "" -C "github-actions"
+cat /tmp/anyajob_deploy.pub    # copy this
 ```
 
 **On EC2:**
@@ -292,28 +292,28 @@ cat /tmp/lawbound_deploy.pub    # copy this
 echo "PASTE_PUBLIC_KEY_HERE" >> ~/.ssh/authorized_keys
 
 # Allow passwordless sudo for service restart only
-sudo visudo -f /etc/sudoers.d/lawbound-deploy
+sudo visudo -f /etc/sudoers.d/anyajob-deploy
 ```
 
 In the editor, paste:
 
 ```
-ubuntu ALL=(root) NOPASSWD: /bin/systemctl restart lawbound, /bin/systemctl status lawbound
+ubuntu ALL=(root) NOPASSWD: /bin/systemctl restart anyajob, /bin/systemctl status anyajob
 ```
 
 **On GitHub → repo → Settings → Secrets → Actions → New secret** — add four secrets:
 
 | Secret | Value |
 |--------|-------|
-| `EC2_SSH_KEY` | Contents of `/tmp/lawbound_deploy` (the private key, including BEGIN/END lines) |
+| `EC2_SSH_KEY` | Contents of `/tmp/anyajob_deploy` (the private key, including BEGIN/END lines) |
 | `EC2_HOST` | Your EC2 public IP |
 | `EC2_USER` | `ubuntu` |
-| `REPO_PATH` | `/home/ubuntu/lawbound` |
+| `REPO_PATH` | `/home/ubuntu/anyajob` |
 
 **Delete the key from your laptop:**
 
 ```bash
-shred -u /tmp/lawbound_deploy /tmp/lawbound_deploy.pub
+shred -u /tmp/anyajob_deploy /tmp/anyajob_deploy.pub
 ```
 
 The `.github/workflows/deploy.yml` file is already in the repo. Push anything to main and the Actions tab will show the deploy running.
@@ -324,8 +324,8 @@ The `.github/workflows/deploy.yml` file is already in the repo. Push anything to
 
 - [ ] `https://jobs.yourdomain.app` shows Cloudflare login
 - [ ] After PIN, you see the listings page with scored roles
-- [ ] `crontab -l` shows 3 lawbound cron entries
-- [ ] `sudo systemctl status lawbound` shows active
+- [ ] `crontab -l` shows 3 anyajob cron entries
+- [ ] `sudo systemctl status anyajob` shows active
 - [ ] `sudo systemctl status cloudflared` shows active
 - [ ] SES production access request submitted
 - [ ] (After SES approval) `npm run test-email -- her@gmail.com` delivers successfully
@@ -351,10 +351,10 @@ She should get a "It works ✓" email. Once that lands, the morning cron at 6am 
 
 ```bash
 # Check app logs
-sudo journalctl -u lawbound -f
+sudo journalctl -u anyajob -f
 
 # Restart after code change
-sudo systemctl restart lawbound
+sudo systemctl restart anyajob
 
 # Run daily pipeline manually
 npm run daily

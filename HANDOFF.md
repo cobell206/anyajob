@@ -4,7 +4,7 @@ Context document for Claude Code (or any future contributor) picking this up. Re
 
 ## What this is
 
-**Lawbound** — a personal job-search tracker for one user (referred to as "the user" or "she" throughout). Targets Columbia/NYU Law admissions: she's looking for legal/policy roles in NYC for the 1-2 years before law school.
+**AnyaJob** — a personal job-search tracker for one user (referred to as "the user" or "she" throughout). Targets Columbia/NYU Law admissions: she's looking for legal/policy roles in NYC for the 1-2 years before law school.
 
 Single user, single deployment, behind Cloudflare Access. Not a SaaS, not multi-tenant. Architecture decisions reflect that scope — anything that looks under-engineered for a SaaS is probably correctly-scoped here.
 
@@ -78,7 +78,7 @@ public/
   style.css
 
 bin/
-  lawbound-logs          ← laptop CLI for fetching redacted logs over CF Access
+  anyajob-logs          ← laptop CLI for fetching redacted logs over CF Access
 
 data/                    ← runtime state, all gitignored except *.example.json
   preferences.example.json  ← committed template
@@ -146,7 +146,7 @@ const log = createLogger('daily');
 log.info({ count: 7 }, 'scrape complete');
 ```
 
-Structured JSON in production (so `journalctl -u lawbound | grep '"component":"daily"'` works). Pretty-printed in dev. CLI test blocks (gated by `if (process.argv[1]?.endsWith('xxx.js'))`) intentionally still use `console.log` — they're for human debugging, not log aggregation.
+Structured JSON in production (so `journalctl -u anyajob | grep '"component":"daily"'` works). Pretty-printed in dev. CLI test blocks (gated by `if (process.argv[1]?.endsWith('xxx.js'))`) intentionally still use `console.log` — they're for human debugging, not log aggregation.
 
 Configure via env: `LOG_LEVEL` (info default), `LOG_FORMAT` (pretty/json), `NODE_ENV`.
 
@@ -160,7 +160,7 @@ Two endpoints expose redacted state for debugging:
 
 Both gated by Cloudflare Access. Output passes through `src/redact.js` which strips API keys, AWS keys, JWTs, GitHub tokens, emails, file paths, and 40+ char opaque tokens.
 
-Laptop CLI in `bin/lawbound-logs` uses Cloudflare Access service token auth. `lawbound-logs --copy daily 1h` fetches an hour of logs and pipes to clipboard. Setup steps in DEPLOY.md.
+Laptop CLI in `bin/anyajob-logs` uses Cloudflare Access service token auth. `anyajob-logs --copy daily 1h` fetches an hour of logs and pipes to clipboard. Setup steps in DEPLOY.md.
 
 ### Email triggers
 

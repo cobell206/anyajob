@@ -1,4 +1,4 @@
-# Lawbound — Law School Job Tracker
+# AnyaJob — Law School Job Tracker
 
 Daily job-search pipeline for someone applying to Columbia or NYU Law. Scrapes legal-relevant roles from reliable sources, scores them with Claude on two axes (qualification fit + law school admissions value), and presents a sortable, filterable shortlist with status pipeline tracking.
 

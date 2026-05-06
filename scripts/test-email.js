@@ -15,7 +15,7 @@ console.log(`Sending test email to ${to} from ${process.env.NOTIFY_FROM}...`);
 
 const result = await sendEmail({
   to,
-  subject: 'Lawbound · Test email',
+  subject: 'AnyaJob · Test email',
   html: `<!doctype html><html><body style="font-family:sans-serif;padding:20px">
     <h2 style="font-family:Georgia,serif">It works ✓</h2>
     <p>If you can read this, AWS SES is wired up correctly. You can now enable notifications in <code>data/preferences.json</code>.</p>

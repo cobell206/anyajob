@@ -118,7 +118,7 @@ async function buildBundle() {
 function bundleAsText(bundle) {
   // Pretty-printed text format that pastes well into a chat with Claude.
   const lines = [];
-  lines.push('=== Lawbound Diagnostic Bundle ===');
+  lines.push('=== AnyaJob Diagnostic Bundle ===');
   lines.push(`Generated:     ${bundle.generatedAt}`);
   lines.push(`Node:          ${bundle.nodeVersion}`);
   lines.push(`Uptime:        ${bundle.uptimeSeconds}s`);
