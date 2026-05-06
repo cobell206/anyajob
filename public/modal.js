@@ -50,36 +50,36 @@ export function openModal(listing, onUpdate) {
   const lsv = s.lawSchoolValue ?? 0;
 
   $('#m-body').innerHTML = `
+    <div class="modal-section">
+      <div class="modal-grid">
+        <div class="modal-stat">
+          <div class="modal-stat-label">Score</div>
+          <div class="modal-stat-value" style="color: var(--${overall >= 8 ? 'green' : 'blue'}-ink)">${overall}/10</div>
+        </div>
+        <div class="modal-stat">
+          <div class="modal-stat-label">Qualification fit</div>
+          <div class="modal-stat-value">${qual}/10</div>
+        </div>
+        <div class="modal-stat">
+          <div class="modal-stat-label">Law school value</div>
+          <div class="modal-stat-value">${lsv}/10</div>
+        </div>
+        <div class="modal-stat">
+          <div class="modal-stat-label">Salary</div>
+          <div class="modal-stat-value">${fmtSalary(s.salaryMin, s.salaryMax)}</div>
+        </div>
+      </div>
+    </div>
+
+    ${s.rationale ? `
+      <div class="modal-section">
+        <h3>Why this score</h3>
+        <div class="rationale-box">${escapeHtml(s.rationale)}</div>
+      </div>
+    ` : ''}
+
     <div class="modal-cols">
       <div class="modal-col-left">
-        <div class="modal-section">
-          <div class="modal-grid">
-            <div class="modal-stat">
-              <div class="modal-stat-label">Score</div>
-              <div class="modal-stat-value" style="color: var(--${overall >= 8 ? 'green' : 'blue'}-ink)">${overall}/10</div>
-            </div>
-            <div class="modal-stat">
-              <div class="modal-stat-label">Qualification fit</div>
-              <div class="modal-stat-value">${qual}/10</div>
-            </div>
-            <div class="modal-stat">
-              <div class="modal-stat-label">Law school value</div>
-              <div class="modal-stat-value">${lsv}/10</div>
-            </div>
-            <div class="modal-stat">
-              <div class="modal-stat-label">Salary</div>
-              <div class="modal-stat-value">${fmtSalary(s.salaryMin, s.salaryMax)}</div>
-            </div>
-          </div>
-        </div>
-
-        ${s.rationale ? `
-          <div class="modal-section">
-            <h3>Why this score</h3>
-            <div class="rationale-box">${escapeHtml(s.rationale)}</div>
-          </div>
-        ` : ''}
-
         ${s.strengths?.length ? `
           <div class="modal-section">
             <h3>Strengths</h3>
