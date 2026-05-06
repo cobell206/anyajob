@@ -1120,6 +1120,15 @@ textarea { resize: vertical; min-height: 80px; }
   .header-inner { padding: 12px 16px; }
   nav a { padding: 6px 10px; font-size: 13px; }
   .stats { grid-template-columns: repeat(2, 1fr); }
+  /* On mobile the toolbar floats above cards rather than sitting flush on
+     the table, so restore the bottom border and round all corners. A
+     slightly stronger shadow replaces the hard cutoff. */
+  .table-toolbar {
+    border-bottom: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    margin-bottom: 12px;
+  }
 }
 
 /* Result card on paste page */
