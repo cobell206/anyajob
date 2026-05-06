@@ -100,16 +100,6 @@ export function openModal(listing, onUpdate) {
             <p style="font-size:14px; color: var(--ink-2); line-height: 1.55">${escapeHtml(s.applicationAngle)}</p>
           </div>
         ` : ''}
-
-        <div class="modal-section" style="padding-top: 16px; border-top: 1px solid var(--border)">
-          <h3>Listing details</h3>
-          <div style="font-size: 13px; color: var(--muted); line-height: 1.6">
-            <div>Source: ${escapeHtml(listing.source || '—')}</div>
-            <div>Posted: ${fmtDateLong(listing.postedAt)}</div>
-            <div>Ingested: ${fmtDateLong(listing.ingestedAt)}</div>
-            ${s.workMode ? `<div>Work mode: ${escapeHtml(s.workMode)}</div>` : ''}
-          </div>
-        </div>
       </div>
 
       <div class="modal-col-right">
@@ -148,6 +138,15 @@ export function openModal(listing, onUpdate) {
     </div>
 
     <hr class="modal-footer-divider">
+
+    <div class="modal-section modal-meta">
+      <div class="modal-meta-grid">
+        <div><span class="modal-meta-label">Source</span> ${escapeHtml(listing.source || '—')}</div>
+        <div><span class="modal-meta-label">Posted</span> ${fmtDateLong(listing.postedAt)}</div>
+        <div><span class="modal-meta-label">Ingested</span> ${fmtDateLong(listing.ingestedAt)}</div>
+        ${s.workMode ? `<div><span class="modal-meta-label">Work mode</span> ${escapeHtml(s.workMode)}</div>` : ''}
+      </div>
+    </div>
   `;
 
   // Wire up handlers.

@@ -801,12 +801,43 @@ td {
 
 .modal-body { padding: 20px 24px 32px; }
 
-/* Full-width divider that anchors the bottom of the modal body, sits below
-   the two-column split. Visual breathing room before the modal edge. */
+/* Full-width divider between the two-column action area and the metadata
+   footer. The negative horizontal margin extends past the body padding so
+   the rule spans the entire modal width, matching the head's bottom border. */
 .modal-footer-divider {
   border: 0;
   border-top: 1px solid var(--border);
   margin: 24px -24px 0;
+}
+
+/* Compact metadata footer — source, posted/ingested dates, work mode.
+   Lower visual weight than the action sections since this is reference
+   info, not something the user typically needs to act on. */
+.modal-meta {
+  margin-top: 16px;
+  margin-bottom: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.modal-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px 24px;
+}
+@media (min-width: 720px) {
+  .modal-meta-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+}
+.modal-meta-label {
+  display: inline-block;
+  font-weight: 600;
+  color: var(--ink-2);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 10px;
+  margin-right: 6px;
 }
 
 .modal-section { margin-bottom: 24px; }
