@@ -55,7 +55,7 @@ function renderSource(s) {
       </div>
       <div class="source-actions">
         <button class="icon-btn-sm" data-toggle="${s.id}" title="${s.enabled ? 'Disable' : 'Enable'}">${s.enabled ? '⏸' : '▶'}</button>
-        ${!s.builtIn ? `<button class="icon-btn-sm danger" data-delete="${s.id}" title="Delete">×</button>` : ''}
+        <button class="icon-btn-sm danger" data-delete="${s.id}" title="Delete">×</button>
       </div>
     </div>
   `;
@@ -119,7 +119,7 @@ function renderFormFields() {
       <input type="url" id="f-url" placeholder="https://www.nyc.gov/jobs">
       <label>Cadence (days between reminders)</label>
       <input type="number" id="f-cadence" value="7" min="1" max="60">
-      <p class="form-help">No auto-scrape. Lawbound will remind you in the morning brief on this cadence.</p>
+      <p class="form-help">No auto-scrape. AnyaJob will remind you in the morning brief on this cadence.</p>
     `;
   }
   fields.innerHTML = body;
