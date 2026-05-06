@@ -113,7 +113,7 @@ export function openModal(listing, onUpdate) {
 
           <label>Status</label>
           <select id="m-status">
-            ${STATUSES.map((s) => `<option value="${s.value}" ${s.value === listing.status ? 'selected' : ''}>${s.label}</option>`).join('')}
+            ${STATUSES.map((s) => `<option value="${s.value}" ${s.value === listing.status ? 'selected' : ''}>${s.pickerLabel || s.label}</option>`).join('')}
           </select>
 
           <div class="field-grid">

@@ -345,7 +345,7 @@
       bar.className = 'reject-reason-bar';
       bar.dataset.fp = fp;
       bar.innerHTML = `
-        <span class="reject-reason-label">Why?</span>
+        <span class="reject-reason-label">Why ignore this one?</span>
         <div class="reject-chip-row">
           ${REJECT_CHIPS.map((c) => `
             <button type="button" class="reject-chip" data-reason="${c.value}">${c.label}</button>
