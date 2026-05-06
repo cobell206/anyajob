@@ -5,6 +5,12 @@ import { $, $$, escapeHtml, api, fmtDateLong } from './app.js';
 let prefs = null;
 let dirty = false;
 
+// Auto-save tuning. Coalesce typing into a single POST 600ms after the user
+// stops; immediate flush on blur, chip changes, and explicit Save click.
+const SAVE_DEBOUNCE_MS = 600;
+let saveTimer = null;
+let saveInFlight = null;
+
 const PROFILE_FIELDS = [
   'name', 'currentRole', 'yearsOutOfUndergrad', 'undergradSchool',
   'gpaRange', 'lsatStatus', 'geo', 'additionalContext',
@@ -125,8 +131,8 @@ function makeChipInput({ containerId, inputId, getValues, setValues }) {
       chip.innerHTML = `${escapeHtml(v)}<button type="button" class="chip-x" aria-label="Remove">×</button>`;
       chip.querySelector('.chip-x').addEventListener('click', () => {
         setValues(values.filter((x) => x !== v));
-        markDirty();
         render();
+        flushSave();
       });
       container.insertBefore(chip, input);
     }
@@ -138,8 +144,8 @@ function makeChipInput({ containerId, inputId, getValues, setValues }) {
     const values = getValues();
     if (values.includes(value)) return;
     setValues([...values, value]);
-    markDirty();
     render();
+    flushSave();
   }
 
   input.addEventListener('keydown', (e) => {
@@ -151,8 +157,8 @@ function makeChipInput({ containerId, inputId, getValues, setValues }) {
       const values = getValues();
       if (values.length) {
         setValues(values.slice(0, -1));
-        markDirty();
         render();
+        flushSave();
       }
     }
   });
@@ -183,6 +189,24 @@ function markDirty() {
     dirty = true;
     setStatus('Unsaved changes', 'dirty');
   }
+}
+
+function scheduleSave() {
+  markDirty();
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSave, SAVE_DEBOUNCE_MS);
+}
+
+async function flushSave() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  // Wait for any in-flight save before issuing another, so changes never
+  // arrive at the server out of order.
+  if (saveInFlight) {
+    try { await saveInFlight; } catch {}
+  }
+  if (!dirty) return;
+  saveInFlight = save();
+  try { await saveInFlight; } finally { saveInFlight = null; }
 }
 
 async function save() {
@@ -278,10 +302,17 @@ async function init() {
 
   for (const k of PROFILE_FIELDS) {
     const el = $('#f-' + k);
-    if (el) el.addEventListener('input', markDirty);
+    if (!el) continue;
+    el.addEventListener('input', scheduleSave);
+    el.addEventListener('blur', flushSave);
   }
 
-  $('#save-btn').addEventListener('click', save);
+  // Last line of defense: if the user closes the tab mid-debounce, flush.
+  window.addEventListener('beforeunload', () => {
+    if (dirty && saveTimer) flushSave();
+  });
+
+  $('#save-btn').addEventListener('click', flushSave);
   $('#reset-btn').addEventListener('click', async () => {
     prefs = await api('/api/preferences');
     renderProfileFields();

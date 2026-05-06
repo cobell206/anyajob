@@ -107,14 +107,14 @@ jobs:
               fi
 
               echo "▸ Restarting service..."
-              sudo systemctl restart lawbound
-            ) 9>/tmp/lawbound.lock
+              sudo systemctl restart anyajob
+            ) 9>/tmp/anyajob.lock
 
             sleep 2
-            if systemctl is-active --quiet lawbound; then
+            if systemctl is-active --quiet anyajob; then
               echo "✓ Service is running"
             else
-              echo "✗ Service failed to start — check journalctl -u lawbound"
+              echo "✗ Service failed to start — check journalctl -u anyajob"
               exit 1
             fi
           EOF
