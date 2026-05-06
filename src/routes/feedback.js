@@ -15,6 +15,10 @@ const VALID_REJECT_REASONS = [
   'not-interested',
   'already-applied',
   'other',
+  'not-a-fit',
+  'salary',
+  'location',
+  'too-senior',
 ];
 
 function setRejectReason(feedback, fp, reason, note) {
@@ -73,11 +77,15 @@ router.post('/:fp/status', async (req, res) => {
 router.post('/:fp/reject-reason', async (req, res) => {
   const { fp } = req.params;
   const { reason, note } = req.body;
-  if (!VALID_REJECT_REASONS.includes(reason)) {
+  if (reason && !VALID_REJECT_REASONS.includes(reason)) {
     return res.status(400).json({ error: `reason must be one of ${VALID_REJECT_REASONS.join(', ')}` });
   }
   const feedback = await readJson('feedback.json');
-  setRejectReason(feedback, fp, reason, note);
+  if (!reason) {
+    if (feedback.rejectReasons) delete feedback.rejectReasons[fp];
+  } else {
+    setRejectReason(feedback, fp, reason, note);
+  }
   await writeJson('feedback.json', feedback);
   res.json({ ok: true });
 });

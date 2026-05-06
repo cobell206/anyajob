@@ -116,6 +116,19 @@ export function openModal(listing, onUpdate) {
             ${STATUSES.map((s) => `<option value="${s.value}" ${s.value === listing.status ? 'selected' : ''}>${s.pickerLabel || s.label}</option>`).join('')}
           </select>
 
+          <div id="m-reject-reasons" class="reject-reasons" hidden>
+            <p class="reject-reasons-label">Why ignore? (optional)</p>
+            <div class="reject-reasons-chips">
+              <button type="button" class="reason-chip" data-reason="not-a-fit">Not a fit</button>
+              <button type="button" class="reason-chip" data-reason="salary">Salary too low</button>
+              <button type="button" class="reason-chip" data-reason="location">Location</button>
+              <button type="button" class="reason-chip" data-reason="too-senior">Too senior/junior</button>
+              <button type="button" class="reason-chip" data-reason="already-applied">Already applied</button>
+              <button type="button" class="reason-chip" data-reason="other">Other…</button>
+            </div>
+            <input type="text" id="m-reject-note" class="reject-note-input" placeholder="Tell me more…" hidden>
+          </div>
+
           <div class="field-grid">
             <div>
               <label>Applied date</label>
@@ -178,6 +191,70 @@ export function openModal(listing, onUpdate) {
     });
   });
 
+  const rejectReasonsEl = $('#m-reject-reasons');
+  const rejectNoteEl = $('#m-reject-note');
+
+  function syncRejectReasonsVisibility(status) {
+    if (status === 'rejected') {
+      rejectReasonsEl.hidden = false;
+      preselectReasonChip(currentListing.rejectReason, currentListing.rejectNote);
+    } else {
+      rejectReasonsEl.hidden = true;
+    }
+  }
+
+  function preselectReasonChip(reason, note) {
+    $$('.reason-chip', rejectReasonsEl).forEach((c) => {
+      c.classList.toggle('is-selected', !!reason && c.dataset.reason === reason);
+    });
+    if (reason === 'other') {
+      rejectNoteEl.hidden = false;
+      rejectNoteEl.value = note || '';
+    } else {
+      rejectNoteEl.hidden = true;
+      rejectNoteEl.value = '';
+    }
+  }
+
+  async function saveRejectReason() {
+    const selected = rejectReasonsEl.querySelector('.reason-chip.is-selected');
+    const reason = selected ? selected.dataset.reason : null;
+    const note = reason === 'other' ? (rejectNoteEl.value || '') : '';
+    try {
+      await api(`/api/feedback/${fp}/reject-reason`, {
+        method: 'POST',
+        body: { reason, note },
+      });
+      currentListing.rejectReason = reason;
+      currentListing.rejectNote = note || null;
+      onUpdateCallback?.(currentListing);
+    } catch (err) {
+      showMsg(`Failed to save: ${err.message}`, 'error');
+    }
+  }
+
+  $$('.reason-chip', rejectReasonsEl).forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const wasSelected = chip.classList.contains('is-selected');
+      $$('.reason-chip', rejectReasonsEl).forEach((c) => c.classList.remove('is-selected'));
+      if (!wasSelected) chip.classList.add('is-selected');
+      const isOther = !wasSelected && chip.dataset.reason === 'other';
+      rejectNoteEl.hidden = !isOther;
+      if (!isOther) rejectNoteEl.value = '';
+      if (isOther) {
+        rejectNoteEl.focus();
+      } else {
+        saveRejectReason();
+      }
+    });
+  });
+
+  rejectNoteEl.addEventListener('blur', () => {
+    if (rejectReasonsEl.querySelector('.reason-chip.is-selected[data-reason="other"]')) {
+      saveRejectReason();
+    }
+  });
+
   $('#m-status').addEventListener('change', async (e) => {
     const status = e.target.value;
     const prev = currentListing.status;
@@ -189,6 +266,7 @@ export function openModal(listing, onUpdate) {
         currentListing.appliedDate = today;
         $('#m-applied-date').value = today;
       }
+      syncRejectReasonsVisibility(status);
       showMsg('Saved');
       onUpdateCallback?.(currentListing);
     } catch (err) {
@@ -196,6 +274,8 @@ export function openModal(listing, onUpdate) {
       showMsg(`Failed to save: ${err.message}`, 'error');
     }
   });
+
+  syncRejectReasonsVisibility(listing.status);
 
   $('#m-applied-date').addEventListener('change', async (e) => {
     const date = e.target.value || null;

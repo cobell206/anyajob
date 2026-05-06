@@ -13,6 +13,7 @@ const router = Router();
 // pre-dedupKey legacy data.
 function hydrate(listing, feedback) {
   const key = listing.dedupKey || listing.fingerprint;
+  const reject = feedback.rejectReasons?.[key];
   return {
     ...listing,
     rating: feedback.ratings[key] || null,
@@ -20,6 +21,8 @@ function hydrate(listing, feedback) {
     status: feedback.status[key] || 'new',
     appliedDate: feedback.appliedDate[key] || null,
     closesDate: feedback.closesDate[key] || listing.score?.closesDate || null,
+    rejectReason: reject?.reason || null,
+    rejectNote: reject?.note || null,
   };
 }
 

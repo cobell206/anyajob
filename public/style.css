@@ -823,6 +823,53 @@ td {
   font-weight: 500;
 }
 
+/* ============ MODAL REJECT REASON CHIPS ============ */
+
+.reject-reasons {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.reject-reasons-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+.reject-reasons-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.reason-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.reason-chip:hover {
+  border-color: var(--border-strong);
+}
+.reason-chip.is-selected {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+.reject-note-input {
+  margin-top: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--ink);
+  box-sizing: border-box;
+}
+
 /* ============ MODAL ============ */
 
 .modal-backdrop {
