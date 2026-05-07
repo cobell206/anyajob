@@ -217,10 +217,16 @@
       return `<span class="status-badge status-${s}">${label}</span>`;
     }
 
+    function isNewListing(l) {
+      if (!l.ingestedAt) return false;
+      const t = new Date(l.ingestedAt).getTime();
+      return !isNaN(t) && Date.now() - t < 24 * 60 * 60 * 1000;
+    }
+
     function renderTable(listings) {
       const tbody = $('#tbody');
       tbody.innerHTML = listings.map((l) => `
-        <tr data-id="${escapeHtml(l.dedupKey || l.fingerprint)}">
+        <tr class="listing-row${isNewListing(l) ? ' is-new' : ''}" data-id="${escapeHtml(l.dedupKey || l.fingerprint)}">
           <td>${scoreCell(l)}</td>
           <td>
             <div class="cell-title">${escapeHtml(l.title)}</div>
@@ -255,7 +261,7 @@
       cards.innerHTML = listings.map((l) => {
         const overall = l.score?.overallScore ?? 0;
         return `
-          <div class="card" data-id="${escapeHtml(l.dedupKey || l.fingerprint)}">
+          <div class="card${isNewListing(l) ? ' is-new' : ''}" data-id="${escapeHtml(l.dedupKey || l.fingerprint)}">
             <div class="card-row">
               <div style="flex:1;min-width:0">
                 <div class="cell-title" style="margin-bottom:2px">${escapeHtml(l.title)}</div>

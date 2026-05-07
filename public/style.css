@@ -604,6 +604,11 @@ tbody tr {
 tbody tr:last-child { border-bottom: none; }
 tbody tr:hover { background: var(--surface-2); }
 
+tbody tr.listing-row.is-new > td:first-child {
+  border-left: 3px solid var(--blue);
+  padding-left: 13px;
+}
+
 td {
   padding: 14px 16px;
   vertical-align: middle;
@@ -714,6 +719,11 @@ td {
 }
 
 .card:active { transform: scale(0.99); box-shadow: var(--shadow-xs); }
+
+.card.is-new {
+  border-left: 3px solid var(--blue);
+  padding-left: 13px;
+}
 
 .card-row {
   display: flex;
