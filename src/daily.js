@@ -13,6 +13,7 @@ import { scoreOne, loadRecentFeedback, buildIgnoreContext } from './score.js';
 import { generateDailyBrief, generateWeeklyReflection } from './summaries.js';
 import { getProfileResumeText } from './documents.js';
 import { fbKey } from './io.js';
+import { classifyLocation } from './location.js';
 import { createLogger } from './log.js';
 
 const log = createLogger('daily');
@@ -90,8 +91,20 @@ async function main() {
   log.info({ count: fresh.length }, 'after dedupe');
 
   // 3. Pre-filter
-  const filtered = applyPreFilters(fresh, prefs);
+  let filtered = applyPreFilters(fresh, prefs);
   log.info({ count: filtered.length }, 'after pre-filters');
+
+  // 3b. Location gate — drop non-NYC listings before they reach scoring.
+  // Allow nyc/remote/hybrid through; allow `unknown` (blank) through too,
+  // since bookmarks and partial smartfetch listings can land without a
+  // parsed location and we don't want to silently lose them.
+  const beforeLoc = filtered.length;
+  filtered = filtered.filter((l) => {
+    const cat = classifyLocation(l.location);
+    return cat === 'nyc' || cat === 'remote' || cat === 'hybrid' || cat === 'unknown';
+  });
+  const droppedLoc = beforeLoc - filtered.length;
+  console.log(`[location-gate] kept ${filtered.length}, dropped ${droppedLoc}`);
 
   // 4. Load examples + resume (resume is loaded once and reused across all
   // listings in this run — the prompt-cached system block makes this cheap)
