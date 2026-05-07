@@ -112,6 +112,25 @@ jobs:
                 echo "! setup.sh changed — review and run manually if needed"
               fi
 
+              # Remove stale lawbound cron block left behind by pre-rename deploys.
+              # setup.sh only manages the anyajob block, so without this the two
+              # blocks coexist and every job fires twice (root cause of the
+              # 2026-05-06 feedback.json corruption from concurrent daily.js runs).
+              echo "▸ Checking crontab for stale lawbound block..."
+              if crontab -l 2>/dev/null | grep -qF '>>> lawbound managed entries >>>'; then
+                crontab -l 2>/dev/null \
+                  | sed '/>>> lawbound managed entries >>>/,/<<< lawbound managed entries <<</d' \
+                  | crontab -
+                echo "  ✓ removed stale lawbound block"
+              else
+                echo "  (no stale lawbound block found)"
+              fi
+              DAILY_COUNT=\$(crontab -l 2>/dev/null | grep -c 'daily\.js' || true)
+              echo "  daily.js cron entries: \$DAILY_COUNT (expected: 1)"
+              if [ "\$DAILY_COUNT" != "1" ]; then
+                echo "! warning: unexpected daily.js entry count — inspect with 'crontab -l'"
+              fi
+
               echo "▸ Restarting service..."
               sudo systemctl restart anyajob
             ) 9>/tmp/anyajob.lock
