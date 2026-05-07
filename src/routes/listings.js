@@ -16,11 +16,11 @@ function hydrate(listing, feedback) {
   const reject = feedback.rejectReasons?.[key];
   return {
     ...listing,
-    rating: feedback.ratings[key] || null,
-    note: feedback.notes[key] || '',
-    status: feedback.status[key] || 'new',
-    appliedDate: feedback.appliedDate[key] || null,
-    closesDate: feedback.closesDate[key] || listing.score?.closesDate || null,
+    rating: feedback.ratings?.[key] || null,
+    note: feedback.notes?.[key] || '',
+    status: feedback.status?.[key] || 'new',
+    appliedDate: feedback.appliedDate?.[key] || null,
+    closesDate: feedback.closesDate?.[key] || listing.score?.closesDate || null,
     rejectReason: reject?.reason || null,
     rejectNote: reject?.note || null,
     rejectAt: reject?.at || null,
@@ -90,13 +90,13 @@ router.get('/stats', async (req, res) => {
   const counts = { new: 0, saved: 0, applied: 0, interview: 0, offer: 0, rejected: 0 };
   for (const l of listings) {
     const key = l.dedupKey || l.fingerprint;
-    const s = feedback.status[key] || 'new';
+    const s = feedback.status?.[key] || 'new';
     counts[s] = (counts[s] || 0) + 1;
   }
   res.json({
     total: listings.length,
     byStatus: counts,
-    appliedThisWeek: Object.values(feedback.appliedDate).filter(
+    appliedThisWeek: Object.values(feedback.appliedDate || {}).filter(
       (d) => d && d >= new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10),
     ).length,
   });
