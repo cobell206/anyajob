@@ -1532,7 +1532,16 @@ textarea { resize: vertical; min-height: 80px; }
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-md);
     margin-bottom: 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
   }
+  .table-toolbar-search {
+    flex: 1 1 100%;
+    max-width: none;
+    order: -1;
+  }
+  .view-btn { padding: 6px 9px; font-size: 15px; }
   .filter-popup {
     right: 0;
     left: auto;
