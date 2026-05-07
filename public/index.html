@@ -7,6 +7,7 @@
   <meta name="theme-color" content="#f7faf9">
   <title>Roles · AnyaJob</title>
   <link rel="stylesheet" href="/style.css?v=__CACHE_VERSION__">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
 </head>
 <body>
   <header>
@@ -64,6 +65,10 @@
         <input type="search" id="t-search" placeholder="Search title, company, or location" autocomplete="off">
       </div>
       <div class="filters" id="filters"></div>
+      <div class="view-toggle">
+        <button class="view-btn is-active" id="view-table" title="Table view">≡</button>
+        <button class="view-btn" id="view-kanban" title="Kanban view">⊞</button>
+      </div>
     </div>
 
     <div class="table-wrap">
@@ -84,6 +89,8 @@
 
     <div class="cards" id="cards"></div>
 
+    <div id="kanban-board" hidden></div>
+
     <div id="empty" style="display:none">
       <div class="empty">
         <div class="empty-icon">○</div>
@@ -100,6 +107,7 @@
     let allListings = [];
     let sortKey = 'score';
     let sortDir = 'desc';
+    let currentView = localStorage.getItem('rolesView') === 'kanban' ? 'kanban' : 'table';
 
     const DEFAULT_FILTERS = {
       status: 'all',     // 'all' | one of STATUSES values
@@ -417,7 +425,20 @@
       const empty = $('#empty');
       const tableWrap = $('.table-wrap');
       const cards = $('#cards');
+      const kanban = $('#kanban-board');
 
+      if (currentView === 'kanban') {
+        tableWrap.style.display = 'none';
+        cards.style.display = 'none';
+        empty.style.display = 'none';
+        kanban.hidden = false;
+        renderKanban();
+        const visible = allListings.filter((l) => (l.status || 'new') !== 'rejected').length;
+        $('#sub').textContent = `${visible} of ${allListings.length} listings`;
+        return;
+      }
+
+      kanban.hidden = true;
       if (filtered.length === 0) {
         empty.style.display = 'block';
         tableWrap.style.display = 'none';
@@ -430,6 +451,112 @@
         renderCards(filtered);
       }
       $('#sub').textContent = `${filtered.length} of ${allListings.length} listings`;
+    }
+
+    function kanbanColumns() {
+      return STATUSES.filter((s) => s.value !== 'rejected');
+    }
+
+    function groupByStatus(listings) {
+      const groups = {};
+      for (const col of kanbanColumns()) groups[col.value] = [];
+      for (const l of listings) {
+        const status = l.status || 'new';
+        if (status === 'rejected') continue;
+        if (!groups[status]) groups[status] = [];
+        groups[status].push(l);
+      }
+      return groups;
+    }
+
+    function kanbanCardHtml(l) {
+      const overall = l.score?.overallScore ?? 0;
+      const fp = l.dedupKey || l.fingerprint;
+      return `
+        <div class="kanban-card" data-fp="${escapeHtml(fp)}" draggable="true">
+          <div class="kanban-card-score ${scoreClass(overall)}">${overall}</div>
+          <div class="kanban-card-body">
+            <div class="kanban-card-title">${escapeHtml(l.title)}</div>
+            <div class="kanban-card-company">${escapeHtml(l.company)}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function updateColCounts() {
+      $$('#kanban-board .kanban-col').forEach((col) => {
+        const count = $$('.kanban-card', col).length;
+        const badge = $('.kanban-col-count', col);
+        if (badge) badge.textContent = count;
+      });
+    }
+
+    function renderKanban() {
+      const board = $('#kanban-board');
+      const groups = groupByStatus(allListings);
+      board.innerHTML = kanbanColumns().map((col) => {
+        const items = (groups[col.value] || [])
+          .slice()
+          .sort((a, b) => (b.score?.overallScore || 0) - (a.score?.overallScore || 0));
+        return `
+          <div class="kanban-col" data-status="${col.value}">
+            <div class="kanban-col-head">
+              <span class="kanban-col-title">${escapeHtml(col.label)}</span>
+              <span class="kanban-col-count">${items.length}</span>
+            </div>
+            <div class="kanban-cards" data-status="${col.value}">
+              ${items.map(kanbanCardHtml).join('')}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      $$('.kanban-card', board).forEach((card) => {
+        card.addEventListener('click', () => {
+          const fp = card.dataset.fp;
+          const listing = allListings.find((l) => (l.dedupKey || l.fingerprint) === fp);
+          if (listing) openModal(listing, onListingUpdated);
+        });
+      });
+
+      $$('.kanban-cards', board).forEach((el) => {
+        Sortable.create(el, {
+          group: 'kanban',
+          animation: 150,
+          onEnd(evt) {
+            const fp = evt.item.dataset.fp;
+            const newStatus = evt.to.dataset.status;
+            const listing = allListings.find((l) => (l.dedupKey || l.fingerprint) === fp);
+            if (!listing) return;
+            if ((listing.status || 'new') === newStatus) {
+              updateColCounts();
+              return;
+            }
+            api(`/api/feedback/${encodeURIComponent(fp)}/status`, {
+              method: 'POST',
+              body: { status: newStatus },
+            }).then(() => {
+              listing.status = newStatus;
+              if (newStatus === 'applied' && !listing.appliedDate) {
+                listing.appliedDate = new Date().toISOString().slice(0, 10);
+              }
+              updateColCounts();
+              loadStats();
+            }).catch(() => {
+              evt.from.insertBefore(evt.item, evt.from.children[evt.oldIndex] || null);
+              updateColCounts();
+            });
+          },
+        });
+      });
+    }
+
+    function setView(view) {
+      currentView = view === 'kanban' ? 'kanban' : 'table';
+      localStorage.setItem('rolesView', currentView);
+      $('#view-table').classList.toggle('is-active', currentView === 'table');
+      $('#view-kanban').classList.toggle('is-active', currentView === 'kanban');
+      render();
     }
 
     function onListingUpdated(updated) {
@@ -778,6 +905,12 @@
       await Promise.all([loadStats(), loadSummaries()]);
       render();
     }
+
+    $('#view-table').addEventListener('click', () => setView('table'));
+    $('#view-kanban').addEventListener('click', () => setView('kanban'));
+    // Reflect persisted view immediately so toggle state is correct on first paint.
+    $('#view-table').classList.toggle('is-active', currentView === 'table');
+    $('#view-kanban').classList.toggle('is-active', currentView === 'kanban');
 
     $$('th[data-sort]').forEach((th) => {
       th.addEventListener('click', () => {
