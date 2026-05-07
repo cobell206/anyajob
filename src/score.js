@@ -82,7 +82,35 @@ function calcCost(usage) {
   return input + cacheW + cacheR + output;
 }
 
-export async function scoreOne(listing, preferences, examples = [], resumeText = null) {
+async function loadFeedback() {
+  try {
+    const raw = await readFile(
+      join(__dirname, '..', 'data', 'feedback.json'),
+      'utf-8',
+    );
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+// Summarize the user's skip patterns as a short comma-separated string for the
+// scoring prompt. Returns null when there's too little signal (< 3 ignores) so
+// the prompt stays clean during cold-start.
+export async function buildIgnoreContext() {
+  const feedback = await loadFeedback();
+  const reasons = Object.values(feedback.rejectReasons || {});
+  if (reasons.length < 3) return null;
+
+  const counts = {};
+  for (const r of reasons) {
+    if (r.reason) counts[r.reason] = (counts[r.reason] || 0) + 1;
+  }
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  return sorted.map(([r, n]) => `${r}: ${n}`).join(', ');
+}
+
+export async function scoreOne(listing, preferences, examples = [], resumeText = null, ignoreContext = null) {
   const cap = parseFloat(process.env.MAX_DAILY_SPEND || '2.00');
   const spend = await loadSpend();
   const todaySpend = spend.byDay[today()] || 0;
@@ -91,7 +119,7 @@ export async function scoreOne(listing, preferences, examples = [], resumeText =
   }
 
   const systemBlocks = buildSystemBlocks(preferences, resumeText);
-  const userMsg = buildUserMessage(listing, examples);
+  const userMsg = buildUserMessage(listing, examples, ignoreContext);
 
   const response = await client.messages.create({
     model: MODEL,

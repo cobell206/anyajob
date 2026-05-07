@@ -91,7 +91,7 @@ export function buildSystemBlocks(preferences, resumeText = null) {
   return blocks;
 }
 
-export function buildUserMessage(listing, examples = []) {
+export function buildUserMessage(listing, examples = [], ignoreContext = null) {
   let exampleBlock = '';
   if (examples.length > 0) {
     const liked = examples.filter((e) => e.rating === 'up').slice(0, 3);
@@ -112,9 +112,13 @@ export function buildUserMessage(listing, examples = []) {
     }
   }
 
+  const ignoreBlock = ignoreContext
+    ? `\n\nUser's recent ignore patterns (use to calibrate score): ${ignoreContext}`
+    : '';
+
   const desc = (listing.description || '').slice(0, 4000);
 
-  return `Score this job listing.${exampleBlock}
+  return `Score this job listing.${exampleBlock}${ignoreBlock}
 
 LISTING TO SCORE:
 Company: ${listing.company}

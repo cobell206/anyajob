@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { fetchAll } from './sources/index.js';
 import { dedupeListings, saveSeen } from './dedupe.js';
-import { scoreOne, loadRecentFeedback } from './score.js';
+import { scoreOne, loadRecentFeedback, buildIgnoreContext } from './score.js';
 import { generateDailyBrief, generateWeeklyReflection } from './summaries.js';
 import { getProfileResumeText } from './documents.js';
 import { fbKey } from './io.js';
@@ -20,6 +20,46 @@ const log = createLogger('daily');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LISTINGS_PATH = join(__dirname, '..', 'data', 'listings.json');
 const PREFS_PATH = join(__dirname, '..', 'data', 'preferences.json');
+
+// Map raw reason codes (see VALID_REJECT_REASONS in routes/feedback.js) to
+// human-readable labels for the email. Unknown codes fall through unchanged
+// so new categories show up rather than vanish.
+const REASON_LABELS = {
+  salary: 'Salary too low',
+  'not-a-fit': 'Not a fit',
+  location: 'Location',
+  'wrong-location': 'Wrong location',
+  'too-senior': 'Too senior',
+  'too-junior': 'Too junior',
+  'wrong-seniority': 'Wrong seniority',
+  'not-interested': 'Not interested',
+  'already-applied': 'Already applied',
+  other: 'Other',
+};
+
+function labelForReason(code) {
+  return REASON_LABELS[code] || code;
+}
+
+// Build the payload the email needs from the rejectReasons map. Returns null
+// when fewer than 3 ignored listings — too little data to surface a pattern.
+// Returns { counts: [{label, code, count}], otherNotes: [string], total }.
+function summarizeIgnorePatterns(rejectReasons) {
+  const entries = Object.values(rejectReasons || {});
+  if (entries.length < 3) return null;
+
+  const counts = {};
+  const otherNotes = [];
+  for (const r of entries) {
+    if (!r || !r.reason) continue;
+    counts[r.reason] = (counts[r.reason] || 0) + 1;
+    if (r.reason === 'other' && r.note) otherNotes.push(r.note);
+  }
+  const sorted = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([code, count]) => ({ code, label: labelForReason(code), count }));
+  return { counts: sorted, otherNotes, total: entries.length };
+}
 
 function applyPreFilters(listings, prefs) {
   const exclude = (prefs.keywords?.exclude || []).map((k) => k.toLowerCase());
@@ -63,13 +103,17 @@ async function main() {
   if (resumeText) {
     log.info({ chars: resumeText.length }, 'using profile resume for scoring context');
   }
+  const ignoreContext = await buildIgnoreContext();
+  if (ignoreContext) {
+    log.info({ patterns: ignoreContext }, 'using ignore patterns for scoring calibration');
+  }
 
   // 5. Score
   const scored = [];
   let totalCost = 0;
   for (const listing of filtered) {
     try {
-      const score = await scoreOne(listing, prefs, examples, resumeText);
+      const score = await scoreOne(listing, prefs, examples, resumeText, ignoreContext);
       totalCost += score._cost || 0;
       scored.push({ ...listing, score, ingestedAt: startedAt });
     } catch (err) {
@@ -141,6 +185,11 @@ async function main() {
           log.info({ count: dueBookmarks.length }, 'including bookmarks due for manual check');
         }
 
+        // Aggregate ignore patterns from rejectReasons. Only surface when
+        // there's enough signal (3+ ignored listings) so we don't draw
+        // conclusions from a handful of skips.
+        const ignorePatterns = summarizeIgnorePatterns(feedback.rejectReasons || {});
+
         // Pending discovery candidates — surface count, link to settings
         let discoveryCount = 0;
         try {
@@ -165,6 +214,7 @@ async function main() {
             lastBriefedAt: b.lastBriefedAt,
           })),
           discoveryCount,
+          ignorePatterns,
         }, { to: recipients });
         if (result.skipped) {
           log.info({ reason: result.skipped }, 'morning email skipped');

@@ -198,7 +198,7 @@ function listingRow(l, baseUrl) {
 // Daily morning email — runs after the 6am scrape
 // Includes a closing-soon section at top when applicable, then today's brief,
 // then top roles. One email, urgency-ordered.
-export function buildMorningEmail({ summary, topListings, nudge, date, closingListings = [], bookmarks = [], discoveryCount = 0 }) {
+export function buildMorningEmail({ summary, topListings, nudge, date, closingListings = [], bookmarks = [], discoveryCount = 0, ignorePatterns = null }) {
   const url = process.env.PUBLIC_URL || 'http://localhost:3000';
 
   // Simple consistent subject — no urgency-based variations
@@ -272,6 +272,30 @@ export function buildMorningEmail({ summary, topListings, nudge, date, closingLi
     </div>
   ` : '';
 
+  // Patterns from her ignored listings — only when there's enough signal.
+  // Helps her see her own preferences reflected back without judgment.
+  const ignoreHtml = ignorePatterns && ignorePatterns.counts?.length ? `
+    <div class="card">
+      <div class="label" style="color:#6b7886">— What you've been skipping —</div>
+      <div style="margin-top:10px;font-size:14px;color:#3b4a5c">
+        ${ignorePatterns.counts.map((c) => `
+          <div style="display:flex;justify-content:space-between;padding:4px 0">
+            <span>${escapeHtml(c.label)}</span>
+            <span style="color:#6b7886;font-variant-numeric:tabular-nums">${c.count}</span>
+          </div>
+        `).join('')}
+      </div>
+      ${ignorePatterns.otherNotes?.length ? `
+        <div style="margin-top:12px;padding-top:10px;border-top:1px dashed rgba(15,29,46,0.1)">
+          <div style="font-size:12px;color:#6b7886;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Other — your notes</div>
+          <ul style="margin:0;padding-left:18px;font-size:13px;color:#3b4a5c">
+            ${ignorePatterns.otherNotes.map((n) => `<li style="margin-bottom:4px">${escapeHtml(n)}</li>`).join('')}
+          </ul>
+        </div>
+      ` : ''}
+    </div>
+  ` : '';
+
   const html = `<!doctype html><html><head><meta charset="utf-8">
     <style>${baseStyle}</style></head><body><div class="wrap">
     ${header()}
@@ -290,6 +314,7 @@ export function buildMorningEmail({ summary, topListings, nudge, date, closingLi
       </div>
       <a class="cta" href="${url}">Open AnyaJob →</a>
     ` : '<p style="color:#6b7886;font-size:14px">No new roles today. The scraper runs again at 6am tomorrow.</p>'}
+    ${ignoreHtml}
     ${footer()}
     </div></body></html>`;
 
