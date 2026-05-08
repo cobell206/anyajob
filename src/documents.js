@@ -313,12 +313,15 @@ Return JSON only.`;
 
   const text = response.content
     .filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
-  const cleaned = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
 
   let parsed;
   try {
-    parsed = JSON.parse(cleaned);
-  } catch {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start < 0 || end < start) throw new Error('no JSON object found in response');
+    parsed = JSON.parse(text.slice(start, end + 1));
+  } catch (err) {
+    log.error({ err, response: text.slice(0, 500) }, 'failed to parse resume alignment response');
     parsed = { error: 'parse failed', raw: text };
   }
   parsed._scoredAt = new Date().toISOString();
