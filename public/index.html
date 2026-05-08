@@ -133,7 +133,10 @@
     }
 
     function applyFiltersAndSort(listings) {
-      let out = listings.slice();
+      // Ignored listings live on /ignored.html and never appear in the main
+      // table/kanban — keep this exclusion ahead of any user filter so the
+      // status pill (if it ever sneaks back) can't surface them.
+      let out = listings.filter((l) => (l.status || 'new') !== 'rejected');
       if (filters.status !== 'all') {
         out = out.filter((l) => (l.status || 'new') === filters.status);
       }
@@ -617,10 +620,13 @@
 
     function renderFilters(stats) {
       const counts = stats.byStatus || {};
-      const total = Object.values(counts).reduce((a, b) => a + b, 0);
+      // Exclude ignored from the totals/pills — ignored listings live on
+      // their own page, so they shouldn't be selectable here.
+      const visibleStatuses = STATUSES.filter((s) => s.value !== 'rejected');
+      const total = visibleStatuses.reduce((sum, s) => sum + (counts[s.value] || 0), 0);
       const statusOptions = [
         { value: 'all', label: 'All', count: total },
-        ...STATUSES.map((s) => ({ ...s, count: counts[s.value] || 0 })),
+        ...visibleStatuses.map((s) => ({ ...s, count: counts[s.value] || 0 })),
       ];
       const activeCount = activeFilterCount();
       const isFiltered = activeCount > 0;
