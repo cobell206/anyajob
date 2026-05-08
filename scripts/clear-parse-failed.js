@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
-const IDX_PATH = resolve(ROOT, 'data', 'documents', 'index.json');
+const IDX_PATH = resolve(ROOT, 'data', 'documents.json');
 const TMP_PATH = IDX_PATH + '.tmp';
 
 const dryRun = process.argv.includes('--dry-run');
