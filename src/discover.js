@@ -20,10 +20,13 @@ import { DISCOVERY_SYSTEM } from './prompts.js';
 import { findOverlap, smartfetchSources } from './discover-overlap.js';
 import { getProfileResumeText } from './documents.js';
 import { writeJsonAtomic } from './atomic.js';
+import { fbKey } from './io.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PREFS_PATH = join(__dirname, '..', 'data', 'preferences.json');
 const DISCOVERIES_PATH = join(__dirname, '..', 'data', 'discoveries.json');
+const LISTINGS_PATH = join(__dirname, '..', 'data', 'listings.json');
+const FEEDBACK_PATH = join(__dirname, '..', 'data', 'feedback.json');
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
@@ -35,27 +38,94 @@ function client() {
 
 // Discovery prompt lives in src/prompts.js (DISCOVERY_SYSTEM)
 
-export async function discoverSources({ maxCandidates = 12 } = {}) {
-  const prefs = JSON.parse(await readFile(PREFS_PATH, 'utf-8'));
-  const existing = await loadSources();
-  const resumeText = await getProfileResumeText();
+// Pull listings she has saved or applied to. These are the strongest positive
+// signal we have about what kinds of employers/roles resonate. Cap at 15, most
+// recent first.
+export function formatPositiveSignal(listings, feedback) {
+  const status = feedback?.status || {};
+  const statusAt = feedback?.statusAt || {};
+  const appliedDate = feedback?.appliedDate || {};
 
-  // Build a compact list of what she's already tracking so Claude doesn't suggest dupes
-  const existingList = existing.sources
-    .filter((s) => s.enabled)
-    .map((s) => {
-      if (s.config?.slug) return `${s.kind}:${s.config.slug}`;
-      if (s.config?.url) return `${s.kind}:${s.config.url}`;
-      return `${s.kind}:${s.name}`;
+  const matches = [];
+  for (const l of listings || []) {
+    const key = fbKey(l);
+    const s = status[key];
+    if (s !== 'saved' && s !== 'applied') continue;
+    const ts = statusAt[key] || appliedDate[key] || '';
+    matches.push({ listing: l, ts });
+  }
+  if (matches.length === 0) return '';
+
+  matches.sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+  const top = matches.slice(0, 15);
+
+  const lines = top.map(({ listing }) => {
+    const title = listing.title || '(untitled)';
+    const company = listing.company || '(unknown)';
+    const location = listing.location || 'unspecified';
+    const score = listing.score?.overallScore;
+    const scorePart = typeof score === 'number' ? `, score ${score}` : '';
+    return `- ${title}, ${company} (${location}${scorePart})`;
+  });
+
+  return `\n\nRoles she saved or applied to (positive signal — find sources like these):\n${lines.join('\n')}`;
+}
+
+// Aggregate her reject reasons into counts. Skip the block entirely unless the
+// total ignored count is at least 3 — fewer than that is noise. Each value in
+// feedback.rejectReasons is `{ reason, note, at }` (see routes/feedback.js).
+export function formatNegativeSignal(feedback) {
+  const reasons = feedback?.rejectReasons || {};
+  const counts = {};
+  let total = 0;
+  for (const v of Object.values(reasons)) {
+    const items = Array.isArray(v) ? v : [v];
+    for (const r of items) {
+      const reason = typeof r === 'string' ? r : r?.reason;
+      if (!reason) continue;
+      counts[reason] = (counts[reason] || 0) + 1;
+      total++;
+    }
+  }
+  if (total < 3) return '';
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const lines = sorted.map(([reason, count]) => `- ${reason}: ${count}`);
+  return `\n\nWhat she's been ignoring (avoid sources heavy in these):\n${lines.join('\n')}`;
+}
+
+// List previously-dismissed candidate sources so Claude doesn't re-suggest
+// them. Keyed identically to the dedup logic below: kind:slug or kind:url.
+export function formatDismissedSignal(discoveries) {
+  const candidates = discoveries?.candidates || [];
+  const dismissed = candidates.filter((c) => c.status === 'dismissed');
+  if (dismissed.length === 0) return '';
+  const keys = dismissed
+    .map((c) => {
+      const id = c.config?.slug || c.config?.url;
+      return id ? `${c.kind}:${id}` : null;
     })
-    .join('\n');
+    .filter(Boolean)
+    .slice(0, 20);
+  if (keys.length === 0) return '';
+  return `\n\nPreviously dismissed sources (do not re-suggest):\n${keys.map((k) => `- ${k}`).join('\n')}`;
+}
 
+export function buildDiscoveryUserMessage({
+  prefs,
+  existingList,
+  resumeBlock = '',
+  listings = [],
+  feedback = {},
+  discoveries = { candidates: [] },
+  maxCandidates = 12,
+}) {
   const targetSchools = prefs.profile?.targetSchools || [];
-  const resumeBlock = resumeText
-    ? `\n\nHER RESUME (verbatim — use to anchor the search to her actual background and seniority, not just stated interests):\n${resumeText.slice(0, 4000)}`
-    : '';
 
-  const userMsg = `Find new sources for her search. Return up to ${maxCandidates} carefully-chosen candidates.
+  const positiveBlock = formatPositiveSignal(listings, feedback);
+  const negativeBlock = formatNegativeSignal(feedback);
+  const dismissedBlock = formatDismissedSignal(discoveries);
+
+  return `Find new sources for her search. Return up to ${maxCandidates} carefully-chosen candidates.
 
 HER PROFILE:
 ${JSON.stringify({
@@ -74,7 +144,7 @@ ALREADY TRACKING (do NOT suggest these):
 ${existingList || '(none)'}
 
 ALREADY ON ALWAYS-SHOW LIST (good signal of types she likes):
-${(prefs.companies?.alwaysShow || []).join(', ')}${resumeBlock}
+${(prefs.companies?.alwaysShow || []).join(', ')}${resumeBlock}${positiveBlock}${negativeBlock}${dismissedBlock}
 
 Use the web_search tool to find candidates. Prioritize sources that:
 1. align with her stated interest areas and geography
@@ -82,6 +152,47 @@ Use the web_search tool to find candidates. Prioritize sources that:
 3. recruit candidates who go on to ${targetSchools.length ? targetSchools.join(' / ') : 'top law schools'} (career pipelines, fellowship feeders, employer-of-record patterns matter)
 
 Return JSON only.`;
+}
+
+async function readJsonOrDefault(path, fallback) {
+  try {
+    return JSON.parse(await readFile(path, 'utf-8'));
+  } catch {
+    return fallback;
+  }
+}
+
+export async function discoverSources({ maxCandidates = 12 } = {}) {
+  const prefs = JSON.parse(await readFile(PREFS_PATH, 'utf-8'));
+  const existing = await loadSources();
+  const resumeText = await getProfileResumeText();
+  const listingsData = await readJsonOrDefault(LISTINGS_PATH, { listings: [] });
+  const feedback = await readJsonOrDefault(FEEDBACK_PATH, {});
+  const discoveries = await readJsonOrDefault(DISCOVERIES_PATH, { candidates: [] });
+
+  // Build a compact list of what she's already tracking so Claude doesn't suggest dupes
+  const existingList = existing.sources
+    .filter((s) => s.enabled)
+    .map((s) => {
+      if (s.config?.slug) return `${s.kind}:${s.config.slug}`;
+      if (s.config?.url) return `${s.kind}:${s.config.url}`;
+      return `${s.kind}:${s.name}`;
+    })
+    .join('\n');
+
+  const resumeBlock = resumeText
+    ? `\n\nHER RESUME (verbatim — use to anchor the search to her actual background and seniority, not just stated interests):\n${resumeText.slice(0, 4000)}`
+    : '';
+
+  const userMsg = buildDiscoveryUserMessage({
+    prefs,
+    existingList,
+    resumeBlock,
+    listings: listingsData.listings || [],
+    feedback,
+    discoveries,
+    maxCandidates,
+  });
 
   const response = await client().messages.create({
     model: MODEL,

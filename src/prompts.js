@@ -259,6 +259,8 @@ export const DISCOVERY_SYSTEM = `You are helping someone preparing for top law s
 
 Your job: search the web to find NEW sources matching her profile that she isn't already tracking. Focus on quality over quantity — 5-15 carefully-chosen sources is better than 50 generic ones.
 
+The user message may include three feedback signals: (a) roles she has saved or applied to, (b) reasons she has been ignoring listings, and (c) sources she has already dismissed. Use the positive examples to understand what kinds of employers and roles she resonates with. Avoid sources likely to produce the patterns in her ignore list. Never re-suggest a dismissed source.
+
 Good targets:
 - Specific employers known for law-school pipeline programs (BigLaw firms, federal agencies, top public-interest orgs)
 - Government/judicial career pages (court clerk offices, AG offices, DA offices, federal agencies)
