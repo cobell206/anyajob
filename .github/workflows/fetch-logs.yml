@@ -28,13 +28,14 @@ jobs:
           SSH_USER: ${{ secrets.EC2_USER }}
           REPO_PATH: ${{ secrets.REPO_PATH }}
         run: |
-          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" bash -se <<'EOF'
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" REPO_PATH="$REPO_PATH" bash -se <<'EOF'
             set -uo pipefail
 
             echo "===== deployed commit ====="
-            cd "$HOME" 2>/dev/null || true
             if [ -n "${REPO_PATH:-}" ] && [ -d "${REPO_PATH:-}" ]; then
               git -C "$REPO_PATH" log -1 --format='%H %s%n%ad' --date=iso || true
+            else
+              echo "(REPO_PATH not set or not a directory: '${REPO_PATH:-<empty>}')"
             fi
 
             echo
@@ -42,14 +43,34 @@ jobs:
             systemctl status anyajob --no-pager --lines=5 || true
 
             echo
-            echo "===== filtered log lines (last hour) ====="
-            sudo journalctl -u anyajob --since "1 hour ago" --no-pager \
-              | grep -i -E "parse|resume|error|fail|500" \
-              | tail -100 || echo "(no matching lines)"
+            echo "===== filtered log lines (last 24h, parse/resume/score/error/fail/500) ====="
+            sudo journalctl -u anyajob --since "24 hours ago" --no-pager \
+              | grep -i -E "parse|resume|score|error|fail|500" \
+              | tail -200 || echo "(no matching lines)"
 
             echo
-            echo "===== last 50 raw lines ====="
-            sudo journalctl -u anyajob --since "1 hour ago" --no-pager | tail -50 || true
+            echo "===== upload-route lines (last 24h) ====="
+            sudo journalctl -u anyajob --since "24 hours ago" --no-pager \
+              | grep -E "POST /api/(documents|profile)" \
+              | tail -50 || echo "(no upload requests)"
+
+            echo
+            echo "===== last 60 raw lines ====="
+            sudo journalctl -u anyajob --since "2 hours ago" --no-pager | tail -60 || true
+
+            echo
+            echo "===== documents.json profile resume entry ====="
+            if [ -n "${REPO_PATH:-}" ] && [ -f "$REPO_PATH/data/documents.json" ]; then
+              # Show only the _profile entry to avoid leaking other fingerprints
+              python3 -c "
+import json,sys
+with open('$REPO_PATH/data/documents.json') as f:
+    d=json.load(f)
+print(json.dumps(d.get('_profile',{}), indent=2)[:3000])
+" 2>/dev/null || echo "(could not parse documents.json)"
+            else
+              echo "(documents.json not found)"
+            fi
           EOF
 
       - name: Cleanup
