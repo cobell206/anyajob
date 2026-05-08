@@ -1,0 +1,57 @@
+name: Fetch service logs
+
+# Manual-only diagnostic job — SSHes to EC2 and prints recent anyajob logs
+# matching parse/resume/error/fail/500. Mirrors deploy.yml SSH setup.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Tail anyajob logs
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
+          REPO_PATH: ${{ secrets.REPO_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" bash -se <<'EOF'
+            set -uo pipefail
+
+            echo "===== deployed commit ====="
+            cd "$HOME" 2>/dev/null || true
+            if [ -n "${REPO_PATH:-}" ] && [ -d "${REPO_PATH:-}" ]; then
+              git -C "$REPO_PATH" log -1 --format='%H %s%n%ad' --date=iso || true
+            fi
+
+            echo
+            echo "===== service status ====="
+            systemctl status anyajob --no-pager --lines=5 || true
+
+            echo
+            echo "===== filtered log lines (last hour) ====="
+            sudo journalctl -u anyajob --since "1 hour ago" --no-pager \
+              | grep -i -E "parse|resume|error|fail|500" \
+              | tail -100 || echo "(no matching lines)"
+
+            echo
+            echo "===== last 50 raw lines ====="
+            sudo journalctl -u anyajob --since "1 hour ago" --no-pager | tail -50 || true
+          EOF
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
