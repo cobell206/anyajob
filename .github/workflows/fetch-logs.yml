@@ -61,13 +61,7 @@ jobs:
             echo
             echo "===== documents.json profile resume entry ====="
             if [ -n "${REPO_PATH:-}" ] && [ -f "$REPO_PATH/data/documents.json" ]; then
-              # Show only the _profile entry to avoid leaking other fingerprints
-              python3 -c "
-import json,sys
-with open('$REPO_PATH/data/documents.json') as f:
-    d=json.load(f)
-print(json.dumps(d.get('_profile',{}), indent=2)[:3000])
-" 2>/dev/null || echo "(could not parse documents.json)"
+              jq '._profile // {}' "$REPO_PATH/data/documents.json" 2>/dev/null | head -100 || echo "(jq failed)"
             else
               echo "(documents.json not found)"
             fi
