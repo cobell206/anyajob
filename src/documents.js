@@ -306,23 +306,26 @@ Return JSON only.`;
 
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 700,
+    max_tokens: 2000,
     system: [{ type: 'text', text: RESUME_ALIGNMENT_SYSTEM, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: userMsg }],
   });
 
   const text = response.content
     .filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+  const truncated = response.stop_reason === 'max_tokens';
 
   let parsed;
   try {
+    if (truncated) throw new Error('response truncated at max_tokens');
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');
     if (start < 0 || end < start) throw new Error('no JSON object found in response');
     parsed = JSON.parse(text.slice(start, end + 1));
   } catch (err) {
-    log.error({ err, response: text.slice(0, 500) }, 'failed to parse resume alignment response');
-    parsed = { error: 'parse failed', raw: text };
+    log.error({ err, stopReason: response.stop_reason, response: text.slice(0, 500) },
+      'failed to parse resume alignment response');
+    parsed = { error: truncated ? 'response truncated' : 'parse failed', raw: text };
   }
   parsed._scoredAt = new Date().toISOString();
 
