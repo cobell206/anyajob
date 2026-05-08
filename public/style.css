@@ -641,6 +641,14 @@ main {
   justify-content: space-between;
 }
 
+/* In kanban view the table is hidden, so the toolbar would otherwise show
+   square bottom corners with no bottom border. Make it a self-contained pill. */
+body:has(#kanban-board:not([hidden])) .table-toolbar {
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 16px;
+}
+
 .table-toolbar-search {
   flex: 1;
   display: flex;
