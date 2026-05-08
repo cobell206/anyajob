@@ -59,26 +59,13 @@ jobs:
             sudo journalctl -u anyajob --since "2 hours ago" --no-pager | tail -60 || true
 
             echo
-            echo "===== persisted parse-failed entries in documents.json ====="
+            echo "===== full raw text from any persisted parse-failed alignment ====="
             if [ -n "${REPO_PATH:-}" ] && [ -f "$REPO_PATH/data/documents.json" ]; then
-              # Find any fingerprints whose resume.current.alignmentScore.error is set
-              jq 'to_entries
-                  | map({fp:.key,
-                         file:.value.resume.current.file,
-                         uploadedAt:.value.resume.current.uploadedAt,
-                         alignmentError:.value.resume.current.alignmentScore.error,
-                         alignmentRawSnippet:(.value.resume.current.alignmentScore.raw // "" | tostring | .[0:300]),
-                         scoredAt:.value.resume.current.alignmentScore._scoredAt})
-                  | map(select(.alignmentError))' \
-                  "$REPO_PATH/data/documents.json" 2>/dev/null | head -200 \
+              jq -r 'to_entries[]
+                     | select(.value.resume.current.alignmentScore.error)
+                     | "FP=\(.key)  uploadedAt=\(.value.resume.current.uploadedAt)\nRAW (length=\(.value.resume.current.alignmentScore.raw|length)):\n\(.value.resume.current.alignmentScore.raw)\n----END-RAW----\n"' \
+                  "$REPO_PATH/data/documents.json" 2>/dev/null \
                   || echo "(jq failed)"
-              echo
-              echo "--- counts:"
-              jq '[to_entries[]
-                   | select(.value.resume.current.alignmentScore.error)] | length as $errs
-                  | [to_entries[]
-                   | select(.value.resume.current.alignmentScore)] | length as $total
-                  | "errors: \(.) / total scored: \($total)"' "$REPO_PATH/data/documents.json" 2>/dev/null || true
             else
               echo "(documents.json not found)"
             fi
