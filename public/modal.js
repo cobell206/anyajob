@@ -175,16 +175,41 @@ export function openModal(listing, onUpdate) {
     el.className = `status-message ${kind}`;
     setTimeout(() => { el.textContent = ''; }, 1500);
   };
+  const showLoading = (text) => {
+    const el = $('#m-status-msg');
+    el.innerHTML = `<span class="spinner-row"><span class="spinner sm"></span><span>${escapeHtml(text)}</span></span>`;
+    el.className = 'status-message info';
+  };
+  // Run an API call with loading + disabled state.
+  const withLoading = async (els, label, fn) => {
+    const arr = Array.isArray(els) ? els : (els ? [els] : []);
+    arr.forEach((el) => { if (el) el.disabled = true; });
+    showLoading(label);
+    try {
+      const result = await fn();
+      arr.forEach((el) => { if (el) el.disabled = false; });
+      return result;
+    } catch (err) {
+      arr.forEach((el) => { if (el) el.disabled = false; });
+      throw err;
+    }
+  };
 
   $$('[data-rate]', $('#m-body')).forEach((btn) => {
     btn.addEventListener('click', async () => {
       const action = btn.dataset.rate;
       const newRating = btn.classList.contains('active') ? null : action;
-      await api(`/api/feedback/${fp}/rating`, {
-        method: 'POST',
-        body: { rating: newRating },
-      });
-      $$('[data-rate]', $('#m-body')).forEach((b) => b.classList.remove('active'));
+      const rateBtns = $$('[data-rate]', $('#m-body'));
+      try {
+        await withLoading(rateBtns, 'Saving…', () => api(`/api/feedback/${fp}/rating`, {
+          method: 'POST',
+          body: { rating: newRating },
+        }));
+      } catch (err) {
+        showMsg(`Failed to save: ${err.message}`, 'error');
+        return;
+      }
+      rateBtns.forEach((b) => b.classList.remove('active'));
       if (newRating) btn.classList.add('active');
       currentListing.rating = newRating;
       showMsg(newRating ? 'Saved' : 'Cleared');
@@ -221,13 +246,15 @@ export function openModal(listing, onUpdate) {
     const selected = rejectReasonsEl.querySelector('.reason-chip.is-selected');
     const reason = selected ? selected.dataset.reason : null;
     const note = reason === 'other' ? (rejectNoteEl.value || '') : '';
+    const chips = $$('.reason-chip', rejectReasonsEl);
     try {
-      await api(`/api/feedback/${fp}/reject-reason`, {
+      await withLoading(chips, 'Saving…', () => api(`/api/feedback/${fp}/reject-reason`, {
         method: 'POST',
         body: { reason, note },
-      });
+      }));
       currentListing.rejectReason = reason;
       currentListing.rejectNote = note || null;
+      showMsg('Saved');
       onUpdateCallback?.(currentListing);
     } catch (err) {
       showMsg(`Failed to save: ${err.message}`, 'error');
@@ -260,7 +287,8 @@ export function openModal(listing, onUpdate) {
     const status = e.target.value;
     const prev = currentListing.status;
     try {
-      await api(`/api/feedback/${fp}/status`, { method: 'POST', body: { status } });
+      await withLoading(e.target, 'Saving status…', () =>
+        api(`/api/feedback/${fp}/status`, { method: 'POST', body: { status } }));
       currentListing.status = status;
       if (status === 'applied' && !currentListing.appliedDate) {
         const today = new Date().toISOString().slice(0, 10);
@@ -280,28 +308,43 @@ export function openModal(listing, onUpdate) {
 
   $('#m-applied-date').addEventListener('change', async (e) => {
     const date = e.target.value || null;
-    await api(`/api/feedback/${fp}/appliedDate`, { method: 'POST', body: { appliedDate: date } });
-    currentListing.appliedDate = date;
-    showMsg('Applied date saved');
-    onUpdateCallback?.(currentListing);
+    try {
+      await withLoading(e.target, 'Saving applied date…', () =>
+        api(`/api/feedback/${fp}/appliedDate`, { method: 'POST', body: { appliedDate: date } }));
+      currentListing.appliedDate = date;
+      showMsg('Applied date saved');
+      onUpdateCallback?.(currentListing);
+    } catch (err) {
+      showMsg(`Failed to save: ${err.message}`, 'error');
+    }
   });
 
   $('#m-closes-date').addEventListener('change', async (e) => {
     const date = e.target.value || null;
-    await api(`/api/feedback/${fp}/closesDate`, { method: 'POST', body: { closesDate: date } });
-    currentListing.closesDate = date;
-    showMsg('Closes date saved');
-    onUpdateCallback?.(currentListing);
+    try {
+      await withLoading(e.target, 'Saving closes date…', () =>
+        api(`/api/feedback/${fp}/closesDate`, { method: 'POST', body: { closesDate: date } }));
+      currentListing.closesDate = date;
+      showMsg('Closes date saved');
+      onUpdateCallback?.(currentListing);
+    } catch (err) {
+      showMsg(`Failed to save: ${err.message}`, 'error');
+    }
   });
 
   let noteTimer;
   $('#m-note').addEventListener('input', (e) => {
     clearTimeout(noteTimer);
     noteTimer = setTimeout(async () => {
-      await api(`/api/feedback/${fp}/note`, { method: 'POST', body: { note: e.target.value } });
-      currentListing.note = e.target.value;
-      showMsg('Saved');
-      onUpdateCallback?.(currentListing);
+      try {
+        showLoading('Saving note…');
+        await api(`/api/feedback/${fp}/note`, { method: 'POST', body: { note: e.target.value } });
+        currentListing.note = e.target.value;
+        showMsg('Saved');
+        onUpdateCallback?.(currentListing);
+      } catch (err) {
+        showMsg(`Failed to save: ${err.message}`, 'error');
+      }
     }, 500);
   });
 
@@ -319,7 +362,7 @@ async function loadDocs(fp) {
   mount.innerHTML = `
     <div class="modal-section docs-section">
       <h3>Application materials</h3>
-      <div class="docs-loading">Loading…</div>
+      <div class="docs-loading"><span class="spinner-row"><span class="spinner sm"></span><span>Loading…</span></span></div>
     </div>
   `;
   try {

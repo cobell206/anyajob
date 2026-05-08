@@ -13,6 +13,7 @@ import {
   deleteDocument,
   validateUpload,
   scoreResumeAgainstJd,
+  scoreCoverLetterAgainstJd,
 } from '../documents.js';
 import { createLogger } from '../log.js';
 
@@ -52,20 +53,19 @@ router.post('/:fp/upload', upload.single('file'), async (req, res) => {
       otherName,
     });
 
-    // Auto-score resume against JD if requested
+    // Auto-score resume or cover letter against JD if requested
     let alignmentScore = null;
-    if (slot === 'resume' && autoScore !== 'false') {
+    if ((slot === 'resume' || slot === 'cover') && autoScore !== 'false') {
       try {
         const all = await readJson('listings.json');
         const listing = all.listings.find((l) => l.fingerprint === req.params.fp);
         if (listing) {
-          alignmentScore = await scoreResumeAgainstJd({
-            fingerprint: req.params.fp,
-            listing,
-          });
+          alignmentScore = slot === 'resume'
+            ? await scoreResumeAgainstJd({ fingerprint: req.params.fp, listing })
+            : await scoreCoverLetterAgainstJd({ fingerprint: req.params.fp, listing });
         }
       } catch (err) {
-        log.error({ err, fp: req.params.fp }, 'auto-scoring resume failed');
+        log.error({ err, fp: req.params.fp, slot }, 'auto-scoring failed');
       }
     }
 
@@ -117,6 +117,18 @@ router.post('/:fp/score-resume', async (req, res) => {
     const listing = all.listings.find((l) => l.fingerprint === req.params.fp);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
     const score = await scoreResumeAgainstJd({ fingerprint: req.params.fp, listing });
+    res.json(score);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:fp/score-cover', async (req, res) => {
+  try {
+    const all = await readJson('listings.json');
+    const listing = all.listings.find((l) => l.fingerprint === req.params.fp);
+    if (!listing) return res.status(404).json({ error: 'Listing not found' });
+    const score = await scoreCoverLetterAgainstJd({ fingerprint: req.params.fp, listing });
     res.json(score);
   } catch (err) {
     res.status(500).json({ error: err.message });

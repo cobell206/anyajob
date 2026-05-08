@@ -25,6 +25,13 @@ function fmtRelTime(iso) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function alignScoreValue(slot, align) {
+  if (!align) return null;
+  if (slot === 'cover' && typeof align.overallScore === 'number') return align.overallScore;
+  if (typeof align.alignmentScore === 'number') return align.alignmentScore;
+  return null;
+}
+
 function renderDoc(fp, slot, entry, opts = {}) {
   if (!entry) {
     return `
@@ -36,8 +43,9 @@ function renderDoc(fp, slot, entry, opts = {}) {
   }
   const previewable = !!entry.previewFile;
   const align = entry.alignmentScore;
-  const alignBadge = (align && typeof align.alignmentScore === 'number')
-    ? `<span class="doc-align align-${align.alignmentScore >= 7 ? 'high' : align.alignmentScore >= 5 ? 'mid' : 'low'}">${align.alignmentScore}/10 fit</span>`
+  const score = alignScoreValue(slot, align);
+  const alignBadge = (score !== null)
+    ? `<span class="doc-align align-${score >= 7 ? 'high' : score >= 5 ? 'mid' : 'low'}">${score}/10 fit</span>`
     : '';
   return `
     <div class="doc-row">
@@ -73,8 +81,15 @@ function renderOther(fp, list = []) {
   `).join('');
 }
 
-export async function renderDocumentsSection(fingerprint) {
+export async function renderDocumentsSection(fingerprint, opts = {}) {
   const docs = await api(`/api/documents/${fingerprint}`).catch(() => ({}));
+  const scoring = opts.scoring || {}; // { resume: bool, cover: bool }
+  const resumeAlignBlock = scoring.resume
+    ? renderAlignSkeleton('Scoring resume against this JD…')
+    : (docs.resume?.current?.alignmentScore ? renderAlignment(docs.resume.current.alignmentScore) : '');
+  const coverAlignBlock = scoring.cover
+    ? renderAlignSkeleton('Scoring cover letter against this JD…')
+    : (docs.cover?.current?.alignmentScore ? renderCoverAlignment(docs.cover.current.alignmentScore) : '');
   const html = `
     <div class="modal-section docs-section">
       <h3>Application materials</h3>
@@ -88,11 +103,21 @@ export async function renderDocumentsSection(fingerprint) {
         ${docs.cover?.current ? '' : `<button class="btn doc-upload-btn" data-slot="cover">+ Cover letter</button>`}
         <button class="btn doc-upload-btn" data-slot="other">+ Other</button>
       </div>
-      ${docs.resume?.current?.alignmentScore ? renderAlignment(docs.resume.current.alignmentScore) : ''}
+      ${resumeAlignBlock}
+      ${coverAlignBlock}
       <input type="file" id="doc-file-input" accept="${ALLOWED}" style="display:none">
     </div>
   `;
   return html;
+}
+
+function renderAlignSkeleton(label) {
+  return `
+    <div class="align-skeleton">
+      <span class="spinner"></span>
+      <span>${escapeHtml(label)}</span>
+    </div>
+  `;
 }
 
 function renderAlignment(a) {
@@ -122,6 +147,39 @@ function renderAlignment(a) {
         <div class="align-section">
           <div class="align-h">Suggested bullets</div>
           <ul>${a.suggestedBullets.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function renderCoverAlignment(a) {
+  if (a.error) {
+    return `<div class="align-box err">Cover letter scoring error: ${escapeHtml(a.error)}</div>`;
+  }
+  const overall = typeof a.overallScore === 'number' ? a.overallScore : 0;
+  const cls = overall >= 7 ? 'high' : overall >= 5 ? 'mid' : 'low';
+  return `
+    <div class="align-box">
+      <div class="align-head">
+        <div class="align-label">Cover letter vs JD</div>
+        <div class="align-score align-${cls}">${overall}/10</div>
+      </div>
+      ${(typeof a.relevanceScore === 'number' || typeof a.toneScore === 'number') ? `
+        <div class="align-summary">
+          ${typeof a.relevanceScore === 'number' ? `Relevance: <strong>${a.relevanceScore}/10</strong>` : ''}${(typeof a.relevanceScore === 'number' && typeof a.toneScore === 'number') ? ' · ' : ''}${typeof a.toneScore === 'number' ? `Tone: <strong>${a.toneScore}/10</strong>` : ''}
+        </div>
+      ` : ''}
+      ${a.strengths?.length ? `
+        <div class="align-section">
+          <div class="align-h">What's working</div>
+          <ul>${a.strengths.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+        </div>
+      ` : ''}
+      ${a.suggestions?.length ? `
+        <div class="align-section">
+          <div class="align-h">Suggestions</div>
+          <ul>${a.suggestions.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
         </div>
       ` : ''}
     </div>
@@ -164,8 +222,29 @@ export function wireDocumentActions(container, fingerprint, refresh) {
       container.querySelector('.docs-section').appendChild(el);
       return el;
     })();
-    status.textContent = `Uploading ${file.name}…`;
+    const willScore = slot === 'resume' || slot === 'cover';
+    status.innerHTML = `<span class="spinner-row"><span class="spinner sm"></span><span>Uploading ${escapeHtml(file.name)}${willScore ? ' and scoring' : ''}…</span></span>`;
     status.className = 'docs-status info';
+
+    // Disable all upload/replace buttons; show inline spinner on the active one.
+    const buttons = Array.from(container.querySelectorAll('.doc-upload-btn, [data-action="replace"]'));
+    const prevHtml = new Map();
+    buttons.forEach((b) => {
+      prevHtml.set(b, b.innerHTML);
+      b.disabled = true;
+      if (b.dataset.slot === slot) {
+        b.innerHTML = `<span class="spinner sm"></span> Uploading…`;
+      }
+    });
+
+    // Show a scoring skeleton in the alignment slot while we wait.
+    let skeleton = null;
+    if (willScore) {
+      skeleton = document.createElement('div');
+      skeleton.className = 'align-skeleton';
+      skeleton.innerHTML = `<span class="spinner"></span><span>${slot === 'resume' ? 'Scoring resume against this JD…' : 'Scoring cover letter against this JD…'}</span>`;
+      container.querySelector('.docs-section').appendChild(skeleton);
+    }
 
     try {
       const res = await fetch(`/api/documents/${fingerprint}/upload`, {
@@ -183,6 +262,12 @@ export function wireDocumentActions(container, fingerprint, refresh) {
     } catch (err) {
       status.textContent = 'Upload failed: ' + err.message;
       status.className = 'docs-status error';
+      // Restore buttons on failure (refresh on success will re-render).
+      buttons.forEach((b) => {
+        b.disabled = false;
+        b.innerHTML = prevHtml.get(b);
+      });
+      if (skeleton) skeleton.remove();
     }
   });
 
@@ -203,11 +288,19 @@ export function wireDocumentActions(container, fingerprint, refresh) {
   container.querySelectorAll('[data-action="delete-other"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       if (!confirm('Delete this document?')) return;
-      await api(`/api/documents/${fingerprint}/delete`, {
-        method: 'POST',
-        body: { slot: 'other', file: btn.dataset.file },
-      });
-      refresh?.();
+      const orig = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner sm"></span>`;
+      try {
+        await api(`/api/documents/${fingerprint}/delete`, {
+          method: 'POST',
+          body: { slot: 'other', file: btn.dataset.file },
+        });
+        refresh?.();
+      } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+      }
     });
   });
 }

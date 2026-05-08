@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, extname, basename } from 'node:path';
 import { spawn } from 'node:child_process';
 import Anthropic from '@anthropic-ai/sdk';
-import { RESUME_ALIGNMENT_SYSTEM } from './prompts.js';
+import { RESUME_ALIGNMENT_SYSTEM, COVER_LETTER_ALIGNMENT_SYSTEM } from './prompts.js';
 import { writeJsonAtomic } from './atomic.js';
 import { createLogger } from './log.js';
 
@@ -333,6 +333,61 @@ Return JSON only.`;
   const idx = await readIndex();
   if (idx[fingerprint]?.resume?.current) {
     idx[fingerprint].resume.current.alignmentScore = parsed;
+    await writeIndex(idx);
+  }
+  return parsed;
+}
+
+export async function scoreCoverLetterAgainstJd({ fingerprint, listing }) {
+  const docs = await listDocuments(fingerprint);
+  const cover = docs.cover?.current;
+  if (!cover) return null;
+
+  const coverPath = await getDocumentPath(fingerprint, cover.file);
+  const coverText = (await extractResumeText(coverPath)).slice(0, 8000);
+  if (!coverText) {
+    return { error: 'Could not extract text from cover letter' };
+  }
+
+  const jdText = (listing.description || '').slice(0, 4000);
+  const userMsg = `Job: ${listing.title} at ${listing.company} (${listing.location || ''})
+
+JOB DESCRIPTION:
+${jdText}
+
+CANDIDATE COVER LETTER:
+${coverText}
+
+Return JSON only.`;
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 2000,
+    system: [{ type: 'text', text: COVER_LETTER_ALIGNMENT_SYSTEM, cache_control: { type: 'ephemeral' } }],
+    messages: [{ role: 'user', content: userMsg }],
+  });
+
+  const text = response.content
+    .filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+  const truncated = response.stop_reason === 'max_tokens';
+
+  let parsed;
+  try {
+    if (truncated) throw new Error('response truncated at max_tokens');
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start < 0 || end < start) throw new Error('no JSON object found in response');
+    parsed = JSON.parse(text.slice(start, end + 1));
+  } catch (err) {
+    log.error({ err, stopReason: response.stop_reason, response: text.slice(0, 500) },
+      'failed to parse cover letter alignment response');
+    parsed = { error: truncated ? 'response truncated' : 'parse failed', raw: text };
+  }
+  parsed._scoredAt = new Date().toISOString();
+
+  const idx = await readIndex();
+  if (idx[fingerprint]?.cover?.current) {
+    idx[fingerprint].cover.current.alignmentScore = parsed;
     await writeIndex(idx);
   }
   return parsed;
