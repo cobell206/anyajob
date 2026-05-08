@@ -93,12 +93,21 @@ router.get('/stats', async (req, res) => {
     const s = feedback.status?.[key] || 'new';
     counts[s] = (counts[s] || 0) + 1;
   }
+  // Stats reflect the main-view roster — ignored listings live on a separate
+  // page so they're excluded from `total` and `appliedThisWeek`. byStatus
+  // still carries rejected so the header's ignored-link can render its count.
+  const cutoff = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  let appliedThisWeek = 0;
+  for (const l of listings) {
+    const key = l.dedupKey || l.fingerprint;
+    if ((feedback.status?.[key] || 'new') === 'rejected') continue;
+    const d = feedback.appliedDate?.[key];
+    if (d && d >= cutoff) appliedThisWeek++;
+  }
   res.json({
-    total: listings.length,
+    total: listings.length - counts.rejected,
     byStatus: counts,
-    appliedThisWeek: Object.values(feedback.appliedDate || {}).filter(
-      (d) => d && d >= new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10),
-    ).length,
+    appliedThisWeek,
   });
 });
 
