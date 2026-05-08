@@ -1,5 +1,5 @@
 // src/score.js
-// Sends a listing to Claude Haiku 4.5 for scoring. Tracks spend, enforces
+// Sends a listing to Claude Sonnet 4.6 for scoring. Tracks spend, enforces
 // daily cap, returns parsed JSON. Uses prompt caching for the static blocks.
 
 import 'dotenv/config';
@@ -17,14 +17,14 @@ const log = createLogger('score');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SPEND_PATH = join(__dirname, '..', 'data', 'spend.json');
 
-const MODEL = 'claude-haiku-4-5-20251001';
+const MODEL = 'claude-sonnet-4-6';
 
-// Haiku 4.5 pricing per million tokens (verify at console.anthropic.com)
+// Sonnet 4.6 pricing per million tokens (verify at console.anthropic.com)
 const PRICING = {
-  input: 1.0 / 1_000_000,
-  cacheWrite: 1.25 / 1_000_000,
-  cacheRead: 0.1 / 1_000_000,
-  output: 5.0 / 1_000_000,
+  input: 3.0 / 1_000_000,
+  cacheWrite: 3.75 / 1_000_000,
+  cacheRead: 0.3 / 1_000_000,
+  output: 15.0 / 1_000_000,
 };
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });

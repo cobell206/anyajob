@@ -223,7 +223,7 @@ export async function deleteDocument(fingerprint, slot, fileToDelete = null) {
 // ---------- Resume vs JD scoring ----------
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = 'claude-haiku-4-5-20251001';
+const MODEL = 'claude-sonnet-4-6';
 
 // Resume alignment prompt lives in src/prompts.js (RESUME_ALIGNMENT_SYSTEM)
 
