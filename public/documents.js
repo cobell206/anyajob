@@ -90,6 +90,12 @@ export async function renderDocumentsSection(fingerprint, opts = {}) {
   const coverAlignBlock = scoring.cover
     ? renderAlignSkeleton('Scoring cover letter against this JD…')
     : (docs.cover?.current?.alignmentScore ? renderCoverAlignment(docs.cover.current.alignmentScore) : '');
+  const resumeNotesBlock = docs.resume?.current
+    ? renderNotesBox('resume', docs.resume.userNotes || '')
+    : '';
+  const coverNotesBlock = docs.cover?.current
+    ? renderNotesBox('cover', docs.cover.userNotes || '')
+    : '';
   const html = `
     <div class="modal-section docs-section">
       <h3>Application materials</h3>
@@ -103,12 +109,35 @@ export async function renderDocumentsSection(fingerprint, opts = {}) {
         ${docs.cover?.current ? '' : `<button class="btn doc-upload-btn" data-slot="cover">+ Cover letter</button>`}
         <button class="btn doc-upload-btn" data-slot="other">+ Other</button>
       </div>
+      ${resumeNotesBlock}
       ${resumeAlignBlock}
+      ${coverNotesBlock}
       ${coverAlignBlock}
       <input type="file" id="doc-file-input" accept="${ALLOWED}" style="display:none">
     </div>
   `;
   return html;
+}
+
+function renderNotesBox(slot, notes) {
+  const label = slot === 'resume' ? 'Notes for resume scoring' : 'Notes for cover letter scoring';
+  const placeholder = slot === 'resume'
+    ? "e.g. Don't suggest litigation experience — I haven't done any."
+    : "e.g. Don't suggest mentioning a JD; I'm pre-law.";
+  return `
+    <div class="align-notes" data-slot="${slot}">
+      <div class="align-notes-head">
+        <span class="align-notes-label">${label}</span>
+        <span class="align-notes-hint">pre-empt suggestions you've already ruled out</span>
+      </div>
+      <textarea class="align-notes-text" data-slot="${slot}" rows="2" maxlength="1500" placeholder="${escapeHtml(placeholder)}">${escapeHtml(notes)}</textarea>
+      <div class="align-notes-actions">
+        <button class="btn-link" data-action="save-notes" data-slot="${slot}">Save notes</button>
+        <button class="btn-link" data-action="rescore" data-slot="${slot}">Re-score${notes ? ' with notes' : ''}</button>
+        <span class="align-notes-status" data-slot="${slot}"></span>
+      </div>
+    </div>
+  `;
 }
 
 function renderAlignSkeleton(label) {
@@ -282,6 +311,76 @@ export function wireDocumentActions(container, fingerprint, refresh) {
   container.querySelectorAll('[data-action="preview"]').forEach((btn) => {
     btn.addEventListener('click', () => {
       openPreview(fingerprint, btn.dataset.file);
+    });
+  });
+
+  function notesText(slot) {
+    const ta = container.querySelector(`textarea.align-notes-text[data-slot="${slot}"]`);
+    return ta ? ta.value : '';
+  }
+  function notesStatus(slot) {
+    return container.querySelector(`.align-notes-status[data-slot="${slot}"]`);
+  }
+
+  container.querySelectorAll('[data-action="save-notes"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const slot = btn.dataset.slot;
+      const status = notesStatus(slot);
+      const orig = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner sm"></span> Saving…`;
+      if (status) { status.textContent = ''; status.className = 'align-notes-status'; }
+      try {
+        await api(`/api/documents/${fingerprint}/notes`, {
+          method: 'POST',
+          body: { slot, notes: notesText(slot) },
+        });
+        if (status) { status.textContent = 'Saved'; status.className = 'align-notes-status ok'; }
+      } catch (err) {
+        if (status) { status.textContent = 'Save failed: ' + err.message; status.className = 'align-notes-status err'; }
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+      }
+    });
+  });
+
+  container.querySelectorAll('[data-action="rescore"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const slot = btn.dataset.slot;
+      const status = notesStatus(slot);
+      const orig = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner sm"></span> Scoring…`;
+      if (status) { status.textContent = ''; status.className = 'align-notes-status'; }
+
+      // Replace existing align block (if any) with a skeleton.
+      const section = container.querySelector('.docs-section');
+      const existing = section?.querySelectorAll('.align-box, .align-skeleton') || [];
+      const skeleton = document.createElement('div');
+      skeleton.className = 'align-skeleton';
+      skeleton.innerHTML = `<span class="spinner"></span><span>${slot === 'resume' ? 'Re-scoring resume…' : 'Re-scoring cover letter…'}</span>`;
+      // Insert after the notes box for this slot.
+      const notesBox = container.querySelector(`.align-notes[data-slot="${slot}"]`);
+      notesBox?.insertAdjacentElement('afterend', skeleton);
+
+      try {
+        // Persist current notes first so a fresh score uses them.
+        await api(`/api/documents/${fingerprint}/notes`, {
+          method: 'POST',
+          body: { slot, notes: notesText(slot) },
+        });
+        await api(`/api/documents/${fingerprint}/score-${slot}`, {
+          method: 'POST',
+          body: { force: true },
+        });
+        refresh?.();
+      } catch (err) {
+        if (status) { status.textContent = 'Re-score failed: ' + err.message; status.className = 'align-notes-status err'; }
+        skeleton.remove();
+        btn.disabled = false;
+        btn.innerHTML = orig;
+      }
     });
   });
 

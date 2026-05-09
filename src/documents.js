@@ -232,6 +232,33 @@ async function hashFileContents(path) {
   return createHash('sha256').update(buf).digest('hex');
 }
 
+const MAX_USER_NOTES = 1500;
+
+// Notes she pre-emptively attaches to the score request — e.g. "don't suggest
+// litigation experience, I know I don't have it." Stored at the slot level so
+// they survive resume re-uploads (only `.current` is swapped on upload).
+export async function setUserNotes({ fingerprint, slot, notes }) {
+  if (slot !== 'resume' && slot !== 'cover') {
+    throw new Error('Invalid slot for notes');
+  }
+  const idx = await readIndex();
+  if (!idx[fingerprint]) idx[fingerprint] = {};
+  if (!idx[fingerprint][slot]) idx[fingerprint][slot] = { versions: [] };
+  const trimmed = (notes || '').slice(0, MAX_USER_NOTES);
+  if (trimmed) {
+    idx[fingerprint][slot].userNotes = trimmed;
+  } else {
+    delete idx[fingerprint][slot].userNotes;
+  }
+  await writeIndex(idx);
+  return idx[fingerprint][slot].userNotes || '';
+}
+
+function userNotesBlock(notes) {
+  if (!notes) return '';
+  return `\n\nCANDIDATE NOTES (respect these — pre-emptive guidance from her about what NOT to suggest. Do not recommend things she has flagged as not applicable, missing, or off-limits):\n${notes}`;
+}
+
 // Pulls the listing note from feedback.json so the scorer can pass it as
 // extra context. Returns '' when no note (or when feedback can't be loaded).
 async function getListingNote(listing) {
@@ -342,9 +369,16 @@ export async function scoreResumeAgainstJd({ fingerprint, listing, force = false
 
   const resumePath = await getDocumentPath(fingerprint, resume.file);
   const resumeHash = await hashFileContents(resumePath);
+  const userNotes = (docs.resume?.userNotes || '').trim();
 
   const prior = resume.alignmentScore || null;
-  if (!force && prior && !prior.error && prior._resumeHash === resumeHash) {
+  if (
+    !force
+    && prior
+    && !prior.error
+    && prior._resumeHash === resumeHash
+    && (prior._userNotes || '') === userNotes
+  ) {
     return prior;
   }
 
@@ -357,13 +391,14 @@ export async function scoreResumeAgainstJd({ fingerprint, listing, force = false
   const note = await getListingNote(listing);
   const noteBlock = note ? `\n\nHER NOTES ON THIS LISTING:\n${note.slice(0, 1500)}` : '';
   const priorBlock = priorFeedbackBlock(prior);
+  const candidateNotesBlock = userNotesBlock(userNotes);
   const userMsg = `Job: ${listing.title} at ${listing.company} (${listing.location || ''})
 
 JOB DESCRIPTION:
 ${jdText}${noteBlock}
 
 CANDIDATE RESUME:
-${resumeText}${priorBlock}
+${resumeText}${candidateNotesBlock}${priorBlock}
 
 Return JSON only.`;
 
@@ -392,6 +427,7 @@ Return JSON only.`;
   }
   parsed._scoredAt = new Date().toISOString();
   parsed._resumeHash = resumeHash;
+  if (userNotes) parsed._userNotes = userNotes;
 
   // Persist on the document entry
   const idx = await readIndex();
@@ -409,9 +445,16 @@ export async function scoreCoverLetterAgainstJd({ fingerprint, listing, force = 
 
   const coverPath = await getDocumentPath(fingerprint, cover.file);
   const coverHash = await hashFileContents(coverPath);
+  const userNotes = (docs.cover?.userNotes || '').trim();
 
   const prior = cover.alignmentScore || null;
-  if (!force && prior && !prior.error && prior._coverHash === coverHash) {
+  if (
+    !force
+    && prior
+    && !prior.error
+    && prior._coverHash === coverHash
+    && (prior._userNotes || '') === userNotes
+  ) {
     return prior;
   }
 
@@ -424,13 +467,14 @@ export async function scoreCoverLetterAgainstJd({ fingerprint, listing, force = 
   const note = await getListingNote(listing);
   const noteBlock = note ? `\n\nHER NOTES ON THIS LISTING:\n${note.slice(0, 1500)}` : '';
   const priorBlock = priorCoverBlock(prior);
+  const candidateNotesBlock = userNotesBlock(userNotes);
   const userMsg = `Job: ${listing.title} at ${listing.company} (${listing.location || ''})
 
 JOB DESCRIPTION:
 ${jdText}${noteBlock}
 
 CANDIDATE COVER LETTER:
-${coverText}${priorBlock}
+${coverText}${candidateNotesBlock}${priorBlock}
 
 Return JSON only.`;
 
@@ -459,6 +503,7 @@ Return JSON only.`;
   }
   parsed._scoredAt = new Date().toISOString();
   parsed._coverHash = coverHash;
+  if (userNotes) parsed._userNotes = userNotes;
 
   const idx = await readIndex();
   if (idx[fingerprint]?.cover?.current) {

@@ -14,6 +14,7 @@ import {
   validateUpload,
   scoreResumeAgainstJd,
   scoreCoverLetterAgainstJd,
+  setUserNotes,
 } from '../documents.js';
 import { createLogger } from '../log.js';
 
@@ -114,6 +115,22 @@ router.post('/:fp/delete', async (req, res) => {
 function parseForce(req) {
   return req.query.force === '1' || req.query.force === 'true' || req.body?.force === true;
 }
+
+// Save scoring notes she wants Claude to respect (e.g. "don't suggest X").
+// Notes live at the slot level (resume.userNotes / cover.userNotes) so they
+// persist across resume re-uploads. POST { slot, notes }; pass notes:'' to clear.
+router.post('/:fp/notes', async (req, res) => {
+  try {
+    const { slot, notes } = req.body || {};
+    if (slot !== 'resume' && slot !== 'cover') {
+      return res.status(400).json({ error: 'slot must be "resume" or "cover"' });
+    }
+    const saved = await setUserNotes({ fingerprint: req.params.fp, slot, notes });
+    res.json({ ok: true, notes: saved });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.post('/:fp/score-resume', async (req, res) => {
   try {

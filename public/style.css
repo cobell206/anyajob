@@ -2002,6 +2002,62 @@ button[disabled] {
   font-weight: 700;
 }
 
+/* Scoring notes box (sits above the alignment box) */
+.align-notes {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: var(--surface-2, #f7f8fa);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 100%;
+  box-sizing: border-box;
+}
+.align-notes-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.align-notes-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+  font-weight: 700;
+}
+.align-notes-hint {
+  font-size: 11px;
+  color: var(--ink-3, var(--ink-2));
+  font-style: italic;
+}
+.align-notes-text {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  resize: vertical;
+  min-height: 44px;
+}
+.align-notes-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.align-notes-status {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.align-notes-status.ok { color: var(--green-ink, var(--ink-2)); }
+.align-notes-status.err { color: var(--bad); }
+
 /* ============ PREVIEW OVERLAY ============ */
 
 .preview-backdrop {
