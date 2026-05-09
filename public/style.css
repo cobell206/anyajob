@@ -2057,6 +2057,15 @@ button[disabled] {
 }
 .align-notes-status.ok { color: var(--green-ink, var(--ink-2)); }
 .align-notes-status.err { color: var(--bad); }
+.align-notes.empty {
+  background: transparent;
+  border-style: dashed;
+}
+.align-notes-empty {
+  font-size: 12px;
+  color: var(--ink-2);
+  font-style: italic;
+}
 
 /* ============ PREVIEW OVERLAY ============ */
 

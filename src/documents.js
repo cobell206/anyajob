@@ -362,7 +362,7 @@ export async function getProfileResumeText() {
   return text ? text.slice(0, 8000) : null;
 }
 
-export async function scoreResumeAgainstJd({ fingerprint, listing, force = false }) {
+export async function scoreResumeAgainstJd({ fingerprint, listing }) {
   const docs = await listDocuments(fingerprint);
   const resume = docs.resume?.current;
   if (!resume) return null;
@@ -370,17 +370,7 @@ export async function scoreResumeAgainstJd({ fingerprint, listing, force = false
   const resumePath = await getDocumentPath(fingerprint, resume.file);
   const resumeHash = await hashFileContents(resumePath);
   const userNotes = (docs.resume?.userNotes || '').trim();
-
   const prior = resume.alignmentScore || null;
-  if (
-    !force
-    && prior
-    && !prior.error
-    && prior._resumeHash === resumeHash
-    && (prior._userNotes || '') === userNotes
-  ) {
-    return prior;
-  }
 
   const resumeText = (await extractResumeText(resumePath)).slice(0, 8000);
   if (!resumeText) {
@@ -438,7 +428,7 @@ Return JSON only.`;
   return parsed;
 }
 
-export async function scoreCoverLetterAgainstJd({ fingerprint, listing, force = false }) {
+export async function scoreCoverLetterAgainstJd({ fingerprint, listing }) {
   const docs = await listDocuments(fingerprint);
   const cover = docs.cover?.current;
   if (!cover) return null;
@@ -446,17 +436,7 @@ export async function scoreCoverLetterAgainstJd({ fingerprint, listing, force = 
   const coverPath = await getDocumentPath(fingerprint, cover.file);
   const coverHash = await hashFileContents(coverPath);
   const userNotes = (docs.cover?.userNotes || '').trim();
-
   const prior = cover.alignmentScore || null;
-  if (
-    !force
-    && prior
-    && !prior.error
-    && prior._coverHash === coverHash
-    && (prior._userNotes || '') === userNotes
-  ) {
-    return prior;
-  }
 
   const coverText = (await extractResumeText(coverPath)).slice(0, 8000);
   if (!coverText) {

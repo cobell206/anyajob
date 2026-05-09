@@ -38,11 +38,13 @@ router.get('/:fp', async (req, res) => {
 });
 
 // Upload a document. multipart/form-data with field "file"
-// Body: slot (resume|cover|other), otherName (when slot=other), autoScore
+// Body: slot (resume|cover|other), otherName (when slot=other)
+// Scoring is no longer triggered here — she requests it explicitly via the
+// "Get feedback" button (POST /score-resume or /score-cover).
 router.post('/:fp/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    const { slot, otherName, autoScore } = req.body;
+    const { slot, otherName } = req.body;
     const v = validateUpload(req.file.originalname, req.file.size);
     if (!v.ok) return res.status(400).json({ error: v.error });
 
@@ -54,23 +56,7 @@ router.post('/:fp/upload', upload.single('file'), async (req, res) => {
       otherName,
     });
 
-    // Auto-score resume or cover letter against JD if requested
-    let alignmentScore = null;
-    if ((slot === 'resume' || slot === 'cover') && autoScore !== 'false') {
-      try {
-        const all = await readJson('listings.json');
-        const listing = all.listings.find((l) => l.fingerprint === req.params.fp);
-        if (listing) {
-          alignmentScore = slot === 'resume'
-            ? await scoreResumeAgainstJd({ fingerprint: req.params.fp, listing })
-            : await scoreCoverLetterAgainstJd({ fingerprint: req.params.fp, listing });
-        }
-      } catch (err) {
-        log.error({ err, fp: req.params.fp, slot }, 'auto-scoring failed');
-      }
-    }
-
-    res.json({ ...result, alignmentScore });
+    res.json(result);
   } catch (err) {
     log.error({ err, fp: req.params.fp }, 'upload failed');
     res.status(500).json({ error: err.message });
@@ -112,10 +98,6 @@ router.post('/:fp/delete', async (req, res) => {
   }
 });
 
-function parseForce(req) {
-  return req.query.force === '1' || req.query.force === 'true' || req.body?.force === true;
-}
-
 // Save scoring notes she wants Claude to respect (e.g. "don't suggest X").
 // Notes live at the slot level (resume.userNotes / cover.userNotes) so they
 // persist across resume re-uploads. POST { slot, notes }; pass notes:'' to clear.
@@ -137,11 +119,7 @@ router.post('/:fp/score-resume', async (req, res) => {
     const all = await readJson('listings.json');
     const listing = all.listings.find((l) => l.fingerprint === req.params.fp);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
-    const score = await scoreResumeAgainstJd({
-      fingerprint: req.params.fp,
-      listing,
-      force: parseForce(req),
-    });
+    const score = await scoreResumeAgainstJd({ fingerprint: req.params.fp, listing });
     res.json(score);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -153,11 +131,7 @@ router.post('/:fp/score-cover', async (req, res) => {
     const all = await readJson('listings.json');
     const listing = all.listings.find((l) => l.fingerprint === req.params.fp);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
-    const score = await scoreCoverLetterAgainstJd({
-      fingerprint: req.params.fp,
-      listing,
-      force: parseForce(req),
-    });
+    const score = await scoreCoverLetterAgainstJd({ fingerprint: req.params.fp, listing });
     res.json(score);
   } catch (err) {
     res.status(500).json({ error: err.message });

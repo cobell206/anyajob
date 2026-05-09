@@ -81,21 +81,16 @@ function renderOther(fp, list = []) {
   `).join('');
 }
 
-export async function renderDocumentsSection(fingerprint, opts = {}) {
+export async function renderDocumentsSection(fingerprint) {
   const docs = await api(`/api/documents/${fingerprint}`).catch(() => ({}));
-  const scoring = opts.scoring || {}; // { resume: bool, cover: bool }
-  const resumeAlignBlock = scoring.resume
-    ? renderAlignSkeleton('Scoring resume against this JD…')
-    : (docs.resume?.current?.alignmentScore ? renderAlignment(docs.resume.current.alignmentScore) : '');
-  const coverAlignBlock = scoring.cover
-    ? renderAlignSkeleton('Scoring cover letter against this JD…')
-    : (docs.cover?.current?.alignmentScore ? renderCoverAlignment(docs.cover.current.alignmentScore) : '');
-  const resumeNotesBlock = docs.resume?.current
-    ? renderNotesBox('resume', docs.resume.userNotes || '')
+  const resumeAlignBlock = docs.resume?.current?.alignmentScore
+    ? renderAlignment(docs.resume.current.alignmentScore)
     : '';
-  const coverNotesBlock = docs.cover?.current
-    ? renderNotesBox('cover', docs.cover.userNotes || '')
+  const coverAlignBlock = docs.cover?.current?.alignmentScore
+    ? renderCoverAlignment(docs.cover.current.alignmentScore)
     : '';
+  const resumeFeedback = renderFeedbackBox('resume', docs.resume);
+  const coverFeedback = renderFeedbackBox('cover', docs.cover);
   const html = `
     <div class="modal-section docs-section">
       <h3>Application materials</h3>
@@ -109,9 +104,9 @@ export async function renderDocumentsSection(fingerprint, opts = {}) {
         ${docs.cover?.current ? '' : `<button class="btn doc-upload-btn" data-slot="cover">+ Cover letter</button>`}
         <button class="btn doc-upload-btn" data-slot="other">+ Other</button>
       </div>
-      ${resumeNotesBlock}
+      ${resumeFeedback}
       ${resumeAlignBlock}
-      ${coverNotesBlock}
+      ${coverFeedback}
       ${coverAlignBlock}
       <input type="file" id="doc-file-input" accept="${ALLOWED}" style="display:none">
     </div>
@@ -119,21 +114,32 @@ export async function renderDocumentsSection(fingerprint, opts = {}) {
   return html;
 }
 
-function renderNotesBox(slot, notes) {
-  const label = slot === 'resume' ? 'Notes for resume scoring' : 'Notes for cover letter scoring';
+function renderFeedbackBox(slot, slotEntry) {
+  const has = !!slotEntry?.current;
+  const notes = slotEntry?.userNotes || '';
+  const hasPriorScore = !!(slotEntry?.current?.alignmentScore && !slotEntry.current.alignmentScore.error);
+  const label = slot === 'resume' ? 'Resume feedback' : 'Cover letter feedback';
   const placeholder = slot === 'resume'
-    ? "e.g. Don't suggest litigation experience — I haven't done any."
-    : "e.g. Don't suggest mentioning a JD; I'm pre-law.";
+    ? "Pre-empt suggestions you've already ruled out — e.g. \"don't suggest litigation experience, I haven't done any.\""
+    : "Pre-empt suggestions you've already ruled out — e.g. \"don't suggest mentioning a JD; I'm pre-law.\"";
+  if (!has) {
+    return `
+      <div class="align-notes empty" data-slot="${slot}">
+        <div class="align-notes-head"><span class="align-notes-label">${label}</span></div>
+        <div class="align-notes-empty">Upload a ${slot === 'resume' ? 'resume' : 'cover letter'} to get feedback.</div>
+      </div>
+    `;
+  }
+  const btnLabel = hasPriorScore ? 'Get feedback again' : 'Get feedback';
   return `
     <div class="align-notes" data-slot="${slot}">
       <div class="align-notes-head">
         <span class="align-notes-label">${label}</span>
-        <span class="align-notes-hint">pre-empt suggestions you've already ruled out</span>
+        <span class="align-notes-hint">notes are optional — they shape the next round</span>
       </div>
       <textarea class="align-notes-text" data-slot="${slot}" rows="2" maxlength="1500" placeholder="${escapeHtml(placeholder)}">${escapeHtml(notes)}</textarea>
       <div class="align-notes-actions">
-        <button class="btn-link" data-action="save-notes" data-slot="${slot}">Save notes</button>
-        <button class="btn-link" data-action="rescore" data-slot="${slot}">Re-score${notes ? ' with notes' : ''}</button>
+        <button class="btn btn-primary" data-action="get-feedback" data-slot="${slot}">${btnLabel}</button>
         <span class="align-notes-status" data-slot="${slot}"></span>
       </div>
     </div>
@@ -251,8 +257,7 @@ export function wireDocumentActions(container, fingerprint, refresh) {
       container.querySelector('.docs-section').appendChild(el);
       return el;
     })();
-    const willScore = slot === 'resume' || slot === 'cover';
-    status.innerHTML = `<span class="spinner-row"><span class="spinner sm"></span><span>Uploading ${escapeHtml(file.name)}${willScore ? ' and scoring' : ''}…</span></span>`;
+    status.innerHTML = `<span class="spinner-row"><span class="spinner sm"></span><span>Uploading ${escapeHtml(file.name)}…</span></span>`;
     status.className = 'docs-status info';
 
     // Disable all upload/replace buttons; show inline spinner on the active one.
@@ -266,15 +271,6 @@ export function wireDocumentActions(container, fingerprint, refresh) {
       }
     });
 
-    // Show a scoring skeleton in the alignment slot while we wait.
-    let skeleton = null;
-    if (willScore) {
-      skeleton = document.createElement('div');
-      skeleton.className = 'align-skeleton';
-      skeleton.innerHTML = `<span class="spinner"></span><span>${slot === 'resume' ? 'Scoring resume against this JD…' : 'Scoring cover letter against this JD…'}</span>`;
-      container.querySelector('.docs-section').appendChild(skeleton);
-    }
-
     try {
       const res = await fetch(`/api/documents/${fingerprint}/upload`, {
         method: 'POST',
@@ -284,8 +280,7 @@ export function wireDocumentActions(container, fingerprint, refresh) {
         const err = await res.json();
         throw new Error(err.error || 'Upload failed');
       }
-      const data = await res.json();
-      status.textContent = data.alignmentScore ? '✓ Uploaded and scored' : '✓ Uploaded';
+      status.textContent = '✓ Uploaded';
       status.className = 'docs-status success';
       setTimeout(() => refresh?.(), 400);
     } catch (err) {
@@ -296,7 +291,6 @@ export function wireDocumentActions(container, fingerprint, refresh) {
         b.disabled = false;
         b.innerHTML = prevHtml.get(b);
       });
-      if (skeleton) skeleton.remove();
     }
   });
 
@@ -321,31 +315,31 @@ export function wireDocumentActions(container, fingerprint, refresh) {
   function notesStatus(slot) {
     return container.querySelector(`.align-notes-status[data-slot="${slot}"]`);
   }
+  async function persistNotes(slot) {
+    return api(`/api/documents/${fingerprint}/notes`, {
+      method: 'POST',
+      body: { slot, notes: notesText(slot) },
+    });
+  }
 
-  container.querySelectorAll('[data-action="save-notes"]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const slot = btn.dataset.slot;
+  // Auto-save notes on blur so a closed modal doesn't lose her draft.
+  container.querySelectorAll('textarea.align-notes-text').forEach((ta) => {
+    let saved = ta.value;
+    ta.addEventListener('blur', async () => {
+      if (ta.value === saved) return;
+      const slot = ta.dataset.slot;
       const status = notesStatus(slot);
-      const orig = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = `<span class="spinner sm"></span> Saving…`;
-      if (status) { status.textContent = ''; status.className = 'align-notes-status'; }
       try {
-        await api(`/api/documents/${fingerprint}/notes`, {
-          method: 'POST',
-          body: { slot, notes: notesText(slot) },
-        });
-        if (status) { status.textContent = 'Saved'; status.className = 'align-notes-status ok'; }
+        await persistNotes(slot);
+        saved = ta.value;
+        if (status) { status.textContent = 'Notes saved'; status.className = 'align-notes-status ok'; }
       } catch (err) {
         if (status) { status.textContent = 'Save failed: ' + err.message; status.className = 'align-notes-status err'; }
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = orig;
       }
     });
   });
 
-  container.querySelectorAll('[data-action="rescore"]').forEach((btn) => {
+  container.querySelectorAll('[data-action="get-feedback"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const slot = btn.dataset.slot;
       const status = notesStatus(slot);
@@ -354,29 +348,25 @@ export function wireDocumentActions(container, fingerprint, refresh) {
       btn.innerHTML = `<span class="spinner sm"></span> Scoring…`;
       if (status) { status.textContent = ''; status.className = 'align-notes-status'; }
 
-      // Replace existing align block (if any) with a skeleton.
-      const section = container.querySelector('.docs-section');
-      const existing = section?.querySelectorAll('.align-box, .align-skeleton') || [];
+      // Replace any existing alignment block with a skeleton so it's clear
+      // a new score is being generated.
       const skeleton = document.createElement('div');
       skeleton.className = 'align-skeleton';
-      skeleton.innerHTML = `<span class="spinner"></span><span>${slot === 'resume' ? 'Re-scoring resume…' : 'Re-scoring cover letter…'}</span>`;
-      // Insert after the notes box for this slot.
+      skeleton.innerHTML = `<span class="spinner"></span><span>${slot === 'resume' ? 'Scoring resume against this JD…' : 'Scoring cover letter against this JD…'}</span>`;
       const notesBox = container.querySelector(`.align-notes[data-slot="${slot}"]`);
-      notesBox?.insertAdjacentElement('afterend', skeleton);
+      let existingAlign = notesBox?.nextElementSibling;
+      if (existingAlign && (existingAlign.classList.contains('align-box') || existingAlign.classList.contains('align-skeleton'))) {
+        existingAlign.replaceWith(skeleton);
+      } else {
+        notesBox?.insertAdjacentElement('afterend', skeleton);
+      }
 
       try {
-        // Persist current notes first so a fresh score uses them.
-        await api(`/api/documents/${fingerprint}/notes`, {
-          method: 'POST',
-          body: { slot, notes: notesText(slot) },
-        });
-        await api(`/api/documents/${fingerprint}/score-${slot}`, {
-          method: 'POST',
-          body: { force: true },
-        });
+        await persistNotes(slot);
+        await api(`/api/documents/${fingerprint}/score-${slot}`, { method: 'POST' });
         refresh?.();
       } catch (err) {
-        if (status) { status.textContent = 'Re-score failed: ' + err.message; status.className = 'align-notes-status err'; }
+        if (status) { status.textContent = 'Scoring failed: ' + err.message; status.className = 'align-notes-status err'; }
         skeleton.remove();
         btn.disabled = false;
         btn.innerHTML = orig;
