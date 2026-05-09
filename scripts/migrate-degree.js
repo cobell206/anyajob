@@ -33,7 +33,7 @@ async function main() {
   let alreadyRejected = 0;
   let autoIgnored = 0;
   let kept = 0;
-  const samples = [];
+  const caught = [];
   const at = new Date().toISOString();
 
   for (const l of listings) {
@@ -50,9 +50,7 @@ async function main() {
         at,
       };
       autoIgnored += 1;
-      if (samples.length < 10) {
-        samples.push(`  - ${l.company} — ${l.title}`);
-      }
+      caught.push(`  - ${l.company || '(no company)'} — ${l.title || '(no title)'}`);
     } else {
       kept += 1;
     }
@@ -63,9 +61,9 @@ async function main() {
   console.log(`already 'rejected':   ${alreadyRejected} (skipped)`);
   console.log(`auto-ignored:         ${autoIgnored}`);
   console.log(`kept:                 ${kept}`);
-  if (samples.length) {
-    console.log('sample auto-ignored listings:');
-    for (const s of samples) console.log(s);
+  if (caught.length) {
+    console.log('newly auto-ignored listings:');
+    for (const s of caught) console.log(s);
   }
 
   if (dryRun) {
