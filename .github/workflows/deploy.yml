@@ -100,6 +100,10 @@ jobs:
               # comes back fresh on each \`git reset --hard\` above.
               COMMIT_SHA=\$(git rev-parse --short HEAD)
               find public -name "*.html" -exec sed -i "s/__CACHE_VERSION__/\$COMMIT_SHA/g" {} \;
+              # Stamp the same SHA into bare local JS imports (e.g. \`from './documents.js'\`)
+              # so transitive ES module imports also bust caches. Idempotent: rewrites any
+              # existing \`?v=...\` query to the new SHA.
+              find public -name "*.js" -exec sed -i "s|from '\(\./[^'?]*\.js\)[^']*'|from '\1?v=\$COMMIT_SHA'|g" {} \;
 
               # Reinstall deps if package.json changed
               if git diff --name-only "\$BEFORE" "\$AFTER" | grep -qE '^(package(-lock)?\.json)$'; then
