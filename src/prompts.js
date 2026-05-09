@@ -304,12 +304,15 @@ For EACH candidate, decide the best source type:
 - If the page likely renders server-side with visible job listings in HTML → kind: "smartfetch", config.url
 - If the page is clearly a SPA / loads via JS → kind: "bookmark", config.url
 
+ALWAYS include a top-level "url" field for each candidate. This is the public-facing careers page or board URL she can click to inspect the source before approving. For greenhouse/lever this is "https://boards.greenhouse.io/<slug>" or "https://jobs.lever.co/<slug>". For smartfetch/bookmark it's the same URL you put in config.url.
+
 Return strict JSON only:
 {
   "candidates": [
     {
       "name": "Display name (e.g. 'NYC Mayor's Office Counsel')",
       "kind": "greenhouse|lever|smartfetch|bookmark",
+      "url": "https://...",
       "config": { "slug": "..." } | { "url": "..." },
       "rationale": "1 sentence on why this matches her profile",
       "confidence": "high|medium|low"

@@ -103,7 +103,7 @@
       const status = $('#status-msg');
       const btn = $('#send-test');
       btn.disabled = true;
-      btn.textContent = 'Sending…';
+      btn.innerHTML = '<span class="spinner sm on-primary"></span> Sending…';
       try {
         const res = await fetch('/api/notify/send-test', {
           method: 'POST',
@@ -120,7 +120,7 @@
         status.style.color = 'var(--bad)';
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Send test';
+        btn.innerHTML = 'Send test';
       }
     });
 

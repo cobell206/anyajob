@@ -1850,6 +1850,7 @@ textarea { resize: vertical; min-height: 80px; }
 
 .spinner.sm { width: 12px; height: 12px; border-width: 2px; }
 .spinner.lg { width: 20px; height: 20px; border-width: 3px; }
+.spinner.on-primary { border-color: rgba(255,255,255,0.4); border-top-color: white; }
 
 .spinner-row {
   display: inline-flex;

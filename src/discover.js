@@ -154,6 +154,19 @@ Use the web_search tool to find candidates. Prioritize sources that:
 Return JSON only.`;
 }
 
+// Derive a public-facing URL for a candidate when the model didn't include
+// one. For greenhouse/lever the URL is structural; otherwise fall back to
+// whatever's in config.url.
+function deriveUrl(c) {
+  if (c.kind === 'greenhouse' && c.config?.slug) {
+    return `https://boards.greenhouse.io/${c.config.slug}`;
+  }
+  if (c.kind === 'lever' && c.config?.slug) {
+    return `https://jobs.lever.co/${c.config.slug}`;
+  }
+  return c.config?.url || '';
+}
+
 async function readJsonOrDefault(path, fallback) {
   try {
     return JSON.parse(await readFile(path, 'utf-8'));
@@ -253,8 +266,10 @@ export async function discoverSources({ maxCandidates = 12 } = {}) {
       return !existingKeys.has(key);
     })
     .map((c) => {
+      const url = c.url || deriveUrl(c);
       const overlap = findOverlap(c, sfSources);
-      return overlap ? { ...c, overlapsWith: overlap } : c;
+      const out = { ...c, url };
+      return overlap ? { ...out, overlapsWith: overlap } : out;
     });
 
   return {

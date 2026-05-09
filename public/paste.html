@@ -76,7 +76,7 @@
         return;
       }
       btn.disabled = true;
-      btn.textContent = 'Scoring…';
+      btn.innerHTML = '<span class="spinner sm on-primary"></span> Scoring…';
       try {
         const res = await fetch('/api/score-paste', {
           method: 'POST',
@@ -136,7 +136,7 @@
         result.innerHTML = `<div class="result-card"><p style="color:var(--bad)">Error: ${err.message}</p></div>`;
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Score it';
+        btn.innerHTML = 'Score it';
       }
     });
   </script>

@@ -57,6 +57,17 @@ function renderSource(s) {
     ? `<button class="repair-btn" data-repair="${s.id}" title="Use AI web search to find the new URL">🔍 Find URL</button>`
     : '';
 
+  const toggle = `
+    <label class="source-toggle ${s.enabled ? 'is-on' : ''}" data-toggle-wrap="${s.id}" title="${s.enabled ? 'Disable this source' : 'Enable this source'}">
+      <input type="checkbox" data-toggle="${s.id}" ${s.enabled ? 'checked' : ''} aria-label="${s.enabled ? 'Active' : 'Inactive'}">
+      <span class="source-toggle-track"><span class="source-toggle-thumb"></span></span>
+      <span class="source-toggle-status-wrap">
+        <span class="source-toggle-status" data-toggle-status="${s.id}">${s.enabled ? 'Active' : 'Inactive'}</span>
+        <span class="spinner sm source-toggle-spinner" data-toggle-spinner="${s.id}" hidden></span>
+      </span>
+    </label>
+  `;
+
   return `
     <div class="source-card ${s.enabled ? '' : 'disabled'}">
       <div class="source-info">
@@ -68,7 +79,7 @@ function renderSource(s) {
       <div class="source-actions">
         ${repairBtn}
         ${runBtn}
-        <button class="icon-btn-sm" data-toggle="${s.id}" title="${s.enabled ? 'Disable' : 'Enable'}">${s.enabled ? '⏸' : '▶'}</button>
+        ${toggle}
         <button class="icon-btn-sm danger" data-delete="${s.id}" title="Delete">×</button>
       </div>
     </div>
@@ -292,11 +303,26 @@ async function loadSources() {
   $('#sources-sub').textContent = `${sourcesData.sources.length} configured · ${enabled} enabled`;
   $('#source-list').innerHTML = sourcesData.sources.map(renderSource).join('');
 
-  $$('[data-toggle]').forEach((b) => {
-    b.addEventListener('click', async () => {
-      const s = sourcesData.sources.find((x) => x.id === b.dataset.toggle);
-      await api(`/api/sources/${s.id}`, { method: 'PATCH', body: { enabled: !s.enabled } });
-      loadSources();
+  $$('[data-toggle]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const s = sourcesData.sources.find((x) => x.id === input.dataset.toggle);
+      if (!s) return;
+      const wrap = document.querySelector(`[data-toggle-wrap="${s.id}"]`);
+      const spinner = document.querySelector(`[data-toggle-spinner="${s.id}"]`);
+      const desired = input.checked;
+      input.disabled = true;
+      wrap?.classList.add('loading');
+      if (spinner) spinner.hidden = false;
+      try {
+        await api(`/api/sources/${s.id}`, { method: 'PATCH', body: { enabled: desired } });
+        loadSources();
+      } catch (err) {
+        input.checked = s.enabled;
+        wrap?.classList.remove('loading');
+        if (spinner) spinner.hidden = true;
+        input.disabled = false;
+        alert('Failed to update: ' + err.message);
+      }
     });
   });
 
@@ -310,9 +336,18 @@ async function loadSources() {
   $$('[data-delete]').forEach((b) => {
     b.addEventListener('click', async () => {
       if (!confirm('Delete this source? This cannot be undone.')) return;
-      const res = await fetch(`/api/sources/${b.dataset.delete}`, { method: 'DELETE' });
-      await res.json();
-      loadSources();
+      const originalLabel = b.innerHTML;
+      b.disabled = true;
+      b.innerHTML = '<span class="spinner sm"></span>';
+      try {
+        const res = await fetch(`/api/sources/${b.dataset.delete}`, { method: 'DELETE' });
+        await res.json();
+        loadSources();
+      } catch (err) {
+        b.disabled = false;
+        b.innerHTML = originalLabel;
+        alert('Delete failed: ' + err.message);
+      }
     });
   });
 
@@ -409,9 +444,11 @@ $('#test-btn').addEventListener('click', async () => {
   const result = $('#test-result');
   result.style.display = 'block';
   result.className = 'test-result';
-  result.innerHTML = 'Testing… (this may take 5-15 seconds for smart fetch)';
+  result.innerHTML = '<span class="spinner sm"></span> Testing… (this may take 5-15 seconds for smart fetch)';
   const btn = $('#test-btn');
+  const originalBtn = btn.innerHTML;
   btn.disabled = true;
+  btn.innerHTML = '<span class="spinner sm"></span> Testing…';
 
   try {
     const data = await api('/api/sources/test', {
@@ -441,10 +478,15 @@ $('#test-btn').addEventListener('click', async () => {
     result.innerHTML = '✗ ' + err.message;
   } finally {
     btn.disabled = false;
+    btn.innerHTML = originalBtn;
   }
 });
 
 $('#save-btn').addEventListener('click', async () => {
+  const btn = $('#save-btn');
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner sm on-primary"></span> Saving…';
   try {
     await api('/api/sources', {
       method: 'POST',
@@ -459,6 +501,9 @@ $('#save-btn').addEventListener('click', async () => {
     loadSources();
   } catch (err) {
     alert('Save failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
   }
 });
 
@@ -544,6 +589,10 @@ async function loadPendingDiscoveries() {
       : escapeHtml(c.config?.url || '');
     const conf = c.confidence || 'medium';
     const confColor = conf === 'high' ? 'var(--green-ink)' : conf === 'low' ? 'var(--muted)' : 'var(--ink-2)';
+    const url = c.url || c.config?.url;
+    const urlLine = url
+      ? `<div class="source-meta"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:var(--blue-ink);text-decoration:none">${escapeHtml(url)} ↗</a></div>`
+      : '';
     const overlapWarning = c.overlapsWith ? `
       <div style="margin-top:8px;padding:8px 10px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#92400e">
         ⚠ Overlaps with smartfetch source <strong>${escapeHtml(c.overlapsWith.name)}</strong>.
@@ -559,6 +608,7 @@ async function loadPendingDiscoveries() {
             <span style="color:${confColor};font-weight:400;font-size:11px;margin-left:4px">· ${conf} confidence</span>
           </div>
           <div class="source-meta">${configLine}</div>
+          ${urlLine}
           <div class="source-stats" style="margin-top:6px;font-style:italic;color:var(--ink-2)">${escapeHtml(c.rationale || '')}</div>
           ${overlapWarning}
         </div>
@@ -574,7 +624,7 @@ async function loadPendingDiscoveries() {
     b.addEventListener('click', async () => {
       const id = b.dataset.approveId;
       b.disabled = true;
-      b.textContent = '…';
+      b.innerHTML = '<span class="spinner sm on-primary"></span>';
       try {
         await api('/api/discoveries/' + id + '/approve', { method: 'POST', body: {} });
         b.textContent = '✓ Approved';
@@ -593,7 +643,9 @@ async function loadPendingDiscoveries() {
   $$('[data-dismiss-id]').forEach((b) => {
     b.addEventListener('click', async () => {
       const id = b.dataset.dismissId;
+      const originalLabel = b.innerHTML;
       b.disabled = true;
+      b.innerHTML = '<span class="spinner sm"></span>';
       try {
         await api('/api/discoveries/' + id + '/dismiss', { method: 'POST', body: {} });
         b.closest('.source-card').remove();
@@ -604,6 +656,7 @@ async function loadPendingDiscoveries() {
       } catch (err) {
         alert('Dismiss failed: ' + err.message);
         b.disabled = false;
+        b.innerHTML = originalLabel;
       }
     });
   });
@@ -624,12 +677,12 @@ $('#discover-btn').addEventListener('click', async () => {
   const btn = $('#discover-btn');
 
   panel.style.display = 'block';
-  status.textContent = '🔎 Searching the web for sources matching your profile…';
+  status.innerHTML = '<span class="spinner sm"></span> Searching the web for sources matching your profile…';
   status.style.color = 'var(--muted)';
   summary.style.display = 'none';
   list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">This usually takes 30-60 seconds…</div>';
   btn.disabled = true;
-  btn.textContent = 'Searching…';
+  btn.innerHTML = '<span class="spinner sm"></span> Searching…';
 
   try {
     const data = await api('/api/sources/discover', { method: 'POST', body: {} });
@@ -652,6 +705,10 @@ $('#discover-btn').addEventListener('click', async () => {
           : escapeHtml(c.config?.url || '');
         const conf = c.confidence || 'medium';
         const confColor = conf === 'high' ? 'var(--green-ink)' : conf === 'low' ? 'var(--muted)' : 'var(--ink-2)';
+        const url = c.url || c.config?.url;
+        const urlLine = url
+          ? `<div class="source-meta"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:var(--blue-ink);text-decoration:none">${escapeHtml(url)} ↗</a></div>`
+          : '';
         return `
           <div class="source-card" data-cand-idx="${i}">
             <div class="source-info">
@@ -661,6 +718,7 @@ $('#discover-btn').addEventListener('click', async () => {
                 <span style="color:${confColor};font-weight:400;font-size:11px;margin-left:4px">· ${conf} confidence</span>
               </div>
               <div class="source-meta">${configLine}</div>
+              ${urlLine}
               <div class="source-stats" style="margin-top:6px;font-style:italic;color:var(--ink-2)">${escapeHtml(c.rationale || '')}</div>
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0">
@@ -675,6 +733,9 @@ $('#discover-btn').addEventListener('click', async () => {
       $$('[data-add-idx]').forEach((b) => {
         b.addEventListener('click', async () => {
           const c = cands[parseInt(b.dataset.addIdx, 10)];
+          const originalLabel = b.innerHTML;
+          b.disabled = true;
+          b.innerHTML = '<span class="spinner sm on-primary"></span>';
           try {
             await api('/api/sources', {
               method: 'POST',
@@ -683,10 +744,11 @@ $('#discover-btn').addEventListener('click', async () => {
             // Mark this card as added
             const card = b.closest('.source-card');
             card.style.opacity = '0.5';
-            b.disabled = true;
             b.textContent = '✓ Added';
             loadSources();
           } catch (err) {
+            b.disabled = false;
+            b.innerHTML = originalLabel;
             alert('Failed to add: ' + err.message);
           }
         });
@@ -705,7 +767,7 @@ $('#discover-btn').addEventListener('click', async () => {
     list.innerHTML = '';
   } finally {
     btn.disabled = false;
-    btn.textContent = '✨ Find new sources';
+    btn.innerHTML = '✨ Find new sources';
   }
 });
 
@@ -719,8 +781,19 @@ async function loadPrefs() {
 
 $('#save-prefs').addEventListener('click', async () => {
   const status = $('#prefs-status');
+  const btn = $('#save-prefs');
+  const originalLabel = btn.innerHTML;
+  let parsed;
   try {
-    const parsed = JSON.parse($('#json').value);
+    parsed = JSON.parse($('#json').value);
+  } catch (err) {
+    status.textContent = 'Invalid JSON: ' + err.message;
+    status.className = 'status-message error';
+    return;
+  }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner sm on-primary"></span> Saving…';
+  try {
     await api('/api/preferences', { method: 'POST', body: parsed });
     prefs = parsed;
     renderNotifySection(); // pick up changes if user edited notifications JSON directly
@@ -728,13 +801,20 @@ $('#save-prefs').addEventListener('click', async () => {
     status.className = 'status-message success';
     setTimeout(() => { status.textContent = ''; }, 2000);
   } catch (err) {
-    status.textContent = 'Invalid JSON: ' + err.message;
+    status.textContent = 'Save failed: ' + err.message;
     status.className = 'status-message error';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
   }
 });
 
 $('#reset-prefs').addEventListener('click', async () => {
   if (!confirm('Reset preferences to defaults? This will overwrite the current profile, keywords, and companies. Notifications will be preserved.')) return;
+  const btn = $('#reset-prefs');
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner sm"></span> Loading…';
   try {
     const defaults = await api('/api/preferences/example');
     // Preserve current notifications so we don't blow away her email setup
@@ -745,6 +825,9 @@ $('#reset-prefs').addEventListener('click', async () => {
   } catch (err) {
     $('#prefs-status').textContent = 'Reset failed: ' + err.message;
     $('#prefs-status').className = 'status-message error';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
   }
 });
 
@@ -805,15 +888,19 @@ $('#add-recipient').addEventListener('click', () => {
 
 $('#save-notify').addEventListener('click', async () => {
   const status = $('#notify-status');
+  const btn = $('#save-notify');
+  const originalLabel = btn.innerHTML;
+  const to = collectRecipients();
+  // Light validation: each must look like an email
+  const bad = to.find((s) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
+  if (bad) {
+    status.textContent = 'Invalid email: ' + bad;
+    status.className = 'status-message error';
+    return;
+  }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner sm on-primary"></span> Saving…';
   try {
-    const to = collectRecipients();
-    // Light validation: each must look like an email
-    const bad = to.find((s) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
-    if (bad) {
-      status.textContent = 'Invalid email: ' + bad;
-      status.className = 'status-message error';
-      return;
-    }
     const updated = {
       ...prefs,
       notifications: {
@@ -834,6 +921,9 @@ $('#save-notify').addEventListener('click', async () => {
   } catch (err) {
     status.textContent = 'Save failed: ' + err.message;
     status.className = 'status-message error';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
   }
 });
 

@@ -69,7 +69,7 @@ function wireDropzone() {
 
 async function uploadResume(file) {
   const root = $('#resume-state');
-  root.innerHTML = '<div style="padding:14px;color:var(--muted)">Uploading…</div>';
+  root.innerHTML = '<div style="padding:14px;color:var(--muted)"><span class="spinner sm"></span> Uploading…</div>';
   const fd = new FormData();
   fd.append('file', file);
   try {
@@ -85,8 +85,13 @@ async function uploadResume(file) {
 
 async function removeResume() {
   if (!confirm('Remove your resume? Scoring and discovery will fall back to the structured profile only.')) return;
-  await fetch('/api/profile/resume', { method: 'DELETE' });
-  await loadResume();
+  const root = $('#resume-state');
+  root.innerHTML = '<div style="padding:14px;color:var(--muted)"><span class="spinner sm"></span> Removing…</div>';
+  try {
+    await fetch('/api/profile/resume', { method: 'DELETE' });
+  } finally {
+    await loadResume();
+  }
 }
 
 async function loadResume() {
@@ -239,8 +244,8 @@ async function runDiscovery() {
   const btn = $('#discover-btn');
   const out = $('#discovery-results');
   btn.disabled = true;
-  btn.textContent = 'Searching the web…';
-  out.innerHTML = '<div style="padding:12px;color:var(--muted)">This usually takes 20–40 seconds.</div>';
+  btn.innerHTML = '<span class="spinner sm"></span> Searching the web…';
+  out.innerHTML = '<div style="padding:12px;color:var(--muted)"><span class="spinner sm"></span> This usually takes 20–40 seconds.</div>';
   try {
     const data = await api('/api/sources/discover', { method: 'POST', body: { maxCandidates: 12 } });
     const candidates = data.candidates || [];
@@ -253,22 +258,25 @@ async function runDiscovery() {
         ${candidates.length} candidate${candidates.length === 1 ? '' : 's'} found.
         Approve or dismiss them on the <a href="/settings.html#discoveries" style="color:var(--blue-ink)">Settings page</a>.
       </div>
-      ${candidates.map((c) => `
+      ${candidates.map((c) => {
+        const url = c.url || c.config?.url;
+        return `
         <div class="discovery-result">
           <div>
             <span class="discovery-result-name">${escapeHtml(c.name || c.kind)}</span>
             <span class="discovery-result-kind">${escapeHtml(c.kind || '')}</span>
           </div>
           ${c.rationale ? `<div class="discovery-result-rationale">${escapeHtml(c.rationale)}</div>` : ''}
-          ${c.config?.url || c.config?.slug ? `<div class="discovery-result-meta">${escapeHtml(c.config?.url || c.config?.slug)}</div>` : ''}
+          ${url ? `<div class="discovery-result-meta"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:var(--blue-ink)">${escapeHtml(url)} ↗</a></div>` :
+            (c.config?.slug ? `<div class="discovery-result-meta">${escapeHtml(c.config.slug)}</div>` : '')}
         </div>
-      `).join('')}
+      `;}).join('')}
     `;
   } catch (err) {
     out.innerHTML = `<div style="padding:12px;color:var(--bad)">Discovery failed: ${escapeHtml(err.message)}</div>`;
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Find sources';
+    btn.innerHTML = 'Find sources';
   }
 }
 

@@ -226,16 +226,49 @@
     .run-result.ok { border-color: var(--green); background: var(--green-soft); color: var(--green-ink); }
     .run-result.err { border-color: var(--bad); background: var(--bad-soft); color: var(--bad); }
 
-    /* Spinner shown inside the Run button while a request is in flight. */
-    .spinner {
-      display: inline-block;
-      width: 12px; height: 12px;
-      border: 2px solid var(--border-strong);
-      border-top-color: var(--blue);
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
+    /* Active/inactive toggle on a source card. Replaces the old pause button —
+       a switch + visible status label communicates enabled-vs-disabled at a
+       glance without needing to read an icon. */
+    .source-toggle {
+      display: inline-flex; align-items: center; gap: 7px;
+      cursor: pointer; user-select: none;
+      font-size: 11px; font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.04em;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    .source-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .source-toggle-track {
+      position: relative;
+      width: 30px; height: 18px;
+      background: var(--border-strong);
+      border-radius: 999px;
+      transition: background 0.18s ease;
+      flex-shrink: 0;
+    }
+    .source-toggle-thumb {
+      position: absolute;
+      top: 2px; left: 2px;
+      width: 14px; height: 14px;
+      background: white;
+      border-radius: 50%;
+      box-shadow: var(--shadow-xs);
+      transition: transform 0.18s ease;
+    }
+    .source-toggle input:checked ~ .source-toggle-track { background: var(--green); }
+    .source-toggle input:checked ~ .source-toggle-track .source-toggle-thumb { transform: translateX(12px); }
+    .source-toggle.is-on { color: var(--green-ink); }
+    .source-toggle.loading { cursor: progress; }
+    .source-toggle.loading .source-toggle-status { visibility: hidden; }
+    .source-toggle.loading .source-toggle-track { opacity: 0.6; }
+    .source-toggle-status-wrap {
+      position: relative;
+      display: inline-flex; align-items: center; justify-content: flex-start;
+      min-width: 54px;
+    }
+    .source-toggle-spinner {
+      position: absolute;
+      left: 0;
+    }
 
     /* Confirm modal: narrower than the listing modal, no two-column layout. */
     .confirm-backdrop .modal.confirm-modal { max-width: 420px; }
