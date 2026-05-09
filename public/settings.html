@@ -335,6 +335,26 @@
       </div>
     </div>
 
+    <!-- ===== Manual run ===== -->
+    <div class="section" id="section-run">
+      <div class="section-head" data-section="run">
+        <div>
+          <div class="section-title">Run job search now</div>
+          <div class="section-sub">Trigger the daily pipeline on demand</div>
+        </div>
+        <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="section-body">
+        <p style="font-size:13px;color:var(--ink-2);margin:0 0 14px;line-height:1.5">
+          The full pipeline (fetch all sources → dedupe → score → email) normally runs every morning at 6am UTC. Use this to trigger an extra run now.
+        </p>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <p id="run-daily-status" class="status-message"></p>
+          <button class="btn primary" id="run-daily-btn">Run job search now</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ===== Notifications ===== -->
     <div class="section" id="section-notify">
       <div class="section-head" data-section="notify">

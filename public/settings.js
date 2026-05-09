@@ -462,6 +462,53 @@ $('#save-btn').addEventListener('click', async () => {
   }
 });
 
+// ===== Manual daily run =====
+$('#run-daily-btn').addEventListener('click', async () => {
+  const btn = $('#run-daily-btn');
+  const status = $('#run-daily-status');
+
+  const ok = await confirmDialog({
+    title: 'Run job search now?',
+    message: 'This will run the full job search now and may take a few minutes. Continue?',
+    confirmLabel: 'Run Now',
+  });
+  if (!ok) return;
+
+  status.textContent = '';
+  status.className = 'status-message';
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Running…';
+
+  try {
+    const res = await fetch('/api/run-daily', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 409) {
+      const t = data.startedAt
+        ? new Date(data.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+        : 'earlier';
+      status.textContent = 'Already running since ' + t;
+      status.className = 'status-message error';
+    } else if (!res.ok) {
+      throw new Error(data.error || `HTTP ${res.status}`);
+    } else {
+      status.textContent = '✓ Started — check back in a few minutes';
+      status.className = 'status-message success';
+      setTimeout(() => { status.textContent = ''; }, 8000);
+    }
+  } catch (err) {
+    status.textContent = '✗ ' + err.message;
+    status.className = 'status-message error';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
+  }
+});
+
 // ===== Pending discoveries (from cron Discovery runs) =====
 async function loadPendingDiscoveries() {
   const wrap = $('#pending-discoveries');

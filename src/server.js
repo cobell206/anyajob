@@ -21,6 +21,7 @@ import sourcesRouter from './routes/sources.js';
 import discoveriesRouter from './routes/discoveries.js';
 import logsRouter from './routes/logs.js';
 import diagnosticRouter from './routes/diagnostic.js';
+import adminRouter from './routes/admin.js';
 import { createLogger } from './log.js';
 
 const log = createLogger('server');
@@ -71,6 +72,7 @@ app.use('/api/profile', profileRouter);
 app.use('/api/notify', notificationsRouter);
 app.use('/api/sources', sourcesRouter);
 app.use('/api/discoveries', discoveriesRouter);
+app.use('/api', adminRouter);
 
 // Debugging endpoints. Output is redacted server-side (see src/redact.js).
 // Cloudflare Access already gates these like the rest of /api/.
