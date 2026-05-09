@@ -20,6 +20,7 @@ const VALID_REJECT_REASONS = [
   'location',
   'too-senior',
   'too-junior',
+  'degree',
 ];
 
 function setRejectReason(feedback, fp, reason, note) {

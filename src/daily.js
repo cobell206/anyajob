@@ -14,6 +14,7 @@ import { generateDailyBrief, generateWeeklyReflection } from './summaries.js';
 import { getProfileResumeText } from './documents.js';
 import { fbKey } from './io.js';
 import { classifyLocation } from './location.js';
+import { requiresLawDegree } from './degree.js';
 import { createLogger } from './log.js';
 
 const log = createLogger('daily');
@@ -35,6 +36,7 @@ const REASON_LABELS = {
   'wrong-seniority': 'Wrong seniority',
   'not-interested': 'Not interested',
   'already-applied': 'Already applied',
+  degree: 'Requires law degree',
   other: 'Other',
 };
 
@@ -105,6 +107,14 @@ async function main() {
   });
   const droppedLoc = beforeLoc - filtered.length;
   console.log(`[location-gate] kept ${filtered.length}, dropped ${droppedLoc}`);
+
+  // 3c. Law-degree gate — drop listings that explicitly require a JD or bar
+  // admission. The candidate doesn't have a law degree, so these are hard
+  // disqualifiers; running before scoring saves tokens.
+  const beforeDegree = filtered.length;
+  filtered = filtered.filter((l) => !requiresLawDegree(l));
+  const droppedDegree = beforeDegree - filtered.length;
+  console.log(`[degree-gate] kept ${filtered.length}, dropped ${droppedDegree}`);
 
   // 4. Load examples + resume (resume is loaded once and reused across all
   // listings in this run — the prompt-cached system block makes this cheap)
