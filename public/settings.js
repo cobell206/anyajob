@@ -304,25 +304,38 @@ async function loadSources() {
   $('#source-list').innerHTML = sourcesData.sources.map(renderSource).join('');
 
   $$('[data-toggle]').forEach((input) => {
-    input.addEventListener('change', async () => {
+    input.addEventListener('change', () => {
       const s = sourcesData.sources.find((x) => x.id === input.dataset.toggle);
       if (!s) return;
+      const previousEnabled = s.enabled;
+      const newEnabled = input.checked;
       const wrap = document.querySelector(`[data-toggle-wrap="${s.id}"]`);
-      const spinner = document.querySelector(`[data-toggle-spinner="${s.id}"]`);
-      const desired = input.checked;
-      input.disabled = true;
-      wrap?.classList.add('loading');
-      if (spinner) spinner.hidden = false;
-      try {
-        await api(`/api/sources/${s.id}`, { method: 'PATCH', body: { enabled: desired } });
-        loadSources();
-      } catch (err) {
-        input.checked = s.enabled;
-        wrap?.classList.remove('loading');
-        if (spinner) spinner.hidden = true;
-        input.disabled = false;
-        alert('Failed to update: ' + err.message);
-      }
+      const status = document.querySelector(`[data-toggle-status="${s.id}"]`);
+      const card = input.closest('.source-card');
+
+      const applyVisual = (enabled) => {
+        input.checked = enabled;
+        if (wrap) {
+          wrap.classList.toggle('is-on', enabled);
+          wrap.title = enabled ? 'Disable this source' : 'Enable this source';
+        }
+        if (status) status.textContent = enabled ? 'Active' : 'Inactive';
+        input.setAttribute('aria-label', enabled ? 'Active' : 'Inactive');
+        if (card) card.classList.toggle('disabled', !enabled);
+        const total = sourcesData.sources.length;
+        const on = sourcesData.sources.filter((x) => x.enabled).length;
+        $('#sources-sub').textContent = `${total} configured · ${on} enabled`;
+      };
+
+      s.enabled = newEnabled;
+      applyVisual(newEnabled);
+
+      api(`/api/sources/${s.id}`, { method: 'PATCH', body: { enabled: newEnabled } })
+        .catch((err) => {
+          s.enabled = previousEnabled;
+          applyVisual(previousEnabled);
+          console.error('Toggle failed, reverted:', err);
+        });
     });
   });
 
