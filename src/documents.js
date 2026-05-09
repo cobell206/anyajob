@@ -10,9 +10,11 @@ import { existsSync, createReadStream } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, extname, basename } from 'node:path';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import { RESUME_ALIGNMENT_SYSTEM, COVER_LETTER_ALIGNMENT_SYSTEM } from './prompts.js';
 import { writeJsonAtomic } from './atomic.js';
+import { readJson, fbKey } from './io.js';
 import { createLogger } from './log.js';
 
 const log = createLogger('documents');
@@ -225,6 +227,57 @@ export async function deleteDocument(fingerprint, slot, fileToDelete = null) {
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = 'claude-sonnet-4-6';
 
+async function hashFileContents(path) {
+  const buf = await readFile(path);
+  return createHash('sha256').update(buf).digest('hex');
+}
+
+// Pulls the listing note from feedback.json so the scorer can pass it as
+// extra context. Returns '' when no note (or when feedback can't be loaded).
+async function getListingNote(listing) {
+  if (listing && typeof listing.note === 'string' && listing.note.trim()) {
+    return listing.note.trim();
+  }
+  try {
+    const feedback = await readJson('feedback.json');
+    return (feedback.notes?.[fbKey(listing)] || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+function priorFeedbackBlock(prior) {
+  if (!prior || prior.error) return '';
+  const lines = ['\n\nPRIOR ALIGNMENT FEEDBACK (from her previous resume — she has since uploaded a new version):'];
+  if (Array.isArray(prior.topStrengths) && prior.topStrengths.length) {
+    lines.push('\nPrevious topStrengths:');
+    prior.topStrengths.forEach((s) => lines.push(`- ${s}`));
+  }
+  if (Array.isArray(prior.areasToStrengthen) && prior.areasToStrengthen.length) {
+    lines.push('\nPrevious areasToStrengthen:');
+    prior.areasToStrengthen.forEach((s) => lines.push(`- ${s}`));
+  }
+  if (Array.isArray(prior.suggestedBullets) && prior.suggestedBullets.length) {
+    lines.push('\nPrevious suggestedBullets:');
+    prior.suggestedBullets.forEach((s) => lines.push(`- ${s}`));
+  }
+  return lines.length > 1 ? lines.join('\n') : '';
+}
+
+function priorCoverBlock(prior) {
+  if (!prior || prior.error) return '';
+  const lines = ['\n\nPRIOR ALIGNMENT FEEDBACK (from her previous cover letter — she has since uploaded a new version):'];
+  if (Array.isArray(prior.strengths) && prior.strengths.length) {
+    lines.push('\nPrevious strengths:');
+    prior.strengths.forEach((s) => lines.push(`- ${s}`));
+  }
+  if (Array.isArray(prior.suggestions) && prior.suggestions.length) {
+    lines.push('\nPrevious suggestions:');
+    prior.suggestions.forEach((s) => lines.push(`- ${s}`));
+  }
+  return lines.length > 1 ? lines.join('\n') : '';
+}
+
 // Resume alignment prompt lives in src/prompts.js (RESUME_ALIGNMENT_SYSTEM)
 
 async function readPdfText(pdfPath) {
@@ -282,25 +335,35 @@ export async function getProfileResumeText() {
   return text ? text.slice(0, 8000) : null;
 }
 
-export async function scoreResumeAgainstJd({ fingerprint, listing }) {
+export async function scoreResumeAgainstJd({ fingerprint, listing, force = false }) {
   const docs = await listDocuments(fingerprint);
   const resume = docs.resume?.current;
   if (!resume) return null;
 
   const resumePath = await getDocumentPath(fingerprint, resume.file);
+  const resumeHash = await hashFileContents(resumePath);
+
+  const prior = resume.alignmentScore || null;
+  if (!force && prior && !prior.error && prior._resumeHash === resumeHash) {
+    return prior;
+  }
+
   const resumeText = (await extractResumeText(resumePath)).slice(0, 8000);
   if (!resumeText) {
     return { error: 'Could not extract text from resume' };
   }
 
   const jdText = (listing.description || '').slice(0, 4000);
+  const note = await getListingNote(listing);
+  const noteBlock = note ? `\n\nHER NOTES ON THIS LISTING:\n${note.slice(0, 1500)}` : '';
+  const priorBlock = priorFeedbackBlock(prior);
   const userMsg = `Job: ${listing.title} at ${listing.company} (${listing.location || ''})
 
 JOB DESCRIPTION:
-${jdText}
+${jdText}${noteBlock}
 
 CANDIDATE RESUME:
-${resumeText}
+${resumeText}${priorBlock}
 
 Return JSON only.`;
 
@@ -328,6 +391,7 @@ Return JSON only.`;
     parsed = { error: truncated ? 'response truncated' : 'parse failed', raw: text };
   }
   parsed._scoredAt = new Date().toISOString();
+  parsed._resumeHash = resumeHash;
 
   // Persist on the document entry
   const idx = await readIndex();
@@ -338,25 +402,35 @@ Return JSON only.`;
   return parsed;
 }
 
-export async function scoreCoverLetterAgainstJd({ fingerprint, listing }) {
+export async function scoreCoverLetterAgainstJd({ fingerprint, listing, force = false }) {
   const docs = await listDocuments(fingerprint);
   const cover = docs.cover?.current;
   if (!cover) return null;
 
   const coverPath = await getDocumentPath(fingerprint, cover.file);
+  const coverHash = await hashFileContents(coverPath);
+
+  const prior = cover.alignmentScore || null;
+  if (!force && prior && !prior.error && prior._coverHash === coverHash) {
+    return prior;
+  }
+
   const coverText = (await extractResumeText(coverPath)).slice(0, 8000);
   if (!coverText) {
     return { error: 'Could not extract text from cover letter' };
   }
 
   const jdText = (listing.description || '').slice(0, 4000);
+  const note = await getListingNote(listing);
+  const noteBlock = note ? `\n\nHER NOTES ON THIS LISTING:\n${note.slice(0, 1500)}` : '';
+  const priorBlock = priorCoverBlock(prior);
   const userMsg = `Job: ${listing.title} at ${listing.company} (${listing.location || ''})
 
 JOB DESCRIPTION:
-${jdText}
+${jdText}${noteBlock}
 
 CANDIDATE COVER LETTER:
-${coverText}
+${coverText}${priorBlock}
 
 Return JSON only.`;
 
@@ -384,6 +458,7 @@ Return JSON only.`;
     parsed = { error: truncated ? 'response truncated' : 'parse failed', raw: text };
   }
   parsed._scoredAt = new Date().toISOString();
+  parsed._coverHash = coverHash;
 
   const idx = await readIndex();
   if (idx[fingerprint]?.cover?.current) {

@@ -111,12 +111,20 @@ router.post('/:fp/delete', async (req, res) => {
   }
 });
 
+function parseForce(req) {
+  return req.query.force === '1' || req.query.force === 'true' || req.body?.force === true;
+}
+
 router.post('/:fp/score-resume', async (req, res) => {
   try {
     const all = await readJson('listings.json');
     const listing = all.listings.find((l) => l.fingerprint === req.params.fp);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
-    const score = await scoreResumeAgainstJd({ fingerprint: req.params.fp, listing });
+    const score = await scoreResumeAgainstJd({
+      fingerprint: req.params.fp,
+      listing,
+      force: parseForce(req),
+    });
     res.json(score);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -128,7 +136,11 @@ router.post('/:fp/score-cover', async (req, res) => {
     const all = await readJson('listings.json');
     const listing = all.listings.find((l) => l.fingerprint === req.params.fp);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
-    const score = await scoreCoverLetterAgainstJd({ fingerprint: req.params.fp, listing });
+    const score = await scoreCoverLetterAgainstJd({
+      fingerprint: req.params.fp,
+      listing,
+      force: parseForce(req),
+    });
     res.json(score);
   } catch (err) {
     res.status(500).json({ error: err.message });
