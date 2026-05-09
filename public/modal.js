@@ -175,45 +175,30 @@ export function openModal(listing, onUpdate) {
     el.className = `status-message ${kind}`;
     setTimeout(() => { el.textContent = ''; }, 1500);
   };
-  const showLoading = (text) => {
-    const el = $('#m-status-msg');
-    el.innerHTML = `<span class="spinner-row"><span class="spinner sm"></span><span>${escapeHtml(text)}</span></span>`;
-    el.className = 'status-message info';
-  };
-  // Run an API call with loading + disabled state.
-  const withLoading = async (els, label, fn) => {
-    const arr = Array.isArray(els) ? els : (els ? [els] : []);
-    arr.forEach((el) => { if (el) el.disabled = true; });
-    showLoading(label);
-    try {
-      const result = await fn();
-      arr.forEach((el) => { if (el) el.disabled = false; });
-      return result;
-    } catch (err) {
-      arr.forEach((el) => { if (el) el.disabled = false; });
-      throw err;
-    }
-  };
 
+  // Rate / status / dates / note are toggle-like state indicators — they
+  // should feel instantaneous. Apply the visual change immediately, fire the
+  // API in the background, and revert only if the request fails.
   $$('[data-rate]', $('#m-body')).forEach((btn) => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       const action = btn.dataset.rate;
       const newRating = btn.classList.contains('active') ? null : action;
+      const previousRating = currentListing.rating;
       const rateBtns = $$('[data-rate]', $('#m-body'));
-      try {
-        await withLoading(rateBtns, 'Saving…', () => api(`/api/feedback/${fp}/rating`, {
-          method: 'POST',
-          body: { rating: newRating },
-        }));
-      } catch (err) {
-        showMsg(`Failed to save: ${err.message}`, 'error');
-        return;
-      }
-      rateBtns.forEach((b) => b.classList.remove('active'));
-      if (newRating) btn.classList.add('active');
-      currentListing.rating = newRating;
-      showMsg(newRating ? 'Saved' : 'Cleared');
+
+      const apply = (rating) => {
+        rateBtns.forEach((b) => b.classList.toggle('active', rating && b.dataset.rate === rating));
+        currentListing.rating = rating;
+      };
+      apply(newRating);
       onUpdateCallback?.(currentListing);
+
+      api(`/api/feedback/${fp}/rating`, { method: 'POST', body: { rating: newRating } })
+        .catch((err) => {
+          apply(previousRating);
+          onUpdateCallback?.(currentListing);
+          showMsg(`Failed to save: ${err.message}`, 'error');
+        });
     });
   });
 
@@ -242,23 +227,18 @@ export function openModal(listing, onUpdate) {
     }
   }
 
-  async function saveRejectReason() {
+  function saveRejectReason() {
     const selected = rejectReasonsEl.querySelector('.reason-chip.is-selected');
     const reason = selected ? selected.dataset.reason : null;
     const note = reason === 'other' ? (rejectNoteEl.value || '') : '';
-    const chips = $$('.reason-chip', rejectReasonsEl);
-    try {
-      await withLoading(chips, 'Saving…', () => api(`/api/feedback/${fp}/reject-reason`, {
-        method: 'POST',
-        body: { reason, note },
-      }));
-      currentListing.rejectReason = reason;
-      currentListing.rejectNote = note || null;
-      showMsg('Saved');
-      onUpdateCallback?.(currentListing);
-    } catch (err) {
-      showMsg(`Failed to save: ${err.message}`, 'error');
-    }
+    currentListing.rejectReason = reason;
+    currentListing.rejectNote = note || null;
+    onUpdateCallback?.(currentListing);
+
+    api(`/api/feedback/${fp}/reject-reason`, { method: 'POST', body: { reason, note } })
+      .catch((err) => {
+        showMsg(`Failed to save: ${err.message}`, 'error');
+      });
   }
 
   $$('.reason-chip', rejectReasonsEl).forEach((chip) => {
@@ -283,68 +263,74 @@ export function openModal(listing, onUpdate) {
     }
   });
 
-  $('#m-status').addEventListener('change', async (e) => {
+  $('#m-status').addEventListener('change', (e) => {
     const status = e.target.value;
     const prev = currentListing.status;
-    try {
-      await withLoading(e.target, 'Saving status…', () =>
-        api(`/api/feedback/${fp}/status`, { method: 'POST', body: { status } }));
-      currentListing.status = status;
-      if (status === 'applied' && !currentListing.appliedDate) {
-        const today = new Date().toISOString().slice(0, 10);
-        currentListing.appliedDate = today;
-        $('#m-applied-date').value = today;
-      }
-      syncRejectReasonsVisibility(status);
-      showMsg('Saved');
-      onUpdateCallback?.(currentListing);
-    } catch (err) {
-      e.target.value = prev || 'new';
-      showMsg(`Failed to save: ${err.message}`, 'error');
+    currentListing.status = status;
+    if (status === 'applied' && !currentListing.appliedDate) {
+      const today = new Date().toISOString().slice(0, 10);
+      currentListing.appliedDate = today;
+      $('#m-applied-date').value = today;
     }
+    syncRejectReasonsVisibility(status);
+    onUpdateCallback?.(currentListing);
+
+    api(`/api/feedback/${fp}/status`, { method: 'POST', body: { status } })
+      .catch((err) => {
+        e.target.value = prev || 'new';
+        currentListing.status = prev;
+        syncRejectReasonsVisibility(prev);
+        onUpdateCallback?.(currentListing);
+        showMsg(`Failed to save: ${err.message}`, 'error');
+      });
   });
 
   syncRejectReasonsVisibility(listing.status);
 
-  $('#m-applied-date').addEventListener('change', async (e) => {
+  $('#m-applied-date').addEventListener('change', (e) => {
     const date = e.target.value || null;
-    try {
-      await withLoading(e.target, 'Saving applied date…', () =>
-        api(`/api/feedback/${fp}/appliedDate`, { method: 'POST', body: { appliedDate: date } }));
-      currentListing.appliedDate = date;
-      showMsg('Applied date saved');
-      onUpdateCallback?.(currentListing);
-    } catch (err) {
-      showMsg(`Failed to save: ${err.message}`, 'error');
-    }
+    const prev = currentListing.appliedDate;
+    currentListing.appliedDate = date;
+    onUpdateCallback?.(currentListing);
+
+    api(`/api/feedback/${fp}/appliedDate`, { method: 'POST', body: { appliedDate: date } })
+      .catch((err) => {
+        currentListing.appliedDate = prev;
+        e.target.value = prev || '';
+        onUpdateCallback?.(currentListing);
+        showMsg(`Failed to save: ${err.message}`, 'error');
+      });
   });
 
-  $('#m-closes-date').addEventListener('change', async (e) => {
+  $('#m-closes-date').addEventListener('change', (e) => {
     const date = e.target.value || null;
-    try {
-      await withLoading(e.target, 'Saving closes date…', () =>
-        api(`/api/feedback/${fp}/closesDate`, { method: 'POST', body: { closesDate: date } }));
-      currentListing.closesDate = date;
-      showMsg('Closes date saved');
-      onUpdateCallback?.(currentListing);
-    } catch (err) {
-      showMsg(`Failed to save: ${err.message}`, 'error');
-    }
+    const prev = currentListing.closesDate;
+    currentListing.closesDate = date;
+    onUpdateCallback?.(currentListing);
+
+    api(`/api/feedback/${fp}/closesDate`, { method: 'POST', body: { closesDate: date } })
+      .catch((err) => {
+        currentListing.closesDate = prev;
+        e.target.value = prev || '';
+        onUpdateCallback?.(currentListing);
+        showMsg(`Failed to save: ${err.message}`, 'error');
+      });
   });
 
   let noteTimer;
   $('#m-note').addEventListener('input', (e) => {
     clearTimeout(noteTimer);
-    noteTimer = setTimeout(async () => {
-      try {
-        showLoading('Saving note…');
-        await api(`/api/feedback/${fp}/note`, { method: 'POST', body: { note: e.target.value } });
-        currentListing.note = e.target.value;
-        showMsg('Saved');
-        onUpdateCallback?.(currentListing);
-      } catch (err) {
-        showMsg(`Failed to save: ${err.message}`, 'error');
-      }
+    noteTimer = setTimeout(() => {
+      const value = e.target.value;
+      const prev = currentListing.note;
+      currentListing.note = value;
+      onUpdateCallback?.(currentListing);
+
+      api(`/api/feedback/${fp}/note`, { method: 'POST', body: { note: value } })
+        .catch((err) => {
+          currentListing.note = prev;
+          showMsg(`Failed to save: ${err.message}`, 'error');
+        });
     }, 500);
   });
 

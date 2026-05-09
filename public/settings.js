@@ -58,11 +58,11 @@ function renderSource(s) {
     : '';
 
   const toggle = `
-    <span class="source-status">
-      <span class="status-dot ${s.enabled ? 'status-active' : 'status-paused'}" data-toggle-dot="${s.id}"></span>
-      <span class="status-label" data-toggle-label="${s.id}">${s.enabled ? 'Active' : 'Paused'}</span>
-    </span>
-    <button class="status-toggle-btn" data-toggle="${s.id}">${s.enabled ? 'Pause' : 'Enable'}</button>
+    <label class="source-toggle ${s.enabled ? 'is-on' : ''}" data-toggle-wrap="${s.id}" title="${s.enabled ? 'Disable this source' : 'Enable this source'}">
+      <input type="checkbox" data-toggle="${s.id}" ${s.enabled ? 'checked' : ''} aria-label="${s.enabled ? 'Active' : 'Inactive'}">
+      <span class="source-toggle-track"><span class="source-toggle-thumb"></span></span>
+      <span class="source-toggle-status" data-toggle-status="${s.id}">${s.enabled ? 'Active' : 'Inactive'}</span>
+    </label>
   `;
 
   return `
@@ -300,31 +300,34 @@ async function loadSources() {
   $('#sources-sub').textContent = `${sourcesData.sources.length} configured · ${enabled} enabled`;
   $('#source-list').innerHTML = sourcesData.sources.map(renderSource).join('');
 
-  $$('[data-toggle]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const s = sourcesData.sources.find((x) => x.id === btn.dataset.toggle);
+  $$('[data-toggle]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const s = sourcesData.sources.find((x) => x.id === input.dataset.toggle);
       if (!s) return;
       const previousEnabled = s.enabled;
-      const next = !previousEnabled;
-      const card = btn.closest('.source-card');
-      const dot = card?.querySelector(`[data-toggle-dot="${s.id}"]`);
-      const label = card?.querySelector(`[data-toggle-label="${s.id}"]`);
+      const newEnabled = input.checked;
+      const wrap = document.querySelector(`[data-toggle-wrap="${s.id}"]`);
+      const status = document.querySelector(`[data-toggle-status="${s.id}"]`);
+      const card = input.closest('.source-card');
 
       const applyVisual = (enabled) => {
         s.enabled = enabled;
+        input.checked = enabled;
+        if (wrap) {
+          wrap.classList.toggle('is-on', enabled);
+          wrap.title = enabled ? 'Disable this source' : 'Enable this source';
+        }
+        if (status) status.textContent = enabled ? 'Active' : 'Inactive';
+        input.setAttribute('aria-label', enabled ? 'Active' : 'Inactive');
         card?.classList.toggle('disabled', !enabled);
-        dot?.classList.toggle('status-active', enabled);
-        dot?.classList.toggle('status-paused', !enabled);
-        if (label) label.textContent = enabled ? 'Active' : 'Paused';
-        btn.textContent = enabled ? 'Pause' : 'Enable';
         const total = sourcesData.sources.length;
         const on = sourcesData.sources.filter((x) => x.enabled).length;
         $('#sources-sub').textContent = `${total} configured · ${on} enabled`;
       };
 
-      applyVisual(next);
+      applyVisual(newEnabled);
 
-      api(`/api/sources/${s.id}`, { method: 'PATCH', body: { enabled: next } })
+      api(`/api/sources/${s.id}`, { method: 'PATCH', body: { enabled: newEnabled } })
         .catch((err) => {
           applyVisual(previousEnabled);
           console.error('Toggle failed, reverted:', err);
