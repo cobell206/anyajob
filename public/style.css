@@ -1158,7 +1158,11 @@ td {
   margin-right: 6px;
 }
 
-.modal-section { margin-bottom: 24px; }
+.modal-section {
+  margin-bottom: 24px;
+  min-width: 0;
+  max-width: 100%;
+}
 
 .modal-section h3 {
   font-size: 11px;
@@ -1710,13 +1714,22 @@ textarea { resize: vertical; min-height: 80px; }
 
 /* ============ DOCUMENTS SECTION ============ */
 
-.docs-section { margin-top: 24px; }
+.docs-section {
+  margin-top: 24px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
 
 .docs-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin-bottom: 12px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .doc-row {
@@ -1895,17 +1908,31 @@ button[disabled] {
   background: linear-gradient(135deg, var(--blue-soft) 0%, var(--green-soft) 100%);
   border-radius: var(--radius);
   border: 1px solid var(--border);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .align-box.err {
   background: var(--bad-soft);
   color: var(--bad);
   font-size: 13px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .align-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 .align-label {
   font-size: 11px;
@@ -1913,6 +1940,8 @@ button[disabled] {
   letter-spacing: 0.08em;
   color: var(--ink-2);
   font-weight: 700;
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 .align-score {
   font-family: var(--font-display, Georgia, serif);
@@ -1921,6 +1950,8 @@ button[disabled] {
   padding: 2px 12px;
   border-radius: 999px;
   background: white;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .align-score.align-high { color: var(--green-ink); }
 .align-score.align-mid { color: var(--blue-ink); }
@@ -1932,8 +1963,13 @@ button[disabled] {
   font-family: var(--font-display, Georgia, serif);
   line-height: 1.5;
   margin-bottom: 10px;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
-.align-section { margin-top: 10px; }
+.align-section {
+  margin-top: 10px;
+  min-width: 0;
+}
 .align-h {
   font-size: 11px;
   text-transform: uppercase;
@@ -1946,6 +1982,7 @@ button[disabled] {
   list-style: none;
   padding: 0;
   margin: 0;
+  min-width: 0;
 }
 .align-section li {
   font-size: 12px;
@@ -1954,6 +1991,8 @@ button[disabled] {
   position: relative;
   margin-bottom: 4px;
   line-height: 1.45;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .align-section li::before {
   content: '→';
