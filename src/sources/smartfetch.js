@@ -17,7 +17,7 @@ import 'dotenv/config';
 import fetch from 'node-fetch';
 import * as cheerio from 'cheerio';
 import Anthropic from '@anthropic-ai/sdk';
-import { SMARTFETCH_EXTRACTION_SYSTEM } from '../prompts.js';
+import { SMARTFETCH_EXTRACTION_SYSTEM, SINGLE_LISTING_EXTRACTION_SYSTEM } from '../prompts.js';
 
 const MODEL = 'claude-haiku-4-5-20251001';
 const MAX_HTML_CHARS = 60000; // ~15k tokens of stripped HTML
@@ -189,6 +189,65 @@ Return JSON only.`;
   })).filter((l) => l.title); // drop entries with no title
 
   return listings;
+}
+
+// Single-listing extractor: she pastes ONE job URL on the "Add a role" page,
+// we fetch, strip, and ask Claude for structured fields to prefill the form.
+// Returns { extracted: bool, title, company, location, description, postedAt, reason }.
+// Throws only on network/HTTP failures — login walls and 404s come back as
+// extracted=false so the UI can show a helpful inline message.
+export async function extractSingleListing(url) {
+  if (!url) throw new Error('url required');
+
+  const res = await fetch(url, {
+    timeout: 20000,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; AnyaJobBot/0.1; +https://anyajob.local)',
+      'Accept': 'text/html,application/xhtml+xml',
+    },
+    redirect: 'follow',
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('text/html') && !ct.includes('application/xhtml')) {
+    throw new Error(`Not HTML (${ct}); cannot extract`);
+  }
+
+  const html = await res.text();
+  const stripped = stripPage(html, url);
+  if (stripped.trim().length < 200) {
+    return { extracted: false, reason: 'Page had no meaningful content (likely JavaScript-rendered or blocked)' };
+  }
+
+  const userMsg = `Source URL: ${url}\n\nCLEANED HTML:\n${stripped}\n\nReturn JSON only.`;
+
+  const response = await client().messages.create({
+    model: MODEL,
+    max_tokens: 4000,
+    system: [{ type: 'text', text: SINGLE_LISTING_EXTRACTION_SYSTEM, cache_control: { type: 'ephemeral' } }],
+    messages: [{ role: 'user', content: userMsg }],
+  });
+
+  const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end < start) {
+    return { extracted: false, reason: 'Could not parse extraction response' };
+  }
+  try {
+    const parsed = JSON.parse(text.slice(start, end + 1));
+    return {
+      extracted: !!parsed.extracted,
+      title: parsed.title || null,
+      company: parsed.company || null,
+      location: parsed.location || null,
+      description: parsed.description || null,
+      postedAt: parsed.postedAt || null,
+      reason: parsed.reason || null,
+    };
+  } catch {
+    return { extracted: false, reason: 'Malformed JSON from extraction model' };
+  }
 }
 
 // CLI test: node src/sources/smartfetch.js https://example.com/careers
