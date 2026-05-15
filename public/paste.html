@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Paste a JD · Job Tracker</title>
+  <title>Add a role · Job Tracker</title>
   <link rel="stylesheet" href="/style.css?v=__CACHE_VERSION__">
 </head>
 <body>
@@ -16,7 +16,7 @@
       <nav>
         <a href="/">Roles</a>
         <a href="/profile.html">Profile</a>
-        <a href="/paste.html" class="active">Paste JD</a>
+        <a href="/paste.html" class="active">Add a role</a>
         <a href="/settings.html">Settings</a>
       </nav>
     </div>
@@ -25,13 +25,20 @@
   <main style="max-width: 720px; margin: 0 auto">
     <div class="page-head">
       <div>
-        <h1 class="page-title">Score a listing</h1>
-        <div class="page-sub">Found something on LinkedIn or Indeed? Paste it here for the same scoring.</div>
+        <h1 class="page-title">Add a role</h1>
+        <div class="page-sub">Paste a JD from LinkedIn, Indeed, anywhere — score it, or log one you've already applied to.</div>
       </div>
     </div>
 
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;box-shadow:var(--shadow-sm);max-width:680px">
-      <label>Title</label>
+      <label>Job URL</label>
+      <div style="display:flex;gap:8px;align-items:stretch">
+        <input type="url" id="url" placeholder="https://…  (paste a link to auto-fill the fields below)" style="flex:1;margin:0">
+        <button type="button" class="btn" id="fetchFromUrl" style="white-space:nowrap;margin:0">Auto-fill</button>
+      </div>
+      <p id="fetchStatus" style="margin:6px 0 0;font-size:12px;color:var(--muted);min-height:16px"></p>
+
+      <label style="margin-top:18px">Title</label>
       <input type="text" id="title" placeholder="e.g. Litigation Paralegal">
 
       <div class="field-grid">
@@ -45,11 +52,34 @@
         </div>
       </div>
 
-      <label>URL (optional)</label>
-      <input type="url" id="url" placeholder="https://…">
-
       <label>Description</label>
       <textarea id="description" rows="10" placeholder="Paste the full job description here…"></textarea>
+
+      <label style="display:flex;align-items:center;gap:8px;margin-top:16px;font-weight:500;cursor:pointer;text-transform:none;letter-spacing:normal;color:var(--ink-1,#111);font-size:14px">
+        <input type="checkbox" id="alreadyApplied" style="width:auto;margin:0">
+        I've already applied to this
+      </label>
+
+      <div id="appliedFields" hidden style="margin-top:12px;padding:16px;background:var(--surface-2,#f7f9fc);border:1px solid var(--border);border-radius:var(--radius-md,8px)">
+        <div class="field-grid">
+          <div>
+            <label>Outcome</label>
+            <select id="appStatus">
+              <option value="applied">Applied — waiting</option>
+              <option value="interview">Interview</option>
+              <option value="offer">Offer</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
+          <div>
+            <label>When</label>
+            <input type="date" id="appDate">
+          </div>
+        </div>
+        <label>Notes (optional)</label>
+        <textarea id="appNote" rows="3" placeholder="Anything worth remembering — referral source, OA date, contact name…"></textarea>
+        <p style="margin:8px 0 0;font-size:12px;color:var(--muted)">This will count as a positive example when scoring future listings and discovering new sources.</p>
+      </div>
 
       <button class="btn primary" id="submit" style="width:100%; padding:12px; font-size:15px; margin-top:16px; justify-content:center">Score it</button>
     </div>
@@ -62,6 +92,73 @@
 
     const btn = $('#submit');
     const result = $('#result');
+    const alreadyApplied = $('#alreadyApplied');
+    const appliedFields = $('#appliedFields');
+    const appDate = $('#appDate');
+    const urlInput = $('#url');
+    const fetchBtn = $('#fetchFromUrl');
+    const fetchStatus = $('#fetchStatus');
+
+    appDate.value = new Date().toISOString().slice(0, 10);
+
+    function syncAppliedToggle() {
+      const on = alreadyApplied.checked;
+      appliedFields.hidden = !on;
+      btn.textContent = on ? 'Log it' : 'Score it';
+    }
+    alreadyApplied.addEventListener('change', syncAppliedToggle);
+    syncAppliedToggle();
+
+    function setFetchStatus(text, kind = 'muted') {
+      fetchStatus.textContent = text;
+      fetchStatus.style.color = kind === 'good' ? 'var(--green-ink)'
+        : kind === 'bad' ? 'var(--bad)'
+        : 'var(--muted)';
+    }
+
+    async function autoFillFromUrl() {
+      const url = urlInput.value.trim();
+      if (!url) {
+        setFetchStatus('Paste a URL above first.', 'bad');
+        return;
+      }
+      try { new URL(url); } catch {
+        setFetchStatus("That doesn't look like a valid URL.", 'bad');
+        return;
+      }
+      fetchBtn.disabled = true;
+      const orig = fetchBtn.textContent;
+      fetchBtn.innerHTML = '<span class="spinner sm"></span> Fetching…';
+      setFetchStatus('Fetching the page and extracting fields…');
+      try {
+        const res = await fetch('/api/score-paste/extract-from-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        const data = await res.json();
+        if (!data.extracted) {
+          setFetchStatus(`Couldn't extract — ${data.reason || 'unknown reason'}. Fill in the fields manually below.`, 'bad');
+          return;
+        }
+        // Prefill non-empty fields. Don't clobber anything she's already typed.
+        if (data.title && !$('#title').value) $('#title').value = data.title;
+        if (data.company && !$('#company').value) $('#company').value = data.company;
+        if (data.location && !$('#location').value) $('#location').value = data.location;
+        if (data.description && !$('#description').value) $('#description').value = data.description;
+        setFetchStatus('Filled in from URL — please verify and edit before submitting.', 'good');
+      } catch (err) {
+        setFetchStatus(`Couldn't reach that page (${err.message}). Fill in manually.`, 'bad');
+      } finally {
+        fetchBtn.disabled = false;
+        fetchBtn.textContent = orig;
+      }
+    }
+
+    fetchBtn.addEventListener('click', autoFillFromUrl);
+    urlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); autoFillFromUrl(); }
+    });
 
     btn.addEventListener('click', async () => {
       const body = {
@@ -71,6 +168,12 @@
         url: $('#url').value.trim(),
         description: $('#description').value.trim(),
       };
+      if (alreadyApplied.checked) {
+        body.alreadyApplied = true;
+        body.applicationStatus = $('#appStatus').value;
+        body.appliedDate = appDate.value || null;
+        body.applicationNote = $('#appNote').value.trim();
+      }
       if (!body.title || !body.description) {
         alert('Title and description are required.');
         return;
@@ -86,8 +189,7 @@
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         const s = data.score;
-        result.innerHTML = `
-          <div class="result-card">
+        const scoreBlock = s ? `
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px">
               <div>
                 <div class="cell-title" style="font-size:18px">${escapeHtml(body.title)}</div>
@@ -125,8 +227,20 @@
             ${s.applicationAngle ? `
               <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin:20px 0 8px">Personal statement angle</h3>
               <p style="font-size:14px; color: var(--ink-2)">${escapeHtml(s.applicationAngle)}</p>
-            ` : ''}
-            <p style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)">Saved — appears in your roles list.</p>
+            ` : ''}` : `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px">
+              <div>
+                <div class="cell-title" style="font-size:18px">${escapeHtml(body.title)}</div>
+                <div class="cell-company">${escapeHtml(body.company)}</div>
+              </div>
+            </div>
+            ${data.scoreError ? `<p style="font-size:13px;color:var(--muted);margin:8px 0 0">Saved without a score (${escapeHtml(data.scoreError)}).</p>` : ''}`;
+        result.innerHTML = `
+          <div class="result-card">
+            ${scoreBlock}
+            <p style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)">${body.alreadyApplied
+              ? `Logged as <strong>${escapeHtml(body.applicationStatus)}</strong>${body.appliedDate ? ` on ${escapeHtml(body.appliedDate)}` : ''} — feeding your scoring &amp; discovery calibration.`
+              : 'Saved — appears in your roles list.'}</p>
             <div style="margin-top:12px">
               <a class="btn primary" href="/">View all roles →</a>
             </div>
@@ -153,11 +267,7 @@
       </a>
       <a href="/paste.html" class="active" aria-current="page">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-        <span>Paste</span>
-      </a>
-      <a href="/notifications.html">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-        <span>Notify</span>
+        <span>Add</span>
       </a>
       <a href="/settings.html">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>

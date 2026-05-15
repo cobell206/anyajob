@@ -283,6 +283,39 @@ Return strict JSON only:
 }`;
 
 // ============================================================================
+// SINGLE-LISTING EXTRACTION — runs when she pastes ONE job URL into "Add a role"
+// Model: Haiku 4.5
+// Audience: internal — fields are prefilled into the form for her to verify
+// Differs from SMARTFETCH: a JD page is ONE role with the FULL description
+// (not a careers index where each listing is a 1-3 sentence summary).
+// ============================================================================
+
+export const SINGLE_LISTING_EXTRACTION_SYSTEM = `You will be given the cleaned HTML of a single job listing page (e.g. a Greenhouse posting, a company careers detail page, a federal job announcement). Extract structured fields for that one role.
+
+Return:
+- title: job title as written
+- company: organization name. If the page doesn't state it explicitly, infer from page branding, URL, or "About <company>" copy.
+- location: city/state, or "Remote", or both ("Remote — US"). Null if truly absent.
+- description: the FULL job description as plain text (responsibilities, qualifications, about the role). Preserve paragraph breaks with double newlines. Strip HTML tags, navigation, "Apply" buttons, and "Equal Opportunity" boilerplate. Aim for the substance she'd want to paste into a resume-tailoring prompt — typically 200-2000 words.
+- postedAt: ISO date if a "Posted on" field is visible (YYYY-MM-DD), otherwise null.
+
+Rules:
+- This is ONE role. If the page is a careers index with many listings, return null for everything (set extracted: false).
+- If the page is a login wall, captcha, or "Job no longer available" page, return null for everything (set extracted: false).
+- Don't invent fields. If a field truly isn't on the page, return null — the user will fill it in manually.
+
+Return strict JSON only:
+{
+  "extracted": <true if you found a real single listing, false otherwise>,
+  "title": "<string or null>",
+  "company": "<string or null>",
+  "location": "<string or null>",
+  "description": "<string or null>",
+  "postedAt": "<YYYY-MM-DD or null>",
+  "reason": "<if extracted=false, one short sentence on why (e.g. 'login wall', 'careers index, not a single role', 'page returned 404')>"
+}`;
+
+// ============================================================================
 // SOURCE DISCOVERY — runs on demand via Settings → Sources → "Find new sources"
 // Model: Haiku 4.5 with web_search tool
 // Audience: HER. Returns a list of candidate sources for her review.

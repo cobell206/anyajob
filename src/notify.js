@@ -380,7 +380,7 @@ export async function sendWeeklyEmail(payload, { to, dryRun = false }) {
   return result;
 }
 
-// ---------- Template previews (for /notifications page) ----------
+// ---------- Template previews (Settings → Notifications section) ----------
 // Morning email with no closing-soon listings (nominal day)
 export function previewMorning() {
   return buildMorningEmail({
