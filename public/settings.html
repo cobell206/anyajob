@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="en" data-color-scheme="light">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="light only">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f7faf9">
+  <script>(function(){function a(t){document.documentElement.dataset.theme=t;var m=document.querySelector('meta[name="theme-color"]');if(m)m.content=t==='dark'?'#0b1220':'#f7faf9';}function r(){var s=localStorage.getItem('theme')||'auto';return s==='auto'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):s;}try{a(r());}catch(e){}try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){if((localStorage.getItem('theme')||'auto')==='auto')a(r());});}catch(e){}})();</script>
   <title>Settings · Job Tracker</title>
   <link rel="stylesheet" href="/style.css?v=__CACHE_VERSION__">
   <style>
@@ -88,6 +90,39 @@
     }
     .repair-btn:hover { background: #ffedd5; border-color: #fdba74; }
     .repair-btn:active { background: #fed7aa; }
+    [data-theme="dark"] .repair-btn { background: rgba(234, 88, 12, 0.16); border-color: rgba(234, 88, 12, 0.4); color: #fdba74; }
+    [data-theme="dark"] .repair-btn:hover { background: rgba(234, 88, 12, 0.24); border-color: rgba(234, 88, 12, 0.6); }
+    [data-theme="dark"] .repair-btn:active { background: rgba(234, 88, 12, 0.32); }
+
+    /* Discovery candidates header card */
+    .discovery-pending-header {
+      padding: 14px 16px;
+      background: linear-gradient(135deg, #fdf4ff 0%, #fef3c7 100%);
+      border: 1px solid #fbcfe8;
+      border-radius: var(--radius);
+      margin-bottom: 10px;
+    }
+    .discovery-pending-header-label {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #be185d; font-weight: 700;
+    }
+    [data-theme="dark"] .discovery-pending-header {
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.14) 0%, rgba(234, 179, 8, 0.14) 100%);
+      border-color: rgba(236, 72, 153, 0.30);
+    }
+    [data-theme="dark"] .discovery-pending-header-label { color: #f9a8d4; }
+
+    /* Overlap warning callout (used per-candidate when smartfetch dupes) */
+    .overlap-warning {
+      margin-top: 8px; padding: 8px 10px;
+      background: #fef3c7; border: 1px solid #fde68a;
+      border-radius: 8px; font-size: 12px; color: #92400e;
+    }
+    [data-theme="dark"] .overlap-warning {
+      background: rgba(234, 179, 8, 0.16);
+      border-color: rgba(234, 179, 8, 0.40);
+      color: #fde68a;
+    }
 
     /* Repair modal */
     .repair-modal { max-width: 540px; }
@@ -164,6 +199,16 @@
     .kind-idealist, .kind-nycbar, .kind-psjd { background: #fef3c7; color: #92400e; }
     .kind-smartfetch { background: #fce7f3; color: #be185d; }
     .kind-bookmark { background: #e0f2fe; color: #075985; }
+    /* Dark variants — soft pastels become low-alpha tints; the strong text
+       color stays the same hue but lighter, so the badge meaning is preserved. */
+    [data-theme="dark"] .kind-greenhouse,
+    [data-theme="dark"] .kind-lever { background: rgba(99, 102, 241, 0.18); color: #a5b4fc; }
+    [data-theme="dark"] .kind-usajobs { background: rgba(34, 197, 94, 0.16); color: #86efac; }
+    [data-theme="dark"] .kind-idealist,
+    [data-theme="dark"] .kind-nycbar,
+    [data-theme="dark"] .kind-psjd { background: rgba(234, 179, 8, 0.16); color: #fde68a; }
+    [data-theme="dark"] .kind-smartfetch { background: rgba(236, 72, 153, 0.18); color: #f9a8d4; }
+    [data-theme="dark"] .kind-bookmark { background: rgba(56, 189, 248, 0.16); color: #7dd3fc; }
 
     .add-form {
       background: var(--surface-2);
@@ -429,28 +474,48 @@
             <button class="filter-pill" data-preview-kind="weekly">Weekly digest</button>
           </div>
 
-          <div style="background:white;border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
             <div style="min-width:0;flex:1">
               <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600">Subject</div>
               <div id="preview-subject" style="font-family:var(--font-display);font-size:15px;font-weight:600;letter-spacing:-0.02em;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Loading…</div>
             </div>
             <div style="display:flex;gap:8px;align-items:center">
-              <input type="email" id="preview-test-to" placeholder="leave blank for saved recipients" style="font-size:12px;padding:7px 10px;width:220px;background:white">
+              <input type="email" id="preview-test-to" placeholder="leave blank for saved recipients" style="font-size:12px;padding:7px 10px;width:220px">
               <button class="btn" id="preview-send-test" style="font-size:12px;padding:7px 12px">Send test</button>
             </div>
           </div>
 
-          <div style="background:white;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
-            <iframe id="preview-iframe" style="width:100%;height:480px;border:0;background:#f7faf9"></iframe>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+            <iframe id="preview-iframe" style="width:100%;height:480px;border:0;background:#fff"></iframe>
           </div>
 
           <p id="preview-status" style="margin-top:10px;font-size:12px"></p>
 
           <div style="margin-top:18px">
             <div style="font-weight:600;font-size:13px;color:var(--ink);margin-bottom:6px">Recently sent</div>
-            <div id="preview-log" style="background:white;border:1px solid var(--border);border-radius:var(--radius);padding:4px"></div>
+            <div id="preview-log" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:4px"></div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ===== Appearance ===== -->
+    <div class="section" id="section-appearance">
+      <div class="section-head" data-section="appearance">
+        <div>
+          <div class="section-title">Appearance</div>
+          <div class="section-sub" id="appearance-sub">Theme: auto</div>
+        </div>
+        <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="section-body">
+        <label>Theme</label>
+        <div role="radiogroup" id="theme-choice" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="filter-pill" data-theme-choice="auto">Auto (follow system)</button>
+          <button type="button" class="filter-pill" data-theme-choice="light">Light</button>
+          <button type="button" class="filter-pill" data-theme-choice="dark">Dark</button>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin-top:8px">Auto follows your operating-system setting and switches when it changes. Light and Dark are sticky overrides.</p>
       </div>
     </div>
 
