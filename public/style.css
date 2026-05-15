@@ -5,9 +5,15 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Geist:wght@400;500;600;700&display=swap');
 
-/* Lock to light mode — prevent dark-mode browsers/OS from inverting */
-:root { color-scheme: light; }
-html { background: #f7faf9; }
+/* Theme system.
+   Default = light. Dark variants live in [data-theme="dark"] below.
+   No data-theme attribute? An inline <head> script in each HTML page sets
+   data-theme based on saved preference (localStorage 'theme': 'light' |
+   'dark' | 'auto') or, when 'auto', the OS preference (matchMedia).
+   That avoids FOUC because the attribute is set before the stylesheet paints.
+*/
+:root { color-scheme: light dark; }
+html { background: var(--bg); }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -16,6 +22,7 @@ html { background: #f7faf9; }
   --bg: #f7faf9;
   --surface: #ffffff;
   --surface-2: #f1f5f4;
+  --surface-translucent: rgba(247, 250, 249, 0.85);  /* Sticky header / tab bar — meant to be paired with backdrop-filter blur */
   --border: #e3e8ec;
   --border-strong: #cbd3d8;
 
@@ -59,6 +66,55 @@ html { background: #f7faf9; }
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
+/* Dark theme — applies when [data-theme="dark"] is set on <html>.
+   The attribute is set by the no-FOUC inline init script in each page
+   based on saved pref or OS preference.
+
+   Design principles:
+   - Surfaces are warm slate (not pure black) for paper-like long-read comfort
+   - Accent colors (blue/green/warn/bad) keep their hues; soft variants
+     become low-alpha overlays so they tint the dark surface naturally
+   - Shadows shift to true black for contrast; otherwise they vanish
+   - Borders contrast against surface but stay quiet
+*/
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0b1220;
+  --surface: #131c2c;
+  --surface-2: #1c2638;
+  --surface-translucent: rgba(11, 18, 32, 0.78);
+  --border: #2a3548;
+  --border-strong: #3d4a63;
+
+  --ink: #e6edf5;
+  --ink-2: #c1cad6;
+  --muted: #8a98ab;
+  --muted-2: #6b7886;
+
+  --blue: #4f8bff;
+  --blue-soft: rgba(79, 139, 255, 0.16);
+  --blue-ink: #93b6ff;
+  --green: #34d399;
+  --green-soft: rgba(52, 211, 153, 0.14);
+  --green-ink: #6ee7b7;
+
+  --good: var(--green);
+  --good-soft: var(--green-soft);
+  --warn: #f59e0b;
+  --warn-soft: rgba(245, 158, 11, 0.16);
+  --bad: #f87171;
+  --bad-soft: rgba(248, 113, 113, 0.16);
+  --info: var(--blue);
+  --info-soft: var(--blue-soft);
+
+  /* Stronger shadows since light shadows vanish on dark surfaces */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.40), 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.40), 0 1px 3px rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.50), 0 4px 12px rgba(0, 0, 0, 0.30);
+}
+
 body {
   font-family: var(--font-ui);
   background: var(--bg);
@@ -74,7 +130,7 @@ body {
 header {
   position: sticky;
   top: 0;
-  background: rgba(247, 250, 249, 0.85);
+  background: var(--surface-translucent);
   backdrop-filter: saturate(140%) blur(12px);
   -webkit-backdrop-filter: saturate(140%) blur(12px);
   border-bottom: 1px solid var(--border);
@@ -2141,7 +2197,7 @@ button[disabled] {
   right: 0;
   bottom: 0;
   z-index: 50;
-  background: rgba(247,250,249,0.92);
+  background: var(--surface-translucent);
   backdrop-filter: saturate(150%) blur(14px);
   -webkit-backdrop-filter: saturate(150%) blur(14px);
   border-top: 1px solid var(--border);

@@ -8,6 +8,9 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { readFile, readFileSync } from 'node:fs';
+import { promisify } from 'node:util';
+const readFileAsync = promisify(readFile);
 
 import listingsRouter from './routes/listings.js';
 import feedbackRouter from './routes/feedback.js';
@@ -35,7 +38,40 @@ const app = express();
 // of seeing every request as coming from 127.0.0.1.
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
-app.use(express.static(join(ROOT, 'public'), {
+
+const PUBLIC_DIR = join(ROOT, 'public');
+
+// Detect dev vs deployed: in deployed builds the GitHub Actions workflow
+// substitutes __CACHE_VERSION__ in HTML with the commit SHA via sed. If the
+// literal token is still present, we're running pre-deploy (e.g. local dev),
+// so substitute it at request time with a fresh timestamp. That gives every
+// page load a unique URL for the JS/CSS refs, which forces the browser to
+// fetch fresh assets without us having to fight the immutable cache header.
+let IS_DEV = false;
+try {
+  IS_DEV = readFileSync(join(PUBLIC_DIR, 'index.html'), 'utf-8').includes('__CACHE_VERSION__');
+} catch {}
+if (IS_DEV) log.info('dev mode: substituting __CACHE_VERSION__ at request time');
+
+if (IS_DEV) {
+  app.use(async (req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    let urlPath = req.path;
+    if (urlPath === '/') urlPath = '/index.html';
+    if (!urlPath.endsWith('.html')) return next();
+    try {
+      const html = await readFileAsync(join(PUBLIC_DIR, urlPath), 'utf-8');
+      const out = html.replace(/__CACHE_VERSION__/g, String(Date.now()));
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(out);
+    } catch {
+      next();
+    }
+  });
+}
+
+app.use(express.static(PUBLIC_DIR, {
   // `path` is the resolved file path on disk (express.static's second
   // setHeaders arg). Don't read res.req.path here — that's the URL path,
   // and for `/` it's `/` (not `/index.html`), which would mis-classify

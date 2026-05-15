@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#f7faf9">
+  <script>(function(){function a(t){document.documentElement.dataset.theme=t;var m=document.querySelector('meta[name="theme-color"]');if(m)m.content=t==='dark'?'#0b1220':'#f7faf9';}function r(){var s=localStorage.getItem('theme')||'auto';return s==='auto'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):s;}try{a(r());}catch(e){}try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){if((localStorage.getItem('theme')||'auto')==='auto')a(r());});}catch(e){}})();</script>
   <title>Ignored · AnyaJob</title>
   <link rel="stylesheet" href="/style.css?v=__CACHE_VERSION__">
 </head>

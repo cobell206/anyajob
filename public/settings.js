@@ -581,8 +581,8 @@ async function loadPendingDiscoveries() {
 
   wrap.style.display = 'block';
   wrap.innerHTML = `
-    <div style="padding:14px 16px;background:linear-gradient(135deg, #fdf4ff 0%, #fef3c7 100%);border:1px solid #fbcfe8;border-radius:var(--radius);margin-bottom:10px">
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#be185d;font-weight:700">✨ Pending source candidates</div>
+    <div class="discovery-pending-header">
+      <div class="discovery-pending-header-label">✨ Pending source candidates</div>
       <div style="margin-top:4px;font-size:13px;color:var(--ink-2)">
         ${pending.length} ${pending.length === 1 ? 'candidate is' : 'candidates are'} waiting for your review.
         ${data.lastSummary ? ' <span style="font-style:italic">' + escapeHtml(data.lastSummary) + '</span>' : ''}
@@ -603,7 +603,7 @@ async function loadPendingDiscoveries() {
       ? `<div class="source-meta"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:var(--blue-ink);text-decoration:none">${escapeHtml(url)} ↗</a></div>`
       : '';
     const overlapWarning = c.overlapsWith ? `
-      <div style="margin-top:8px;padding:8px 10px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#92400e">
+      <div class="overlap-warning">
         ⚠ Overlaps with smartfetch source <strong>${escapeHtml(c.overlapsWith.name)}</strong>.
         Approving this will cause double-fetching — consider disabling that source after approval.
       </div>
@@ -1023,6 +1023,43 @@ document.querySelector('#section-notify .section-head').addEventListener('click'
     loadPreviewLog();
   }
 });
+
+// ===== Appearance / theme =====
+// The inline <head> script in each HTML page applies the resolved theme on
+// load (no FOUC). This block just keeps the Settings UI in sync and lets
+// her flip between auto / light / dark.
+function applyTheme(stored) {
+  const resolved = stored === 'auto'
+    ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : stored;
+  document.documentElement.dataset.theme = resolved;
+  const tc = document.querySelector('meta[name="theme-color"]');
+  if (tc) tc.content = resolved === 'dark' ? '#0b1220' : '#f7faf9';
+}
+
+function syncThemeUI() {
+  const stored = localStorage.getItem('theme') || 'auto';
+  $$('[data-theme-choice]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.themeChoice === stored);
+  });
+  const sub = $('#appearance-sub');
+  if (sub) {
+    sub.textContent = stored === 'auto'
+      ? `Theme: auto (currently ${document.documentElement.dataset.theme})`
+      : `Theme: ${stored}`;
+  }
+}
+
+$$('[data-theme-choice]').forEach((b) => {
+  b.addEventListener('click', () => {
+    const choice = b.dataset.themeChoice;
+    localStorage.setItem('theme', choice);
+    applyTheme(choice);
+    syncThemeUI();
+  });
+});
+
+syncThemeUI();
 
 // ===== Spend =====
 api('/api/spend').then((s) => {
