@@ -1,6 +1,6 @@
 // public/modal.js — reusable detail modal for a listing
 
-import { $, $$, escapeHtml, api, fmtSalary, fmtDateLong, scoreClass, STATUSES } from './app.js';
+import { $, $$, escapeHtml, api, fmtSalary, fmtDateLong, scoreClass, STATUSES, SVG_THUMB_UP, SVG_THUMB_DOWN } from './app.js';
 import { renderDocumentsSection, wireDocumentActions } from './documents.js';
 
 let currentListing = null;
@@ -106,8 +106,8 @@ export function openModal(listing, onUpdate) {
         <div class="modal-section">
           <h3>Your decision</h3>
           <div class="btn-row" style="margin-bottom: 8px">
-            <button class="btn btn-vote up ${listing.rating === 'up' ? 'active' : ''}" data-rate="up">👍</button>
-            <button class="btn btn-vote down ${listing.rating === 'down' ? 'active' : ''}" data-rate="down">👎</button>
+            <button class="btn btn-vote up ${listing.rating === 'up' ? 'active' : ''}" data-rate="up" aria-label="Like this listing">${SVG_THUMB_UP}</button>
+            <button class="btn btn-vote down ${listing.rating === 'down' ? 'active' : ''}" data-rate="down" aria-label="Dislike this listing">${SVG_THUMB_DOWN}</button>
             ${listing.url ? `<a class="btn primary" href="${escapeHtml(listing.url)}" target="_blank" rel="noopener">Open original ↗</a>` : ''}
           </div>
 
