@@ -7,6 +7,7 @@
 import { $, $$, escapeHtml, api, fmtSalary, fmtDate, scoreClass, STATUSES, SVG_THUMB_UP, SVG_THUMB_DOWN } from './app.js';
 import { openModal } from './modal.js';
 import { openAddRoleModal } from './add-role-modal.js';
+import { openReviewCandidatesModal } from './review-candidates-modal.js';
 
 let allListings = [];
 let sortKey = 'score';
@@ -835,6 +836,7 @@ async function load() {
       renderFilters(initial.stats);
     }
     if (initial.summaries) renderSummaries(initial.summaries);
+    if (initial.discoveries) updatePendingReviewPill(initial.discoveries.pendingCount || 0);
     render();
     firstRenderDone = true;
     return;
@@ -842,9 +844,34 @@ async function load() {
 
   const data = await api('/api/listings?days=60');
   allListings = data.listings;
-  await Promise.all([loadStats(), loadSummaries()]);
+  await Promise.all([loadStats(), loadSummaries(), loadPendingReviewCount()]);
   render();
   firstRenderDone = true;
+}
+
+// Pending source candidates from cron Discovery runs. We only need the
+// count for the pill — the modal fetches the full list on open. Initial
+// paint reads from window.__INITIAL.discoveries (inlined by routes/page.js);
+// this function only runs on the network fallback path.
+async function loadPendingReviewCount() {
+  try {
+    const data = await api('/api/discoveries');
+    updatePendingReviewPill((data.pending || []).length);
+  } catch {
+    updatePendingReviewPill(0);
+  }
+}
+
+function updatePendingReviewPill(count) {
+  const pill = $('#pending-review-pill');
+  if (!pill) return;
+  const countEl = $('#pending-review-count');
+  if (count > 0) {
+    if (countEl) countEl.textContent = String(count);
+    pill.hidden = false;
+  } else {
+    pill.hidden = true;
+  }
 }
 
 // Re-fetch after the add-role modal saves a new listing. Skips the
@@ -865,6 +892,15 @@ $('#add-role-btn')?.addEventListener('click', openAddRole);
 // Empty-state button only exists in the DOM when there are no roles; bind
 // defensively in case the empty state isn't shown.
 $('#add-role-btn-empty')?.addEventListener('click', openAddRole);
+
+// Pending-review pill: open the review-candidates modal. Modal calls back
+// with the post-action count so we can shrink/hide the pill in real time
+// as she approves or dismisses candidates inside it.
+$('#pending-review-pill')?.addEventListener('click', () => {
+  openReviewCandidatesModal({
+    onChange: ({ pendingCount }) => updatePendingReviewPill(pendingCount),
+  });
+});
 
 // Deep-link entry point: nav links from other pages route here as
 // /?add=1 so clicking "Add a role" from anywhere lands on roles with the

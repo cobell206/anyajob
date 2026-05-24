@@ -72,31 +72,13 @@
 
     /* Source cards */
     .source-list { display: flex; flex-direction: column; gap: 8px; }
-    .source-card {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 14px;
-      display: flex; justify-content: space-between; align-items: center;
-      gap: 10px;
-    }
-    /* Disabled source: keep the name legible (she still has to identify
-       which one to re-enable) — dim only the secondary metadata. */
-    .source-card.disabled .source-meta,
-    .source-card.disabled .source-stats { opacity: 0.55; }
-    .source-info { flex: 1; min-width: 0; }
-    .source-name { font-weight: 600; font-size: 14px; color: var(--ink); }
-    .source-meta { font-size: 12px; color: var(--muted); margin-top: 2px; word-break: break-all; }
-    .source-stats {
-      font-size: 12px; color: var(--muted); margin-top: 4px;
-      display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
-    }
-    .source-stats .stat-good { color: var(--green-ink); }
-    .source-stats .stat-bad { color: var(--bad-ink); display: inline-flex; align-items: center; gap: 4px; }
-    .source-stats .stat-warn { color: var(--warn-ink); }
-    .source-actions {
-      display: flex; align-items: center; gap: 6px; flex-shrink: 0;
-    }
+    /* .source-card (base + .candidate-card variant), .source-name/.source-meta/
+       .source-info/.source-stats/.source-actions, .candidate-header/-name-link/
+       -rationale/-overlap/-actions, .ext-link-icon, .pending-caption — all
+       moved to style.css alongside .candidate-card's renderer (candidates.js)
+       so the review-candidates modal on the roles page inherits the same look.
+       Settings-specific bits (.source-toggle, mobile .source-card stacking)
+       stay below. */
     /* Repair button — shown when a source is failing with 404/403 */
     .repair-btn {
       background: var(--warn-soft);
@@ -222,176 +204,10 @@
       display: flex; gap: 8px; justify-content: flex-end;
     }
 
-    /* .confidence-badge moved to style.css */
-
-    /* Candidate card (pending Discovery + live "Find new sources" results).
-       Variant of .source-card: flips to a column layout because the card is
-       a "read → decide" surface, not a "tweak status" one. Pink left-border
-       carries the "this isn't a real source yet" signal so the section
-       above doesn't need a banner. Shared template lives in settings.js. */
-    .source-card.candidate-card {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 0;
-      border-left: 3px solid #ec4899;
-      padding-left: 13px; /* compensate so content doesn't shift left by 1px */
-    }
-
-    /* Header row: [kind chip · name (link, eats middle) · confidence chip]
-       on the left, [Add · Dismiss] on the right. The actions used to live
-       in a footer with a divider above — but the cards were tall without
-       enough content to justify the stack. Inlining the buttons drops the
-       card height ~40% and makes the row read as "ready to decide" instead
-       of "scroll to find the buttons." */
-    .candidate-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      min-width: 0; /* let the name truncate before squeezing actions */
-    }
-    .candidate-header-text {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex: 1;
-      min-width: 0;
-    }
-    .candidate-header-text .source-name {
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-weight: 600;
-    }
-    /* When the confidence chip sits in the header row, drop kind-badge's
-       default margin-right — the flex gap is already handling spacing. */
-    .candidate-header .kind-badge { margin-right: 0; }
-
-    /* Title link with an inline external-link icon. Underline is on the
-       link itself (transparent at rest, blue on hover) so the affordance
-       appears without making the title look like a generic blue link
-       at-rest. Icon is at lower opacity at rest, full on hover. */
-    .candidate-name-link {
-      color: var(--ink);
-      text-decoration: none;
-      display: inline-flex;
-      align-items: baseline;
-      gap: 5px;
-      border-bottom: 1px solid transparent;
-      transition: color 0.18s ease-out, border-color 0.18s ease-out;
-      max-width: 100%;
-    }
-    .candidate-name-link:hover {
-      color: var(--blue-ink);
-      border-bottom-color: currentColor;
-    }
-    .candidate-name-link:focus-visible {
-      outline: none;
-      color: var(--blue-ink);
-      border-bottom-color: currentColor;
-      border-radius: 2px;
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
-    }
-    .ext-link-icon {
-      flex-shrink: 0;
-      opacity: 0.45;
-      transform: translateY(1px);
-      transition: opacity 0.18s ease-out;
-    }
-    .candidate-name-link:hover .ext-link-icon,
-    .candidate-name-link:focus-visible .ext-link-icon { opacity: 1; }
-
-    .candidate-rationale {
-      margin-top: 8px;
-      font-size: 12px;
-      font-style: italic;
-      line-height: 1.45;
-      color: var(--ink-2);
-    }
-    .candidate-overlap {
-      margin-top: 8px;
-      padding: 8px 10px;
-      background: var(--warn-soft);
-      border: 1px solid #fde68a;
-      border-radius: 8px;
-      font-size: 12px;
-      line-height: 1.4;
-      color: var(--warn-ink);
-    }
-
-    /* Actions live inside the header row now (right side), no divider above.
-       8px gap between buttons meets the touch-spacing minimum so adjacent
-       taps on mobile don't mis-fire onto the neighboring button. */
-    .source-card.candidate-card .candidate-actions {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-shrink: 0;
-      margin: 0;
-      padding: 0;
-      border: 0;
-    }
-    .candidate-actions .btn {
-      font-size: 12px;
-      padding: 6px 12px;
-    }
-
-    /* Mobile: stack actions below the header so buttons keep their tap
-       targets and the name has horizontal room to breathe. */
-    @media (max-width: 600px) {
-      .candidate-header { flex-wrap: wrap; }
-      .source-card.candidate-card .candidate-actions {
-        width: 100%;
-        justify-content: flex-end;
-        margin-top: 10px;
-        padding-top: 10px;
-        border-top: 1px solid var(--border);
-      }
-    }
-
-    /* "Pending review" callout. Soft pink tint + matching left-accent ties
-       this header to the candidate cards below (which share the same
-       #ec4899 border-left), so the AI's summary copy reads as the framing
-       for what follows instead of floating muted-italic decoration. */
-    .pending-caption {
-      margin: 8px 0 12px;
-      padding: 12px 14px;
-      background: linear-gradient(180deg, rgba(236, 72, 153, 0.07), rgba(236, 72, 153, 0.02));
-      border: 1px solid rgba(236, 72, 153, 0.22);
-      border-left: 3px solid #ec4899;
-      border-radius: 10px;
-    }
-    .pending-caption.is-empty { padding: 10px 14px; }
-    .pending-caption-head {
-      display: flex;
-      align-items: baseline;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .pending-caption-label {
-      color: #be185d;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-size: 11px;
-    }
-    .pending-caption-count {
-      color: var(--ink-2);
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .pending-caption-summary {
-      color: var(--ink-2);
-      font-style: italic;
-      font-size: 13px;
-      line-height: 1.55;
-      margin: 6px 0 0;
-    }
-    [data-theme="dark"] .pending-caption {
-      background: linear-gradient(180deg, rgba(236, 72, 153, 0.14), rgba(236, 72, 153, 0.05));
-      border-color: rgba(236, 72, 153, 0.32);
-    }
+    /* .confidence-badge, .source-card variants (incl. .candidate-card column
+       layout), .candidate-header / -name-link / -rationale / -overlap /
+       -actions, .ext-link-icon, .pending-caption — all live in style.css now
+       so the review-candidates modal on the roles page renders identically. */
     [data-theme="dark"] .pending-caption-label { color: #f472b6; }
 
     /* .kind-badge (+ palette), .kind-tabs/.kind-tab, .form-help, .test-result

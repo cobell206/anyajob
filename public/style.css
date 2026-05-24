@@ -15,23 +15,31 @@
    none of these fit, and promote anything that gets reused into this list.
 
      Page masthead .......... .page-head + .page-title + .page-sub
-     Form / result panel .... .result-card
+     Sectional container .... .panel (+ .panel-head / .panel-title /
+                              .panel-subtitle) — single source of truth for
+                              "section wrapped in a card." Settings .section
+                              accordion composes .panel and adds collapse
+                              behavior. Paste's .result-card composes .panel.
      Clickable list item .... .card (with .card-row, .card-meta, .card-foot)
      Inline status / result . .test-result (+ .ok / .err modifiers)
-     Empty state ............ .empty-state, or .empty + .empty-icon/.empty-title
+     Empty state ............ .empty (+ .empty-icon / .empty-title)
      Buttons ................ .btn (+ .primary / .ghost / .danger), .btn-link
+                              .primary is solid charcoal (--ink fill); other
+                              variants use blue/green semantic tokens
      Inputs ................. bare <input>, <textarea>, <select> — global
-                              styles apply; no per-page overrides
-     Two-column form rows ... .field-grid
-     Field help text ........ .form-help
+                              rule sets size, focus ring, hover state.
+                              No per-page input overrides
+     Two-column form rows ... .field-grid (+ .full child modifier)
+     Field help text ........ .form-help (block under input)
+     Chip input ............. .chip-input container + .chip pills
      Loading spinner ........ .spinner / .spinner.sm / .spinner.sm.on-primary
-     Section eyebrow ........ .section-eyebrow + .section-eyebrow-label /
-                              .section-eyebrow-rule / .section-eyebrow-desc /
-                              .section-eyebrow-sm (compact, in-card variant)
      Data typography ........ .cell-title, .cell-company, .cell-location,
                               .cell-salary, .score-num, .status-badge
-     Stagger reveal ......... .is-entering + --i  (or scoped per-page
-                              nth-child delays for fixed-size lists)
+     Stagger reveal ......... .is-entering + --i (rows/cards, JS-driven);
+                              .panel + .stats .stat cascade via :nth-of-type
+                              (page-load entrance, CSS-only)
+     Page-load motion ....... rowIn keyframe is the single motion vocabulary
+                              — all entrance animations reuse it
 
    Domain-specific compositions (.source-card, .candidate-card, .ignored-row,
    .listing-row, .stat) layer on top of these primitives — they're allowed
@@ -39,6 +47,38 @@
    Do NOT introduce per-page surface/typography systems (hero panels with
    bespoke fonts, page-specific button styles, etc.) — those break cohesion
    with the roles page without adding feature value.
+
+   ─────────────────────────────────────────────────────────────────────────
+   TABLE OF CONTENTS
+   ─────────────────────────────────────────────────────────────────────────
+   The file is sectioned by single-line dividers (`/* ============ X ============ */`).
+   These super-zones group them into ~9 conceptual chunks for navigation:
+
+     FOUNDATIONS              (lines  ~1 –  381) tokens, theme, html/body,
+                                                 header, layout
+     ROLES PAGE               (lines ~382 – 1257) stats, filter bar, filter
+                                                 panel, kanban, table,
+                                                 score cell, status badge,
+                                                 mobile cards, reject bar,
+                                                 modal reject chips
+     LISTING-DETAIL MODAL     (lines ~1258 – 1494) modal chrome
+     FORM PRIMITIVES          (lines ~1495 – 1729) buttons, label, input,
+                                                 textarea, field-grid,
+                                                 chip-input
+     OTHER PAGE SURFACES      (lines ~1730 – 2090) ignored, empty, responsive
+     FEATURE MODULES          (lines ~2091 – 2395) daily brief, weekly
+                                                 reflection, documents
+     MOTION & LOADING         (lines ~2396 – 2660) spinners, add-role flow,
+                                                 entrance animation, skeleton
+     NAV & OVERLAYS           (lines ~2660 – 2949) preview overlay, tab bar
+     SHARED LIFTED ATOMICS    (lines ~2950 –   …)  .panel, .section accordion,
+                                                 kind/confidence badges,
+                                                 test result, form helpers,
+                                                 toggle row, kind-tab pills
+
+   To find a class: `grep -n "^\.classname" public/style.css`. Most classes
+   live in exactly one block; cross-zone references (.panel referenced by
+   .section, etc.) are documented inline.
    ───────────────────────────────────────────────────────────────────────── */
 
 /* Theme system.
@@ -380,52 +420,6 @@ main.narrow { max-width: var(--page-narrow); }
   font-size: 14px;
   color: var(--muted);
   margin-top: 4px;
-}
-
-/* Section eyebrow: tracked-uppercase label + hairline rule that extends
-   to the right edge of the content area. Used by editorial-ish sections
-   inside .result-card panels (profile sections) and reusable elsewhere. */
-.section-eyebrow {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  margin-bottom: 18px;
-}
-.section-eyebrow-label {
-  font-family: var(--font-ui);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-  flex-shrink: 0;
-}
-.section-eyebrow-rule {
-  flex: 1;
-  height: 1px;
-  background: var(--border-strong);
-  align-self: center;
-  transform: translateY(-1px);
-}
-.section-eyebrow-desc {
-  margin: -4px 0 22px;
-  font-size: 14px;
-  line-height: 1.55;
-  color: var(--muted);
-  max-width: 48em;
-}
-
-/* Compact eyebrow heading for in-card section labels (Strengths, Concerns,
-   etc.) — same tracked-uppercase treatment as .section-eyebrow-label but
-   sized to sit directly above a paragraph or short list rather than gate a
-   full chapter. */
-.section-eyebrow-sm {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  margin: 20px 0 8px;
 }
 
 /* ============ STAT TILES ============ */
@@ -1822,6 +1816,280 @@ textarea { resize: vertical; min-height: 80px; }
   color: var(--muted);
 }
 
+/* Pending-review pill — sits in .page-head-actions on the roles page when
+   the cron Discovery run has surfaced source candidates awaiting approval.
+   Shape mirrors .ignored-link (chip with rounded ends) but the color is the
+   pending-pink accent already in use on the settings section dot, so the
+   visual identity is consistent across surfaces. A leading dot pulses to
+   draw the eye; the count rides on the right in tabular-nums so the chip
+   doesn't reflow as cards are approved/dismissed. Hidden via [hidden]
+   when count is zero so it never sits empty. */
+.pending-review-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #be185d;
+  background: rgba(236, 72, 153, 0.08);
+  border: 1px solid rgba(236, 72, 153, 0.28);
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.pending-review-pill[hidden] { display: none; }
+.pending-review-pill:hover {
+  background: rgba(236, 72, 153, 0.14);
+  border-color: rgba(236, 72, 153, 0.45);
+  color: #9d174d;
+}
+.pending-review-pill::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ec4899;
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.18);
+  animation: pending-pulse 1.6s ease-in-out infinite;
+}
+.pending-review-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+@keyframes pending-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.9); }
+  50%      { opacity: 1;    transform: scale(1.1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pending-review-pill::before { animation: none; }
+}
+[data-theme="dark"] .pending-review-pill {
+  color: #f9a8d4;
+  background: rgba(236, 72, 153, 0.10);
+  border-color: rgba(236, 72, 153, 0.32);
+}
+[data-theme="dark"] .pending-review-pill:hover {
+  background: rgba(236, 72, 153, 0.18);
+  border-color: rgba(236, 72, 153, 0.52);
+  color: #fbcfe8;
+}
+
+/* Review-candidates modal body — scopes the loading/empty placeholders and
+   the candidate list spacing. Cards themselves come from .source-card +
+   .candidate-card (below) so the look stays consistent across the settings
+   page and this modal. */
+.modal-review-candidates .rc-list { display: flex; flex-direction: column; gap: 10px; }
+.modal-review-candidates .rc-loading,
+.modal-review-candidates .rc-empty {
+  padding: 32px 8px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+.modal-review-candidates .rc-error {
+  padding: 16px;
+  color: var(--bad);
+  font-size: 14px;
+}
+
+/* ============ SOURCE / CANDIDATE CARD ============
+   Shared between the Settings → Sources accordion and the review-candidates
+   modal on the roles page. Lifted out of settings.html's inline <style> when
+   the candidate-card renderer became shared (public/candidates.js) so both
+   surfaces get the same look. Settings-specific bits (.source-toggle,
+   .source-actions mobile reflow) still live in settings.html.
+
+   .source-card is the base flex-row layout used for real sources in the
+   settings list (name + meta on the left, run/toggle/menu actions on the
+   right). .source-card.candidate-card is the variant used for AI-suggested
+   candidates: flips to a column because the card is a "read → decide"
+   surface, and adds a pink left-accent so it reads as not-yet-a-source. */
+.source-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.source-card.disabled .source-meta,
+.source-card.disabled .source-stats { opacity: 0.55; }
+.source-info { flex: 1; min-width: 0; }
+.source-name { font-weight: 600; font-size: 14px; color: var(--ink); }
+.source-meta { font-size: 12px; color: var(--muted); margin-top: 2px; word-break: break-all; }
+.source-stats {
+  font-size: 12px; color: var(--muted); margin-top: 4px;
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+}
+.source-stats .stat-good { color: var(--green-ink); }
+.source-stats .stat-bad { color: var(--bad-ink); display: inline-flex; align-items: center; gap: 4px; }
+.source-stats .stat-warn { color: var(--warn-ink); }
+.source-actions {
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+}
+
+/* Candidate variant: column layout + pink left-accent. */
+.source-card.candidate-card {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  border-left: 3px solid #ec4899;
+  padding-left: 13px; /* compensate so content doesn't shift left by 1px */
+}
+
+/* Header row: [kind chip · name (link, eats middle) · confidence chip] on
+   the left, [Add · Dismiss] on the right. Inlining the actions instead of
+   stacking them in a footer keeps cards ~40% shorter and reads as "ready
+   to decide" rather than "scroll to find the buttons." */
+.candidate-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.candidate-header-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.candidate-header-text .source-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.candidate-header .kind-badge { margin-right: 0; }
+
+/* Title link with an inline external-link icon. Underline appears on the
+   link itself only on hover (transparent at rest) so the title doesn't
+   read as a generic blue link by default. */
+.candidate-name-link {
+  color: var(--ink);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  border-bottom: 1px solid transparent;
+  transition: color 0.18s ease-out, border-color 0.18s ease-out;
+  max-width: 100%;
+}
+.candidate-name-link:hover {
+  color: var(--blue-ink);
+  border-bottom-color: currentColor;
+}
+.candidate-name-link:focus-visible {
+  outline: none;
+  color: var(--blue-ink);
+  border-bottom-color: currentColor;
+  border-radius: 2px;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+.ext-link-icon {
+  flex-shrink: 0;
+  opacity: 0.45;
+  transform: translateY(1px);
+  transition: opacity 0.18s ease-out;
+}
+.candidate-name-link:hover .ext-link-icon,
+.candidate-name-link:focus-visible .ext-link-icon { opacity: 1; }
+
+.candidate-rationale {
+  margin-top: 8px;
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.candidate-overlap {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--warn-soft);
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--warn-ink);
+}
+
+.source-card.candidate-card .candidate-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.candidate-actions .btn {
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+/* Mobile: stack actions below the header so buttons keep their tap targets
+   and the name has horizontal room to breathe. */
+@media (max-width: 600px) {
+  .candidate-header { flex-wrap: wrap; }
+  .source-card.candidate-card .candidate-actions {
+    width: 100%;
+    justify-content: flex-end;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* "Pending review" callout. Soft pink tint + matching left-accent ties the
+   header to the candidate cards below (which share the same #ec4899
+   border-left), so the AI's summary copy reads as the framing for what
+   follows instead of floating muted-italic decoration. */
+.pending-caption {
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, rgba(236, 72, 153, 0.07), rgba(236, 72, 153, 0.02));
+  border: 1px solid rgba(236, 72, 153, 0.22);
+  border-left: 3px solid #ec4899;
+  border-radius: 10px;
+}
+.pending-caption.is-empty { padding: 10px 14px; }
+.pending-caption-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pending-caption-label {
+  color: #be185d;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+}
+.pending-caption-count {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.pending-caption-summary {
+  color: var(--ink-2);
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 6px 0 0;
+}
+[data-theme="dark"] .pending-caption {
+  background: linear-gradient(180deg, rgba(236, 72, 153, 0.14), rgba(236, 72, 153, 0.05));
+  border-color: rgba(236, 72, 153, 0.32);
+}
+
 .ignored-list { display: flex; flex-direction: column; gap: 24px; }
 
 .ignored-group { display: flex; flex-direction: column; gap: 8px; }
@@ -2528,6 +2796,15 @@ button[disabled] {
   justify-content: center;
 }
 
+/* ============ ANIMATION / ENTRANCE ============ */
+/* App-wide motion vocabulary. Single keyframe (rowIn) reused by every
+   first-paint cascade in the app:
+     - .is-entering (table rows, source cards, manual-form children)
+     - .page-head + .panel cascades on each page load
+     - .stats .stat tile cascade on Roles (see STAT TILES block)
+   All wrapped in prefers-reduced-motion so reduced-motion users skip
+   the cascade entirely. */
+
 /* Row/card entrance: rows cascade in on first paint. Only the first ~8
    visible get the stagger; we cap --i in JS so a 60-listing day doesn't
    take 2 seconds to reveal. The `backwards` fill keeps each row hidden
@@ -2566,6 +2843,7 @@ button[disabled] {
   .panel:nth-of-type(6) { animation-delay: 290ms; }
 }
 
+/* ============ SKELETON ============ */
 /* Shimmer skeletons — used on pages where initial paint is empty pending an
    API fetch (settings, profile). Matches the final layout's shape so there's
    no layout shift when real data swaps in. Reduced-motion drops the shimmer

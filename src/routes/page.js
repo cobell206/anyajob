@@ -48,9 +48,11 @@ function hydrate(listing, feedback) {
 }
 
 async function computeInitialData() {
-  const [{ listings = [] } = {}, feedback = {}] = await Promise.all([
+  const [{ listings = [] } = {}, feedback = {}, discoveries = {}] = await Promise.all([
     readJson('listings.json').catch(() => ({ listings: [] })),
     readJson('feedback.json').catch(() => ({})),
+    // Best-effort: missing file → empty object → 0 pending, pill stays hidden.
+    readJson('discoveries.json').catch(() => ({})),
   ]);
 
   // 60-day window matches what index.html requests via /api/listings?days=60.
@@ -81,6 +83,11 @@ async function computeInitialData() {
     summaries = JSON.parse(await readFile(SUMMARIES_PATH, 'utf-8'));
   } catch { /* leave null */ }
 
+  // Pending source candidates: just the count + the run's summary copy so the
+  // roles page can paint the pending-review pill without an extra fetch. The
+  // full candidate list is fetched on demand when she opens the modal.
+  const pendingCount = (discoveries.candidates || []).filter((c) => c.status === 'pending').length;
+
   return {
     listings: { count: hydrated.length, listings: hydrated },
     stats: {
@@ -89,6 +96,10 @@ async function computeInitialData() {
       appliedThisWeek,
     },
     summaries,
+    discoveries: {
+      pendingCount,
+      lastSummary: discoveries.lastSummary || null,
+    },
   };
 }
 
