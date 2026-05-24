@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light dark">
-  <meta name="theme-color" content="#f7faf9">
-  <script>(function(){function a(t){document.documentElement.dataset.theme=t;var m=document.querySelector('meta[name="theme-color"]');if(m)m.content=t==='dark'?'#0b1220':'#f7faf9';}function r(){var s=localStorage.getItem('theme')||'auto';return s==='auto'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):s;}try{a(r());}catch(e){}try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){if((localStorage.getItem('theme')||'auto')==='auto')a(r());});}catch(e){}})();</script>
+  <meta name="theme-color" content="#fafaf7">
+  <script>(function(){function a(t){document.documentElement.dataset.theme=t;var m=document.querySelector('meta[name="theme-color"]');if(m)m.content=t==='dark'?'#1a1614':'#fafaf7';}function r(){var s=localStorage.getItem('theme')||'auto';return s==='auto'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):s;}try{a(r());}catch(e){}try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){if((localStorage.getItem('theme')||'auto')==='auto')a(r());});}catch(e){}})();</script>
   <title>Roles · AnyaJob</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,9 +22,12 @@
         <h1 class="page-title">Roles</h1>
         <div class="page-sub" id="sub">Loading…</div>
       </div>
-      <a href="/ignored.html" class="ignored-link" id="ignored-link" hidden>
-        Ignored <span class="ignored-link-count" id="ignored-link-count"></span> →
-      </a>
+      <div class="page-head-actions">
+        <a href="/ignored.html" class="ignored-link" id="ignored-link" hidden>
+          Ignored <span class="ignored-link-count" id="ignored-link-count"></span> →
+        </a>
+        <button type="button" class="btn primary" id="add-role-btn">+ Add role</button>
+      </div>
     </div>
 
     <!-- Daily brief -->
@@ -86,14 +89,16 @@
       <div class="empty">
         <div class="empty-icon">○</div>
         <div class="empty-title">No roles yet</div>
-        <div class="empty-sub">The daily scrape runs at 6am. Or paste one to get started.</div>
+        <div class="empty-sub">The daily scrape runs at 6am, or add one now.</div>
+        <button type="button" class="btn primary" id="add-role-btn-empty" style="margin-top:14px">+ Add a role</button>
       </div>
     </div>
   </main>
 
   <script type="module">
-    import { $, $$, escapeHtml, api, fmtSalary, fmtDate, scoreClass, STATUSES } from './app.js?v=__CACHE_VERSION__';
+    import { $, $$, escapeHtml, api, fmtSalary, fmtDate, scoreClass, STATUSES, SVG_THUMB_UP, SVG_THUMB_DOWN } from './app.js?v=__CACHE_VERSION__';
     import { openModal } from './modal.js?v=__CACHE_VERSION__';
+    import { openAddRoleModal } from './add-role-modal.js?v=__CACHE_VERSION__';
 
     let allListings = [];
     let sortKey = 'score';
@@ -282,7 +287,7 @@
                 <div class="cell-title" style="margin-bottom:2px">${escapeHtml(l.title)}</div>
                 <div class="cell-company">${escapeHtml(l.company)}</div>
               </div>
-              <div class="score-num ${scoreClass(overall)}" style="font-size:28px">${overall}</div>
+              <div class="score-num lg ${scoreClass(overall)}">${overall}</div>
             </div>
             <div class="card-meta">
               <span>${escapeHtml(l.location || '—')}</span>
@@ -291,8 +296,8 @@
             </div>
             <div class="card-foot">
               ${statusBadge(l.status)}
-              ${l.rating === 'up' ? '<span style="color:var(--green)">👍</span>' :
-                l.rating === 'down' ? '<span style="color:var(--bad)">👎</span>' : ''}
+              ${l.rating === 'up' ? `<span class="rating-thumb up" aria-label="Liked">${SVG_THUMB_UP}</span>` :
+                l.rating === 'down' ? `<span class="rating-thumb down" aria-label="Disliked">${SVG_THUMB_DOWN}</span>` : ''}
             </div>
           </div>
         `;
@@ -704,13 +709,13 @@
               <div class="filter-pill-row">
                 ${[
                   { v: 'any', l: 'Any' },
-                  { v: 'up', l: '👍 Liked' },
-                  { v: 'down', l: '👎 Disliked' },
+                  { v: 'up', l: 'Liked', icon: SVG_THUMB_UP },
+                  { v: 'down', l: 'Disliked', icon: SVG_THUMB_DOWN },
                   { v: 'unrated', l: 'Unrated' },
                 ].map((o) => `
                   <button type="button"
                           class="filter-mini-pill ${o.v === filters.rating ? 'active' : ''}"
-                          data-rating="${o.v}">${o.l}</button>
+                          data-rating="${o.v}">${o.icon ? `<span class="filter-mini-pill-icon">${o.icon}</span>` : ''}${o.l}</button>
                 `).join('')}
               </div>
             </div>
@@ -932,6 +937,34 @@
       await Promise.all([loadStats(), loadSummaries()]);
       render();
       firstRenderDone = true;
+    }
+
+    // Re-fetch after the add-role modal saves a new listing. Skips the
+    // window.__INITIAL fast-path (that's the page-load snapshot and is stale
+    // now) and uses the same network branch load() would take. firstRenderDone
+    // stays true so the stagger animation doesn't replay on every reload.
+    async function reloadData() {
+      const data = await api('/api/listings?days=60');
+      allListings = data.listings;
+      await Promise.all([loadStats(), loadSummaries()]);
+      render();
+    }
+
+    function openAddRole() {
+      openAddRoleModal({ onAdded: reloadData });
+    }
+    $('#add-role-btn')?.addEventListener('click', openAddRole);
+    // Empty-state button only exists in the DOM when there are no roles; bind
+    // defensively in case the empty state isn't shown.
+    $('#add-role-btn-empty')?.addEventListener('click', openAddRole);
+
+    // Deep-link entry point: nav links from other pages route here as
+    // /?add=1 so clicking "Add a role" from anywhere lands on roles with the
+    // modal already open. Strip the param after opening so a refresh doesn't
+    // re-trigger it.
+    if (new URLSearchParams(location.search).get('add')) {
+      openAddRole();
+      history.replaceState(null, '', location.pathname);
     }
 
     $('#view-table').addEventListener('click', () => setView('table'));

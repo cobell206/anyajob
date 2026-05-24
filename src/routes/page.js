@@ -92,6 +92,27 @@ async function computeInitialData() {
   };
 }
 
+// Ignored-page fast path: matches /api/listings/ignored so the front-end can
+// render synchronously instead of flashing "Loading…" on first paint.
+async function computeIgnoredInitial() {
+  const [{ listings = [] } = {}, feedback = {}] = await Promise.all([
+    readJson('listings.json').catch(() => ({ listings: [] })),
+    readJson('feedback.json').catch(() => ({})),
+  ]);
+
+  const out = listings
+    .map((l) => hydrate(l, feedback))
+    .filter((l) => l.status === 'rejected');
+
+  out.sort((a, b) => {
+    const at = a.rejectAt || a.ingestedAt || '';
+    const bt = b.rejectAt || b.ingestedAt || '';
+    return bt.localeCompare(at);
+  });
+
+  return { listings: { count: out.length, listings: out } };
+}
+
 // JSON-safe inline: escape </ so a stray "</script>" in any string field
 // can't terminate our <script> tag prematurely.
 function safeJsonForScript(obj) {
@@ -99,17 +120,17 @@ function safeJsonForScript(obj) {
 }
 
 // Every page route runs through the same pipeline: read the HTML off
-// disk, substitute the nav, and (for / only) inject window.__INITIAL.
-// The data-file read for / is the only handler that can fail in
-// expected ways — all the others just touch the public/ HTML.
+// disk, substitute the nav, and (when initial is defined) inject
+// window.__INITIAL so the front-end can render before any fetch fires.
+// The data-file reads in initial() are the only handlers that can fail
+// in expected ways — pages without an initial just touch the public/ HTML.
 // Notifications was consolidated into a Settings accordion (commit 407ef65)
 // — public/notifications.html is gone, the page is no longer served.
 const PAGES = [
-  { path: '/',              file: 'index.html'   },
-  { path: '/profile.html',  file: 'profile.html' },
-  { path: '/paste.html',    file: 'paste.html'   },
-  { path: '/settings.html', file: 'settings.html' },
-  { path: '/ignored.html',  file: 'ignored.html' },
+  { path: '/',              file: 'index.html',    initial: computeInitialData    },
+  { path: '/profile.html',  file: 'profile.html'                                  },
+  { path: '/settings.html', file: 'settings.html'                                 },
+  { path: '/ignored.html',  file: 'ignored.html',  initial: computeIgnoredInitial },
 ];
 
 for (const page of PAGES) {
@@ -117,8 +138,8 @@ for (const page of PAGES) {
     try {
       let html = await readFile(join(PUBLIC_DIR, page.file), 'utf-8');
       html = applyNav(html, page.path);
-      if (page.path === '/') {
-        const initial = await computeInitialData();
+      if (page.initial) {
+        const initial = await page.initial();
         html = html.replace(
           '</body>',
           `<script>window.__INITIAL=${safeJsonForScript(initial)};</script>\n</body>`,

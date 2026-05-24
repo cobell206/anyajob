@@ -74,7 +74,7 @@ public/
   settings.html          ← settings page (markup only)
   settings.js            ← settings page logic (extracted from HTML)
   (notifications UI lives inside settings.html → Notifications section)
-  paste.html             ← manual paste-and-score page
+  add-role-modal.js      ← manual paste-and-score modal (mounts on index.html)
   style.css
 
 bin/

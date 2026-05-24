@@ -88,14 +88,14 @@ job-tracker/
 │   ├── weekly.js          ← Sunday digest cron
 │   └── test-email.js      ← verify SES setup
 └── public/
-    ├── index.html         ← table view + modal
-    ├── paste.html         ← manual JD scorer
+    ├── index.html         ← table view + modal (+ add-role modal trigger)
     ├── settings.html      ← preferences editor
     │                       (email previews + test send live in settings.html → Notifications section)
     ├── style.css
     ├── app.js
-    ├── modal.js
-    └── documents.js       ← upload UI
+    ├── modal.js              ← listing detail modal
+    ├── add-role-modal.js     ← manual JD scorer modal (opens from roles page)
+    └── documents.js          ← upload UI
 ```
 
 ## Setup (on laptop)
