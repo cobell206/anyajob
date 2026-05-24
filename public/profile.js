@@ -14,6 +14,13 @@ const SAVE_DEBOUNCE_MS = 600;
 let saveTimer = null;
 let saveInFlight = null;
 
+// Per-field saved-flash. Tracks which field wrappers (<div data-field="…">)
+// have been edited since the last successful save so we can pulse the
+// underline green on each of them when the POST settles. Set, not array,
+// so repeated edits to the same field only flash once.
+const pendingFlash = new Set();
+const FIELD_FLASH_MS = 900;
+
 const PROFILE_FIELDS = [
   'name', 'currentRole', 'yearsOutOfUndergrad', 'undergradSchool',
   'gpaRange', 'lsatStatus', 'geo', 'additionalContext',
@@ -247,6 +254,11 @@ async function save() {
       interestAreas: prefs.profile?.interestAreas || [],
     },
   };
+  // Snapshot pendingFlash up front: if the user starts editing another
+  // field while this POST is in flight, that field stays dirty for the
+  // next save cycle rather than getting flashed prematurely.
+  const flashThisRound = Array.from(pendingFlash);
+  pendingFlash.clear();
   // The legacy bottom "Save changes" button no longer exists in the
   // dossier layout (auto-save handles everything). Guard the disabled
   // toggle so older cached HTML doesn't crash here either.
@@ -258,11 +270,26 @@ async function save() {
     prefs = updated;
     dirty = false;
     setStatus('Filed', 'saved');
-    setTimeout(() => { if (!dirty) setStatus('auto-saves as you type'); }, 1800);
+    flashSavedFields(flashThisRound);
+    setTimeout(() => { if (!dirty) setStatus(''); }, 1800);
   } catch (err) {
     setStatus('Save failed: ' + err.message, 'dirty');
+    // Restore so the next successful save still flashes these fields.
+    flashThisRound.forEach((el) => pendingFlash.add(el));
   } finally {
     if (saveBtn) saveBtn.disabled = false;
+  }
+}
+
+function flashSavedFields(wrappers) {
+  for (const w of wrappers) {
+    if (!w) continue;
+    // Restart the animation cleanly even if a previous flash is still
+    // mid-frame on the same element.
+    w.classList.remove('is-saved');
+    void w.offsetWidth;
+    w.classList.add('is-saved');
+    setTimeout(() => w.classList.remove('is-saved'), FIELD_FLASH_MS);
   }
 }
 
@@ -353,7 +380,14 @@ async function init() {
   for (const k of PROFILE_FIELDS) {
     const el = $('#f-' + k);
     if (!el) continue;
-    el.addEventListener('input', scheduleSave);
+    // The dossier markup wraps each input in <div data-field="k"> so the
+    // flash can target the row (including its underline rule) rather
+    // than the bare input.
+    const wrap = el.closest('[data-field]');
+    el.addEventListener('input', () => {
+      if (wrap) pendingFlash.add(wrap);
+      scheduleSave();
+    });
     el.addEventListener('blur', flushSave);
   }
 
@@ -372,7 +406,7 @@ async function init() {
     schools.render();
     interests.render();
     dirty = false;
-    setStatus('auto-saves as you type');
+    setStatus('');
   });
 
   $('#resume-file').addEventListener('change', (e) => {
@@ -383,7 +417,7 @@ async function init() {
   $('#discover-btn').addEventListener('click', runDiscovery);
 
   await loadResume();
-  setStatus('auto-saves as you type');
+  setStatus('');
 }
 
 init().catch((err) => {
