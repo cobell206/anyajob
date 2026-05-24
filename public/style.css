@@ -1367,6 +1367,12 @@ td {
    .modal. */
 .modal.modal-add-role { max-width: 640px; }
 
+/* Confirm/alert dialog — narrower still since these only carry a short
+   prompt + two buttons. Used by app.js's confirmDialog / alertDialog,
+   which fire from any page, so the rule lives here in style.css rather
+   than alongside settings-specific modal variants. */
+.confirm-backdrop .modal.confirm-modal { max-width: 420px; }
+
 .modal-head {
   position: sticky;
   top: 0;

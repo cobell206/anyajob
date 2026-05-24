@@ -1,0 +1,495 @@
+/* PROFILE PAGE — page-specific styles only.
+   The page uses the global .page-head, .field-grid, .chip-input, and
+   section-spacing rhythm so it reads as the same family as Settings
+   and Roles. What stays here is genuinely profile-only: the auto-save
+   masthead row, the résumé artifact treatments, the discovery zone,
+   and the per-field saved-flash. */
+
+/* All section card chrome now lives on .panel / .panel-head /
+   .panel-title / .panel-subtitle in style.css. Nothing profile-
+   specific needed here. */
+
+/* Masthead status row — auto-save indicator + reset link. */
+.mast-status-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+.save-status { color: var(--muted); transition: color 0.2s; }
+.save-status.dirty { color: var(--warn-ink); }
+.save-status.saved { color: var(--green-ink); }
+/* Collapse the status (and its leading indicator dot) when there's no
+   text — the resting state is meant to be invisible; the indicator only
+   appears for in-flight saves, dirty buffers, or errors. */
+.save-status:empty { display: none; }
+.save-status::before {
+  content: '';
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 7px;
+  vertical-align: middle;
+  opacity: 0.7;
+}
+.save-status.dirty::before { animation: profile-pulse 1.4s ease-in-out infinite; }
+@keyframes profile-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.85); }
+  50%      { opacity: 0.9; transform: scale(1.1); }
+}
+.mast-reset {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.mast-status-row.is-dirty .mast-reset {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Saved-flash — pulses the input's border green for ~900ms after
+   the auto-save POST settles. Driven by .is-saved toggled on each
+   [data-field] wrapper in profile.js. */
+@keyframes field-saved-flash {
+  0%   { border-color: var(--border); box-shadow: none; }
+  18%  { border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+  100% { border-color: var(--border); box-shadow: none; }
+}
+.field-grid .is-saved input,
+.field-grid .is-saved textarea,
+.is-saved > .chip-input {
+  animation: field-saved-flash 900ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .field-grid .is-saved input,
+  .field-grid .is-saved textarea,
+  .is-saved > .chip-input {
+    animation: none;
+  }
+}
+
+/* Per-field helper line under specific inputs. Sits below the input,
+   quieter than the label. */
+.field-help {
+  display: block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+/* Résumé drop-zone (empty state). Lives inside the section card.
+   Uses --surface-2 + dashed border so the drop affordance reads
+   distinctly from the surrounding card without competing with it. */
+.resume-blank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 36px 24px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  text-align: center;
+  cursor: pointer;
+  color: var(--muted);
+  transition: border-color 0.18s, background 0.18s, color 0.18s;
+}
+.resume-blank:hover,
+.resume-blank.dragover {
+  border-color: var(--ink-2);
+  color: var(--ink-2);
+}
+.resume-blank.dragover { border-style: solid; }
+.resume-blank svg {
+  width: 28px; height: 28px;
+  color: var(--ink-2);
+  stroke-width: 1.5;
+}
+.resume-blank-prompt {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.resume-blank-prompt em {
+  font-style: normal;
+  color: var(--blue-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.resume-blank-help {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Resume artifact (current file). Lives inside the section card,
+   so it uses --surface-2 to read as a subtle inner panel instead
+   of an explicit second card. */
+.resume-current {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+.resume-current-icon {
+  width: 32px; height: 32px;
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+.resume-current-icon svg { width: 100%; height: 100%; stroke-width: 1.5; }
+.resume-current-info { flex: 1; min-width: 0; }
+.resume-current-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+  word-break: break-all;
+}
+.resume-current-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.resume-actions {
+  display: flex; gap: 2px; flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.resume-pending {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---------- Discovery zone ----------
+   No card chrome here — the parent .profile-section is already the
+   card. Discovery-zone just provides the layout for the pitch +
+   action row + results. */
+.discovery-zone { padding: 0; }
+.discovery-pitch {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 60ch;
+  margin-bottom: 14px;
+}
+.discovery-action-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+#discover-btn .arrow {
+  width: 14px; height: 14px; flex-shrink: 0;
+  transition: transform 0.2s;
+}
+#discover-btn:hover .arrow { transform: translateX(2px); }
+.discovery-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.discovery-meta strong { color: var(--ink-2); font-weight: 600; }
+
+.discovery-results { margin-top: 0; }
+.discovery-results:not(:empty) {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.discovery-pending {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.discovery-empty {
+  font-size: 13px;
+  color: var(--muted);
+}
+.discovery-error { color: var(--bad-ink); }
+.discovery-summary {
+  font-size: 13px;
+  color: var(--ink-2);
+  margin-bottom: 12px;
+}
+.discovery-summary strong {
+  font-weight: 600;
+  color: var(--ink);
+  margin-right: 2px;
+}
+.discovery-summary a {
+  color: var(--blue-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.discovery-result {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.discovery-result:last-child { border-bottom: 0; }
+.discovery-result-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+}
+.discovery-result-kind {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--muted);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.discovery-result-rationale {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  margin-top: 4px;
+  max-width: 60ch;
+}
+.discovery-result-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+  word-break: break-all;
+}
+.discovery-result-meta a { color: var(--ink-2); text-decoration: underline; }
+.discovery-result-meta a:hover { color: var(--ink); }
+
+/* ---------- Résumé feedback ---------- */
+/* Two-column layout: rendered résumé on the left, findings panel on
+   the right. Collapses to a stacked layout on narrow widths. */
+.feedback-empty {
+  display: flex; flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 4px 4px;
+}
+.feedback-empty-pitch {
+  font-size: 13px; line-height: 1.55; color: var(--ink-2);
+  max-width: 60ch;
+}
+.feedback-empty-meta {
+  font-size: 12px; color: var(--muted);
+}
+.feedback-empty-meta strong { color: var(--ink-2); font-weight: 600; }
+
+/* Toolbar: lens pills on the left, refresh + last-generated on the right. */
+.feedback-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.feedback-lens-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.feedback-toolbar-right {
+  display: flex; align-items: center; gap: 12px;
+}
+.feedback-stamp {
+  font-size: 11.5px; color: var(--muted);
+}
+
+/* Overall header — score chip + 2-3 sentence read. */
+.feedback-overall {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+.feedback-overall-score {
+  font-weight: 600; font-size: 28px; line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  min-width: 48px;
+}
+.feedback-overall-text {
+  flex: 1;
+  font-size: 14px; line-height: 1.55; color: var(--ink-2);
+}
+.feedback-overall-score.score-low { color: var(--bad-ink); }
+.feedback-overall-score.score-mid { color: var(--ink); }
+.feedback-overall-score.score-high { color: var(--green-ink); }
+
+/* Two-column grid. Sticky right panel so she can scroll the résumé
+   and the findings list stays in view. */
+.feedback-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .feedback-grid { grid-template-columns: 1fr; }
+  .feedback-findings { position: static; max-height: none; }
+}
+
+/* Rendered résumé text — semantic sections with detected headings. */
+.resume-render {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 26px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink);
+  max-height: 70vh;
+  overflow: auto;
+}
+.resume-render-section + .resume-render-section { margin-top: 16px; }
+.resume-render h3 {
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.resume-render p {
+  white-space: pre-wrap;
+  margin-bottom: 6px;
+}
+.resume-render mark.finding {
+  background: var(--warn-soft);
+  border-bottom: 1px solid var(--warn);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+.resume-render mark.finding[data-severity="major"] {
+  background: var(--bad-soft);
+  border-bottom-color: var(--bad);
+}
+.resume-render mark.finding.is-active,
+.resume-render mark.finding:hover {
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.25);
+}
+.resume-render mark.finding[data-severity="major"].is-active,
+.resume-render mark.finding[data-severity="major"]:hover {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.25);
+}
+
+/* Findings side panel. */
+.feedback-findings {
+  position: sticky; top: 80px;
+  max-height: 70vh;
+  overflow: auto;
+  display: flex; flex-direction: column;
+  gap: 14px;
+}
+.feedback-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.feedback-section-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.feedback-section-name {
+  font-weight: 600; font-size: 14px; color: var(--ink);
+}
+.feedback-section-score {
+  font-weight: 600; font-size: 14px;
+  letter-spacing: -0.01em;
+  color: var(--muted);
+}
+.feedback-strengths {
+  font-size: 12.5px; color: var(--ink-2);
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--border);
+}
+.feedback-strengths-label,
+.feedback-findings-label {
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.feedback-strengths ul,
+.feedback-finding-list { margin: 0; padding: 0; list-style: none; }
+.feedback-strengths li {
+  padding: 2px 0; line-height: 1.5;
+}
+.feedback-finding {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.feedback-finding:last-child { border-bottom: 0; }
+.feedback-finding.is-active { background: var(--surface-2); margin: 0 -10px; padding: 8px 10px; border-radius: 6px; }
+.feedback-finding-head {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 4px;
+}
+.feedback-finding-severity {
+  display: inline-block;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--warn);
+}
+.feedback-finding[data-severity="major"] .feedback-finding-severity {
+  background: var(--bad);
+}
+.feedback-finding-quote {
+  font-size: 12px; color: var(--muted);
+  font-style: italic;
+  line-height: 1.45;
+  flex: 1; min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.feedback-finding-comment {
+  font-size: 13px; color: var(--ink-2);
+  line-height: 1.5;
+}
+.feedback-finding-rewrite {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--ink);
+  line-height: 1.5;
+  position: relative;
+}
+.feedback-finding-rewrite-label {
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+.feedback-error {
+  padding: 14px 16px;
+  background: var(--bad-soft);
+  border: 1px solid var(--bad);
+  border-radius: var(--radius);
+  color: var(--bad-ink);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.feedback-loading {
+  padding: 24px 4px;
+  font-size: 13px; color: var(--muted);
+  display: flex; align-items: center; gap: 10px;
+}
