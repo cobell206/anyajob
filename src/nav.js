@@ -8,12 +8,14 @@
 // on others, "Paste" vs "Paste JD" varying). Add new pages here, not
 // in the HTML.
 
+// Notifications consolidated into a Settings accordion (commit 407ef65),
+// so it's no longer a top-level destination. Paste renamed to "Add a role"
+// (label) / "Add" (mobile tab short) at the same time.
 const NAV = [
-  { href: '/',                   label: 'Roles',         short: 'Roles',    icon: 'roles' },
-  { href: '/profile.html',       label: 'Profile',       short: 'Profile',  icon: 'profile' },
-  { href: '/paste.html',         label: 'Paste',         short: 'Paste',    icon: 'paste' },
-  { href: '/notifications.html', label: 'Notifications', short: 'Notify',   icon: 'notify' },
-  { href: '/settings.html',      label: 'Settings',      short: 'Settings', icon: 'settings' },
+  { href: '/',              label: 'Roles',      short: 'Roles',    icon: 'roles' },
+  { href: '/profile.html',  label: 'Profile',    short: 'Profile',  icon: 'profile' },
+  { href: '/paste.html',    label: 'Add a role', short: 'Add',      icon: 'paste' },
+  { href: '/settings.html', label: 'Settings',   short: 'Settings', icon: 'settings' },
 ];
 
 // Inline SVGs for the mobile tab-bar. Copied verbatim from the original

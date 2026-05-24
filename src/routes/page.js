@@ -102,13 +102,14 @@ function safeJsonForScript(obj) {
 // disk, substitute the nav, and (for / only) inject window.__INITIAL.
 // The data-file read for / is the only handler that can fail in
 // expected ways — all the others just touch the public/ HTML.
+// Notifications was consolidated into a Settings accordion (commit 407ef65)
+// — public/notifications.html is gone, the page is no longer served.
 const PAGES = [
-  { path: '/',                   file: 'index.html'         },
-  { path: '/profile.html',       file: 'profile.html'       },
-  { path: '/paste.html',         file: 'paste.html'         },
-  { path: '/notifications.html', file: 'notifications.html' },
-  { path: '/settings.html',      file: 'settings.html'      },
-  { path: '/ignored.html',       file: 'ignored.html'       },
+  { path: '/',              file: 'index.html'   },
+  { path: '/profile.html',  file: 'profile.html' },
+  { path: '/paste.html',    file: 'paste.html'   },
+  { path: '/settings.html', file: 'settings.html' },
+  { path: '/ignored.html',  file: 'ignored.html' },
 ];
 
 for (const page of PAGES) {

@@ -925,6 +925,129 @@ $('#save-notify').addEventListener('click', async () => {
 
 loadPrefs();
 
+// ===== Email previews + test send (formerly /notifications.html) =====
+// Lazy-loaded: the preview iframe + log only fetch when she actually opens
+// the Notifications section, so the settings page itself stays cheap.
+let activePreviewKind = 'morning';
+let previewLoaded = false;
+
+async function loadPreview() {
+  try {
+    const data = await api(`/api/notify/preview/${activePreviewKind}`);
+    $('#preview-subject').textContent = data.subject;
+    const iframe = $('#preview-iframe');
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open();
+    doc.write(data.html);
+    doc.close();
+  } catch (err) {
+    $('#preview-subject').textContent = 'Could not load preview';
+  }
+}
+
+async function loadPreviewLog() {
+  try {
+    const log = await api('/api/notify/log');
+    const recent = (log.sent || []).slice(-10).reverse();
+    if (recent.length === 0) {
+      $('#preview-log').innerHTML = '<div style="padding:18px;text-align:center;color:var(--muted);font-size:12px">No emails sent yet.</div>';
+      return;
+    }
+    $('#preview-log').innerHTML = recent.map((e, i) => `
+      <div style="display:flex;justify-content:space-between;padding:8px 12px;${i < recent.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}align-items:center;font-size:12px">
+        <div>
+          <div style="font-weight:500">${escapeHtml(e.subject)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${e.kind} · ${new Date(e.sentAt).toLocaleString()}</div>
+        </div>
+        <span class="status-badge status-applied">sent</span>
+      </div>
+    `).join('');
+  } catch {}
+}
+
+$$('[data-preview-kind]').forEach((b) => {
+  b.addEventListener('click', () => {
+    activePreviewKind = b.dataset.previewKind;
+    $$('[data-preview-kind]').forEach((x) => x.classList.toggle('active', x === b));
+    loadPreview();
+  });
+});
+
+$('#preview-send-test').addEventListener('click', async () => {
+  const to = $('#preview-test-to').value.trim();
+  const status = $('#preview-status');
+  const btn = $('#preview-send-test');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner sm"></span> Sending…';
+  try {
+    const res = await fetch('/api/notify/send-test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: activePreviewKind, to: to || undefined }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    status.textContent = '✓ Sent (' + data.messageId + ')';
+    status.style.color = 'var(--green-ink)';
+    loadPreviewLog();
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+    status.style.color = 'var(--bad)';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
+// The general section-head click handler (top of file) toggles `.open` first;
+// our listener runs after, sees the new state, and lazy-loads on first open.
+document.querySelector('#section-notify .section-head').addEventListener('click', () => {
+  if (previewLoaded) return;
+  if (document.querySelector('#section-notify').classList.contains('open')) {
+    previewLoaded = true;
+    loadPreview();
+    loadPreviewLog();
+  }
+});
+
+// ===== Appearance / theme =====
+// The inline <head> script in each HTML page applies the resolved theme on
+// load (no FOUC). This block just keeps the Settings UI in sync and lets
+// her flip between auto / light / dark.
+function applyTheme(stored) {
+  const resolved = stored === 'auto'
+    ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : stored;
+  document.documentElement.dataset.theme = resolved;
+  const tc = document.querySelector('meta[name="theme-color"]');
+  if (tc) tc.content = resolved === 'dark' ? '#0b1220' : '#f7faf9';
+}
+
+function syncThemeUI() {
+  const stored = localStorage.getItem('theme') || 'auto';
+  $$('[data-theme-choice]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.themeChoice === stored);
+  });
+  const sub = $('#appearance-sub');
+  if (sub) {
+    sub.textContent = stored === 'auto'
+      ? `Theme: auto (currently ${document.documentElement.dataset.theme})`
+      : `Theme: ${stored}`;
+  }
+}
+
+$$('[data-theme-choice]').forEach((b) => {
+  b.addEventListener('click', () => {
+    const choice = b.dataset.themeChoice;
+    localStorage.setItem('theme', choice);
+    applyTheme(choice);
+    syncThemeUI();
+  });
+});
+
+syncThemeUI();
+
 // ===== Spend =====
 api('/api/spend').then((s) => {
   const days = Object.entries(s.byDay || {}).sort();

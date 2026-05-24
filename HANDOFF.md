@@ -73,7 +73,7 @@ public/
   documents.js           ← document upload/score UI
   settings.html          ← settings page (markup only)
   settings.js            ← settings page logic (extracted from HTML)
-  notifications.html     ← notifications config page
+  (notifications UI lives inside settings.html → Notifications section)
   paste.html             ← manual paste-and-score page
   style.css
 

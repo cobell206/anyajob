@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="en" data-color-scheme="light">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="light only">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f7faf9">
+  <script>(function(){function a(t){document.documentElement.dataset.theme=t;var m=document.querySelector('meta[name="theme-color"]');if(m)m.content=t==='dark'?'#0b1220':'#f7faf9';}function r(){var s=localStorage.getItem('theme')||'auto';return s==='auto'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):s;}try{a(r());}catch(e){}try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){if((localStorage.getItem('theme')||'auto')==='auto')a(r());});}catch(e){}})();</script>
   <title>Settings · Job Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -68,6 +70,13 @@
       outline: none;
       box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.3);
     }
+    [data-theme="dark"] .repair-btn { background: rgba(234, 88, 12, 0.16); border-color: rgba(234, 88, 12, 0.4); color: #fdba74; }
+    [data-theme="dark"] .repair-btn:hover { background: rgba(234, 88, 12, 0.24); border-color: rgba(234, 88, 12, 0.6); }
+    [data-theme="dark"] .repair-btn:active { background: rgba(234, 88, 12, 0.32); }
+    /* Note: main also added .discovery-pending-header + .overlap-warning rules
+       here, but HEAD renders those surfaces as .pending-caption (settings.js)
+       and .candidate-overlap (defined below) — so those rules were orphan
+       CSS and got dropped during the merge. */
 
     /* Repair modal */
     .repair-modal { max-width: 540px; }
@@ -210,7 +219,9 @@
     }
 
     /* .kind-badge (+ palette), .kind-tabs/.kind-tab, .form-help, .test-result
-       moved to style.css */
+       moved to style.css. NOTE: main introduced dark-mode variants for the
+       kind-badge palette; those need to be added to style.css alongside the
+       lifted primitives. Tracked in TODOs after this merge. */
 
     .add-form {
       background: var(--surface-2);
@@ -322,9 +333,13 @@
     /* Email recipient list — settings-only composition (notifications page
        has its own one-off layout). */
     .email-list { display: flex; flex-direction: column; gap: 6px; }
-    .email-row { display: flex; gap: 6px; align-items: center; }
+    .email-row { display: flex; gap: 8px; align-items: stretch; }
     .email-row input { flex: 1; }
-    .email-row .icon-btn-sm { flex-shrink: 0; }
+    .email-row .icon-btn-sm {
+      flex-shrink: 0;
+      width: 40px; height: auto;
+      font-size: 18px; line-height: 1;
+    }
 
     /* .test-result h4/ul, .toggle-row, .toggle-label moved to style.css */
 
@@ -446,48 +461,6 @@
       <div class="section-head" data-section="notify">
         <div>
           <div class="section-title">Notifications</div>
-          <div class="section-sub" id="notify-sub">Email recipients and toggles</div>
-        </div>
-        <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
-      </div>
-      <div class="section-body">
-        <label>Send notifications to</label>
-        <div id="recipient-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px"></div>
-        <button class="btn" id="add-recipient" style="font-size:12px;padding:7px 12px">+ Add another recipient</button>
-        <p style="font-size:12px;color:var(--muted);margin-top:8px;font-style:italic">All addresses receive the same emails. The recipient must match a verified address in SES (or your domain must be verified out of sandbox).</p>
-
-        <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border)">
-          <label style="margin-top:0">Email types</label>
-          <div style="display:flex;flex-direction:column;gap:8px">
-            <label class="toggle-row" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:500;color:var(--ink);margin:0">
-              <input type="checkbox" id="toggle-morning" style="margin-top:2px;width:auto">
-              <span style="flex:1">
-                <span>Morning brief (daily, 6am)</span>
-                <span style="display:block;font-size:11px;color:var(--muted);font-weight:400;margin-top:2px">Today's new roles, brief summary, closing-soon section if applicable</span>
-              </span>
-            </label>
-            <label class="toggle-row" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;text-transform:none;letter-spacing:normal;font-size:13px;font-weight:500;color:var(--ink);margin:0">
-              <input type="checkbox" id="toggle-weekly" style="margin-top:2px;width:auto">
-              <span style="flex:1">
-                <span>Weekly digest (Sundays, 9am)</span>
-                <span style="display:block;font-size:11px;color:var(--muted);font-weight:400;margin-top:2px">Pattern reflection, weekly stats, this-week deadlines</span>
-              </span>
-            </label>
-          </div>
-        </div>
-
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;gap:10px;flex-wrap:wrap">
-          <p id="notify-status" class="status-message"></p>
-          <button class="btn primary" id="save-notify">Save notifications</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ===== Notifications ===== -->
-    <div class="section" id="section-notify">
-      <div class="section-head" data-section="notify">
-        <div>
-          <div class="section-title">Notifications</div>
           <div class="section-sub" id="notify-sub">Loading…</div>
         </div>
         <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
@@ -520,6 +493,59 @@
           <p id="notify-status" class="status-message"></p>
           <button class="btn primary" id="save-notify">Save notifications</button>
         </div>
+
+        <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--border)">
+          <div style="font-weight:600;font-size:14px;color:var(--ink);margin-bottom:4px">Preview & test send</div>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 12px">See exactly what each notification looks like before it sends — or send a test to yourself.</p>
+
+          <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+            <button class="filter-pill active" data-preview-kind="morning">Morning · standard</button>
+            <button class="filter-pill" data-preview-kind="urgent">Morning · with closing soon</button>
+            <button class="filter-pill" data-preview-kind="weekly">Weekly digest</button>
+          </div>
+
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="min-width:0;flex:1">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600">Subject</div>
+              <div id="preview-subject" style="font-family:var(--font-display);font-size:15px;font-weight:600;letter-spacing:-0.02em;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Loading…</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="email" id="preview-test-to" placeholder="leave blank for saved recipients" style="font-size:12px;padding:7px 10px;width:220px">
+              <button class="btn" id="preview-send-test" style="font-size:12px;padding:7px 12px">Send test</button>
+            </div>
+          </div>
+
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+            <iframe id="preview-iframe" style="width:100%;height:480px;border:0;background:#fff"></iframe>
+          </div>
+
+          <p id="preview-status" style="margin-top:10px;font-size:12px"></p>
+
+          <div style="margin-top:18px">
+            <div style="font-weight:600;font-size:13px;color:var(--ink);margin-bottom:6px">Recently sent</div>
+            <div id="preview-log" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:4px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Appearance ===== -->
+    <div class="section" id="section-appearance">
+      <div class="section-head" data-section="appearance">
+        <div>
+          <div class="section-title">Appearance</div>
+          <div class="section-sub" id="appearance-sub">Theme: auto</div>
+        </div>
+        <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="section-body">
+        <label>Theme</label>
+        <div role="radiogroup" id="theme-choice" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="filter-pill" data-theme-choice="auto">Auto (follow system)</button>
+          <button type="button" class="filter-pill" data-theme-choice="light">Light</button>
+          <button type="button" class="filter-pill" data-theme-choice="dark">Dark</button>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin-top:8px">Auto follows your operating-system setting and switches when it changes. Light and Dark are sticky overrides.</p>
       </div>
     </div>
 

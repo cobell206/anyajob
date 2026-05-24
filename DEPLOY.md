@@ -288,7 +288,7 @@ She should get a "It works ✓" email within a minute. If it fails, common issue
 
 ### Stage 5: Preview emails
 
-Visit `https://jobs.anyalawgirly.com/notifications.html` to preview the three email templates and send tests. This is the safest way to tune copy before turning on the cron jobs.
+Visit `https://jobs.anyalawgirly.com/settings.html` and open the **Notifications** section to preview the three email templates and send tests. This is the safest way to tune copy before turning on the cron jobs.
 
 ## Verification checklist
 

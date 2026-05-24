@@ -91,7 +91,7 @@ job-tracker/
     ├── index.html         ← table view + modal
     ├── paste.html         ← manual JD scorer
     ├── settings.html      ← preferences editor
-    ├── notifications.html ← email previews + test send
+    │                       (email previews + test send live in settings.html → Notifications section)
     ├── style.css
     ├── app.js
     ├── modal.js
