@@ -1,9 +1,45 @@
 /* public/style.css
-   Bright modern app, blue/green accents, subtle shadows.
-   Typography: Fraunces (display serif) for headings, Geist (precise sans) for UI.
+   Warm modern app, coral/green accents, subtle shadows.
+   Typography: Geist for everything — display and UI. Fraunces was retired
+   in favor of weight + size variation; --font-display falls through to
+   Geist as well so legacy var(--font-display) call sites keep working
+   without each needing a rewrite.
    Fonts are loaded via <link> in each HTML <head> (with preconnect) — see
    index.html etc. CSS @import here would serialize the request chain.
-*/
+
+   ─────────────────────────────────────────────────────────────────────────
+   SHARED PRIMITIVES — THE CANON
+   ─────────────────────────────────────────────────────────────────────────
+   The roles (index) page is the reference design. When building or editing
+   any page, reach for these primitives first; only invent new classes when
+   none of these fit, and promote anything that gets reused into this list.
+
+     Page masthead .......... .page-head + .page-title + .page-sub
+     Form / result panel .... .result-card
+     Clickable list item .... .card (with .card-row, .card-meta, .card-foot)
+     Inline status / result . .test-result (+ .ok / .err modifiers)
+     Empty state ............ .empty-state, or .empty + .empty-icon/.empty-title
+     Buttons ................ .btn (+ .primary / .ghost / .danger), .btn-link
+     Inputs ................. bare <input>, <textarea>, <select> — global
+                              styles apply; no per-page overrides
+     Two-column form rows ... .field-grid
+     Field help text ........ .form-help
+     Loading spinner ........ .spinner / .spinner.sm / .spinner.sm.on-primary
+     Section eyebrow ........ .section-eyebrow + .section-eyebrow-label /
+                              .section-eyebrow-rule / .section-eyebrow-desc /
+                              .section-eyebrow-sm (compact, in-card variant)
+     Data typography ........ .cell-title, .cell-company, .cell-location,
+                              .cell-salary, .score-num, .status-badge
+     Stagger reveal ......... .is-entering + --i  (or scoped per-page
+                              nth-child delays for fixed-size lists)
+
+   Domain-specific compositions (.source-card, .candidate-card, .ignored-row,
+   .listing-row, .stat) layer on top of these primitives — they're allowed
+   when a page has a real list-item shape that the generic .card doesn't fit.
+   Do NOT introduce per-page surface/typography systems (hero panels with
+   bespoke fonts, page-specific button styles, etc.) — those break cohesion
+   with the roles page without adding feature value.
+   ───────────────────────────────────────────────────────────────────────── */
 
 /* Theme system.
    Default = light. Dark variants live in [data-theme="dark"] below.
@@ -22,20 +58,27 @@ html { background: var(--bg); }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  /* Surfaces */
-  --bg: #f7faf9;
+  /* Surfaces — warm off-white app bg, pure white cards. The cream
+     undertone (instead of the prior cool blue-grey) is the load-bearing
+     change for the "modern hospitality app" feel. */
+  --bg: #fafaf7;
   --surface: #ffffff;
-  --surface-2: #f1f5f4;
-  --surface-translucent: rgba(247, 250, 249, 0.85);  /* Sticky header / tab bar — meant to be paired with backdrop-filter blur */
-  --border: #e3e8ec;
-  --border-strong: #cbd3d8;
+  --surface-2: #f4f2ee;
+  --surface-translucent: rgba(250, 250, 247, 0.85);
+  --border: #e8e4dd;
+  --border-strong: #d4cfc6;
 
-  /* Ink */
-  --ink: #0f1d2e;
-  --ink-2: #3b4a5c;
-  --muted: #5b6878;
+  /* Ink — charcoal not cool-navy. Warm slate for secondary text. */
+  --ink: #222222;
+  --ink-2: #4a4744;
+  --muted: #787472;
 
-  /* Brand */
+  /* Brand — original blue accent. Charcoal was tried as a system-wide
+     accent but was kept only for the primary button (see .btn.primary
+     below) — Airbnb's actual pattern: solid charcoal CTAs, blue for
+     everything else (links, filter-active states, chip pills, focus
+     rings). Coral was tried first and reverted because it collided
+     with the green stat-good indicators (red+green score rows). */
   --blue: #2563eb;
   --blue-soft: #dbeafe;
   --blue-ink: #1e40af;
@@ -55,17 +98,49 @@ html { background: var(--bg); }
   --info: var(--blue);
   --info-soft: var(--blue-soft);
 
-  /* Shadows — light and crisp */
-  --shadow-xs: 0 1px 2px rgba(15, 29, 46, 0.04);
-  --shadow-sm: 0 1px 3px rgba(15, 29, 46, 0.06), 0 1px 2px rgba(15, 29, 46, 0.04);
-  --shadow-md: 0 4px 12px rgba(15, 29, 46, 0.06), 0 1px 3px rgba(15, 29, 46, 0.04);
-  --shadow-popover: 0 8px 24px rgba(15, 29, 46, 0.12), 0 2px 6px rgba(15, 29, 46, 0.06);
-  --shadow-lg: 0 12px 32px rgba(15, 29, 46, 0.08), 0 4px 12px rgba(15, 29, 46, 0.04);
+  /* Shadows — warm-tinted rgba so they land softly on the cream bg
+     instead of the prior cool-slate cast.
+
+     ELEVATION LADDER — pick from this list; if nothing fits, you
+     probably don't need a new shadow.
+       xs ........ resting utility surface, knobs, KPIs, settings sections
+                   (.stat, .section, .weekly, .ignored-row, switch knob)
+       sm ........ resting content card
+                   (.card, .brief, .result-card, .table-toolbar, .table-wrap)
+       md ........ hover lift for clickable cards
+                   (.card:hover, .ignored-row:hover→sm, .kanban-card:hover)
+       popover ... transient floating UI
+                   (.filter-popup, dropdowns)
+       lg ........ modal & full-page overlays
+                   (.modal, .preview-frame)
+
+     xs vs sm look near-identical in isolation; the split exists so
+     hover/press states can shift one rung (.card:active drops sm→xs,
+     .ignored-row:hover lifts xs→sm). Don't collapse them.
+
+     Solid-color CTAs (.btn.primary) intentionally skip shadow — a halo
+     around charcoal reads as glow, not lift. */
+  /* shadow-xs is the workhorse for .panel — gives sectional cards a
+     visible-but-quiet float on the cream bg without reading as "drop
+     shadow". The second layer is an inset-style 1px outline that
+     reinforces the card edge below the border. */
+  --shadow-xs: 0 1px 2px rgba(28, 22, 18, 0.05), 0 0 0 1px rgba(28, 22, 18, 0.02);
+  --shadow-sm: 0 1px 3px rgba(28, 22, 18, 0.07), 0 1px 2px rgba(28, 22, 18, 0.04);
+  --shadow-md: 0 4px 12px rgba(28, 22, 18, 0.06), 0 1px 3px rgba(28, 22, 18, 0.04);
+  --shadow-popover: 0 8px 24px rgba(28, 22, 18, 0.12), 0 2px 6px rgba(28, 22, 18, 0.06);
+  --shadow-lg: 0 12px 32px rgba(28, 22, 18, 0.08), 0 4px 12px rgba(28, 22, 18, 0.04);
 
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
+
+  /* Page width tokens — only two canonical widths, used by <main>.
+     Wide is for table/grid surfaces (roles, ignored, kanban). Narrow is
+     for form/text surfaces (paste, profile dossier, settings). Replaces
+     three previously-drifting values (1200 / 880 / 840). */
+  --page-wide: 1100px;
+  --page-narrow: 880px;
 
   /* z-index scale — keep all stacking contexts on this ladder.
      0:   ground / default
@@ -75,7 +150,9 @@ html { background: var(--bg); }
      100: modal / sheet
      200: full-screen overlays (preview backdrop) */
 
-  --font-display: 'Fraunces', 'Times New Roman', serif;
+  /* Fraunces retired — display falls through to Geist. Hierarchy comes
+     from weight (400 / 500 / 600 / 700) and size, not family-mixing. */
+  --font-display: 'Geist', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-ui: 'Geist', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
 }
@@ -94,18 +171,24 @@ html { background: var(--bg); }
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #0b1220;
-  --surface: #131c2c;
-  --surface-2: #1c2638;
-  --surface-translucent: rgba(11, 18, 32, 0.78);
-  --border: #2a3548;
-  --border-strong: #3d4a63;
+  /* Warm near-black surfaces instead of the prior cool slate, so the
+     cream/coral accents read consistently across themes. */
+  --bg: #1a1614;
+  --surface: #221e1b;
+  --surface-2: #2a2622;
+  --surface-translucent: rgba(26, 22, 20, 0.78);
+  --border: #3d3833;
+  --border-strong: #4f4a45;
 
-  --ink: #e6edf5;
-  --ink-2: #c1cad6;
-  --muted: #8a98ab;
-  --muted-2: #6b7886;
+  --ink: #f7f4f0;
+  --ink-2: #d5cfc8;
+  --muted: #9b948d;
+  --muted-2: #7c756e;
 
+  /* Original blue accent, lifted for dark-mode contrast. The primary
+     button overrides to use the warm off-white ink color (see
+     .btn.primary below) — Airbnb's solid-charcoal CTAs become solid
+     off-white CTAs in dark mode. */
   --blue: #4f8bff;
   --blue-soft: rgba(79, 139, 255, 0.16);
   --blue-ink: #93b6ff;
@@ -122,12 +205,44 @@ html { background: var(--bg); }
   --info: var(--blue);
   --info-soft: var(--blue-soft);
 
-  /* Stronger shadows since light shadows vanish on dark surfaces */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.30);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.40), 0 1px 2px rgba(0, 0, 0, 0.30);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.40), 0 1px 3px rgba(0, 0, 0, 0.30);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.50), 0 4px 12px rgba(0, 0, 0, 0.30);
+  /* Dark-mode shadows: softer than the prior 0.30–0.50 ramp. In dark UI
+     the perceived "lift" comes more from a top inset highlight (see the
+     surface block below) than from bottom pooling — heavy black halos
+     just muddy the bg. --shadow-popover is defined here too (light mode
+     had it; dark mode was silently falling back to none on .filter-popup
+     and the settings color popover). */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.20);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.18);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.30), 0 1px 3px rgba(0, 0, 0, 0.20);
+  --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.45), 0 4px 12px rgba(0, 0, 0, 0.25);
 }
+
+/* Dark-mode rim highlight: a 1px inset top edge at low white alpha makes
+   surfaces feel rim-lit from above instead of just bordered. The bottom
+   shadow alone reads weak on a near-black bg; the top rim is what sells
+   "lifted." Exposed as --rim-highlight so hover/active states can stack
+   it cleanly with their own elevation level (box-shadow lists override,
+   so we have to re-declare the whole stack on each state). */
+[data-theme="dark"] {
+  --rim-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+[data-theme="dark"] .card,
+[data-theme="dark"] .result-card,
+[data-theme="dark"] .brief,
+[data-theme="dark"] .table-wrap,
+[data-theme="dark"] .table-toolbar {
+  box-shadow: var(--rim-highlight), var(--shadow-sm);
+}
+[data-theme="dark"] .stat,
+[data-theme="dark"] .section,
+[data-theme="dark"] .weekly,
+[data-theme="dark"] .ignored-row {
+  box-shadow: var(--rim-highlight), var(--shadow-xs);
+}
+[data-theme="dark"] .card:hover         { box-shadow: var(--rim-highlight), var(--shadow-md); }
+[data-theme="dark"] .card:active        { box-shadow: var(--rim-highlight), var(--shadow-xs); }
+[data-theme="dark"] .ignored-row:hover  { box-shadow: var(--rim-highlight), var(--shadow-sm); }
 
 body {
   font-family: var(--font-ui);
@@ -157,7 +272,10 @@ header {
 }
 
 .header-inner {
-  max-width: 1200px;
+  /* Aligns to the wide page width so the nav chrome sits flush with the
+     content gutter on table/grid pages. Narrow pages still center their
+     own content inside this wider rail — that's expected. */
+  max-width: var(--page-wide);
   margin: 0 auto;
   padding: 14px 24px;
   display: flex;
@@ -231,10 +349,14 @@ nav a.active {
 /* ============ LAYOUT ============ */
 
 main {
-  max-width: 1200px;
+  max-width: var(--page-wide);
   margin: 0 auto;
   padding: 32px 24px 80px;
 }
+/* Form/text pages opt into the narrow track via class="narrow".
+   Single source of truth for "narrow page width" so settings, paste,
+   and the profile dossier don't drift apart again. */
+main.narrow { max-width: var(--page-narrow); }
 
 .page-head {
   margin-bottom: 24px;
@@ -260,84 +382,14 @@ main {
   margin-top: 4px;
 }
 
-/* Editorial / "dossier" variant of .page-head. Opt-in via .is-dossier on
-   the same element. Used by pages that read as documents rather than
-   dashboards (profile). Keeps the shared anchor classes (.page-head,
-   .page-title, .page-sub) so other styling and JS keep working. */
-.page-head.is-dossier {
-  display: block;
-  margin-bottom: 48px;
-}
-.page-head.is-dossier .page-title {
-  font-size: clamp(40px, 7vw, 64px);
-  line-height: 0.98;
-  letter-spacing: -0.035em;
-  font-weight: 500;
-  font-variation-settings: 'opsz' 144;
-  margin-top: 22px;
-}
-.page-head.is-dossier .page-title em {
-  font-style: italic;
-  font-weight: 400;
-  color: var(--ink-2);
-}
-.page-head.is-dossier .page-sub {
-  margin-top: 16px;
-  max-width: 32em;
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 400;
-  font-size: 16.5px;
-  line-height: 1.55;
-  color: var(--ink-2);
-  font-variation-settings: 'opsz' 24;
-}
-
-/* Tracked-out kicker line used above an editorial page title. A short
-   hairline leads in to anchor the eye. Reusable on any page that wants
-   the "filed document" feel above its .page-title. */
-.page-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-family: var(--font-ui);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-}
-.page-eyebrow::before {
-  content: '';
-  width: 32px; height: 1px;
-  background: var(--ink-2);
-  flex-shrink: 0;
-}
-.page-eyebrow-dot {
-  width: 3px; height: 3px;
-  background: currentColor;
-  border-radius: 50%;
-  opacity: 0.5;
-}
-
-/* Chapter eyebrow for sections inside an editorial page. Roman numeral
-   (or any short marker) + tracked label + a hairline rule that extends
-   to the right edge of the content area. Sits above the section body. */
+/* Section eyebrow: tracked-uppercase label + hairline rule that extends
+   to the right edge of the content area. Used by editorial-ish sections
+   inside .result-card panels (profile sections) and reusable elsewhere. */
 .section-eyebrow {
   display: flex;
   align-items: baseline;
   gap: 14px;
   margin-bottom: 18px;
-}
-.section-eyebrow-numeral {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 400;
-  font-size: 22px;
-  color: var(--ink-2);
-  font-variation-settings: 'opsz' 72;
-  flex-shrink: 0;
-  letter-spacing: 0.02em;
 }
 .section-eyebrow-label {
   font-family: var(--font-ui);
@@ -356,14 +408,24 @@ main {
   transform: translateY(-1px);
 }
 .section-eyebrow-desc {
-  margin: -8px 0 22px;
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 400;
-  font-size: 14.5px;
+  margin: -4px 0 22px;
+  font-size: 14px;
   line-height: 1.55;
   color: var(--muted);
   max-width: 48em;
+}
+
+/* Compact eyebrow heading for in-card section labels (Strengths, Concerns,
+   etc.) — same tracked-uppercase treatment as .section-eyebrow-label but
+   sized to sit directly above a paragraph or short list rather than gate a
+   full chapter. */
+.section-eyebrow-sm {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 20px 0 8px;
 }
 
 /* ============ STAT TILES ============ */
@@ -402,6 +464,21 @@ main {
 
 .stat-value.accent { color: var(--blue-ink); }
 .stat-value.good { color: var(--green-ink); }
+
+/* Stat tile entrance — quick 25ms cascade across the tiles at the top
+   of the Roles page so the dashboard "composes" itself. Caps at 6
+   tiles (any more falls back to the un-delayed 220ms default). */
+@media (prefers-reduced-motion: no-preference) {
+  .stats .stat {
+    animation: rowIn 220ms ease-out backwards;
+  }
+  .stats .stat:nth-child(1) { animation-delay:  30ms; }
+  .stats .stat:nth-child(2) { animation-delay:  60ms; }
+  .stats .stat:nth-child(3) { animation-delay:  90ms; }
+  .stats .stat:nth-child(4) { animation-delay: 120ms; }
+  .stats .stat:nth-child(5) { animation-delay: 150ms; }
+  .stats .stat:nth-child(6) { animation-delay: 180ms; }
+}
 
 /* ============ FILTER BAR ============ */
 
@@ -598,6 +675,12 @@ main {
 }
 .filter-mini-pill.active .filter-mini-pill-count { opacity: 0.9; }
 
+/* Inline icon (e.g. thumbs-up/down on Liked/Disliked rating pills).
+   Sized to the pill's text weight so the glyph sits balanced with the
+   label, not floating above or below it. */
+.filter-mini-pill-icon { display: inline-flex; align-items: center; }
+.filter-mini-pill-icon svg { width: 12px; height: 12px; }
+
 .filter-slider {
   width: 100%;
   margin: 0;
@@ -687,9 +770,13 @@ main {
 .filter-pill:hover { border-color: var(--border-strong); }
 
 .filter-pill.active {
-  background: var(--blue);
-  color: white;
-  border-color: var(--blue);
+  /* Charcoal active state mirrors .btn.primary — selection signal in this
+     palette is solid ink, not branded blue. Same color as the primary
+     CTA but a different shape (pill vs. button rectangle), so they read
+     as distinct surfaces without splintering the accent vocabulary. */
+  background: var(--ink);
+  color: var(--surface);
+  border-color: var(--ink);
 }
 
 .filter-pill .count {
@@ -775,8 +862,11 @@ main {
   font-family: var(--font-display);
 }
 
+/* Kanban score badge — matches the .score-num scale: high stays green
+   (semantic positive signal), low stays muted, mid drops the blue tint
+   for a neutral surface-2 chip with ink text. */
 .kanban-card-score.high { background: var(--green-soft); color: var(--green-ink); }
-.kanban-card-score.mid { background: var(--blue-soft); color: var(--blue-ink); }
+.kanban-card-score.mid { background: var(--surface-2); color: var(--ink); }
 .kanban-card-score.low { background: var(--surface-2); color: var(--muted); }
 
 .kanban-card-body { min-width: 0; flex: 1; }
@@ -812,9 +902,12 @@ main {
 }
 
 .view-btn.is-active {
-  background: var(--blue-soft);
-  border-color: var(--blue);
-  color: var(--blue-ink);
+  /* Soft charcoal tint rather than solid ink — the toggle is icon-only
+     and small, so solid fill would over-weight it next to neighboring
+     controls. Strong border + ink glyph still reads clearly as "active". */
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+  color: var(--ink);
 }
 
 /* ============ TABLE TOOLBAR ============ */
@@ -912,7 +1005,7 @@ th {
 }
 
 th:hover { color: var(--ink); }
-th.sorted { color: var(--blue-ink); }
+th.sorted { color: var(--ink); }
 th.sorted::after { content: '↓'; margin-left: 4px; }
 th.sorted.asc::after { content: '↑'; }
 
@@ -968,9 +1061,18 @@ td {
   letter-spacing: -0.02em;
 }
 
+/* Score scale: high pops (green = good fit), low recedes (muted = ignore),
+   mid is neutral ink — the previous blue-ink wasn't carrying a semantic,
+   it was just an in-between color. Ink lets the number stand on its own. */
 .score-num.high { color: var(--green-ink); }
-.score-num.mid { color: var(--blue-ink); }
+.score-num.mid { color: var(--ink); }
 .score-num.low { color: var(--muted); }
+
+/* Size variant — the default 22px is the table-row size; .lg is the
+   card-view row-hero treatment where the score is the dominant cell.
+   Lifts inline font-size off the markup in index.html so a future
+   scale change doesn't need a markup edit. */
+.score-num.lg { font-size: 28px; }
 
 .score-bars {
   display: flex;
@@ -1039,6 +1141,7 @@ td {
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
+.card:hover { box-shadow: var(--shadow-md); border-color: var(--border-strong); }
 .card:active { transform: scale(0.99); box-shadow: var(--shadow-xs); }
 
 .card.is-new {
@@ -1263,6 +1366,13 @@ td {
   .modal-backdrop.open .modal { transform: translateY(0) scale(1); }
 }
 
+/* Add-role modal variant: narrower than the listing-detail modal since the
+   body is a single-column form (URL hero → reveal-on-demand manual fields)
+   rather than the two-column read/write split that .modal-cols expects.
+   Everything else (transform, backdrop, head, close button) inherits from
+   .modal. */
+.modal.modal-add-role { max-width: 640px; }
+
 .modal-head {
   position: sticky;
   top: 0;
@@ -1461,12 +1571,18 @@ td {
 .btn:hover { border-color: var(--border-strong); box-shadow: var(--shadow-xs); }
 .btn:active { transform: translateY(1px); }
 
+/* Primary CTA — solid charcoal (Airbnb pattern). Uses --ink instead of
+   --blue so the rest of the system (links, filter-active states, chip
+   pills, focus rings) can keep the blue accent without dragging the
+   primary button along. Hover deepens to pure black; dark mode flips
+   to off-white fill and pure-white hover. */
 .btn.primary {
-  background: var(--blue);
-  border-color: var(--blue);
-  color: white;
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--surface);
 }
-.btn.primary:hover { background: var(--blue-ink); border-color: var(--blue-ink); }
+.btn.primary:hover { background: #000; border-color: #000; }
+[data-theme="dark"] .btn.primary:hover { background: #ffffff; border-color: #ffffff; }
 
 .btn.success {
   background: var(--green);
@@ -1505,19 +1621,42 @@ td {
 }
 
 .btn-vote {
-  font-size: 18px;
   padding: 9px 14px;
+  /* SVG thumbs replace the prior emoji glyphs — explicit size + flex
+     centering so the icon sits visually balanced inside the button at
+     the same optical weight the 18px emoji had. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+.btn-vote svg { width: 18px; height: 18px; }
 
+/* Inline rating indicator — used in card-foot to show how a listing was
+   rated, distinct from the .btn-vote control surface. Color flows from
+   the .up / .down modifier through currentColor on the SVG. */
+.rating-thumb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+.rating-thumb svg { width: 100%; height: 100%; }
+.rating-thumb.up { color: var(--green); }
+.rating-thumb.down { color: var(--bad); }
+
+/* Form label — sentence case, modern. Drops the prior tracked-caps
+   SaaS-era treatment in favor of a quiet medium-weight title that sits
+   tight to its input. Parents own top-margin so labels inside a panel
+   don't push themselves away from the section heading. */
 label {
   display: block;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  margin-bottom: 6px;
-  margin-top: 16px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+  letter-spacing: 0;
+  text-transform: none;
+  margin: 0 0 6px;
 }
 
 input[type='text'],
@@ -1535,7 +1674,19 @@ textarea {
   padding: 10px 12px;
   font-size: 14px;
   font-family: var(--font-ui);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+/* Hover-not-focus shifts the border one step stronger so inputs feel
+   "alive" on pointer devices. Costs nothing on touch. */
+input[type='text']:hover:not(:focus),
+input[type='email']:hover:not(:focus),
+input[type='date']:hover:not(:focus),
+input[type='number']:hover:not(:focus),
+input[type='url']:hover:not(:focus),
+select:hover:not(:focus),
+textarea:hover:not(:focus) {
+  border-color: var(--border-strong);
 }
 
 input:focus,
@@ -1551,7 +1702,9 @@ textarea { resize: vertical; min-height: 80px; }
 .field-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  /* 18px row / 20px column gap reads as a modern form rhythm. 12px was
+     tight enough that adjacent inputs felt fused. */
+  gap: 18px 20px;
 }
 
 /* Inputs (especially date pickers on iOS) have an intrinsic min content width.
@@ -1633,6 +1786,17 @@ textarea { resize: vertical; min-height: 80px; }
   margin-bottom: 6px;
 }
 .page-back:hover { color: var(--ink-2); }
+
+/* Right-side cluster in .page-head — used on the roles page to sit the
+   Ignored link next to the primary "+ Add role" CTA. .page-head itself is
+   justify-content: space-between, so a single child hugs right; wrap two
+   children in this container to keep them grouped. */
+.page-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 
 .ignored-link {
   display: inline-flex;
@@ -1828,15 +1992,10 @@ textarea { resize: vertical; min-height: 80px; }
   }
 }
 
-/* Result card on paste page */
-.result-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  box-shadow: var(--shadow-sm);
-  margin-top: 24px;
-}
+/* Result card on paste page. Composes .panel for the surface chrome
+   (markup: <section class="panel result-card">) and keeps only the
+   paste-specific top margin so it sits below the page-head. */
+.result-card { margin-top: 24px; }
 
 .spend-row {
   display: flex;
@@ -1913,11 +2072,17 @@ textarea { resize: vertical; min-height: 80px; }
 }
 
 .brief::before {
+  /* Hairline ink rule replaces the prior blue→green gradient stripe.
+     The stripe is decorative chrome — at 2px solid ink it reads as a
+     typeset rule rather than a branded color flourish, which fits the
+     warm-cream / charcoal-CTA aesthetic the rest of the surface has
+     moved toward. Green stays reserved for actual positive signals
+     (high scores), not decoration. */
   content: '';
   position: absolute;
   top: 0; left: 0; bottom: 0;
-  width: 3px;
-  background: linear-gradient(180deg, var(--blue) 0%, var(--green) 100%);
+  width: 2px;
+  background: var(--ink);
 }
 
 .brief-meta {
@@ -1932,7 +2097,9 @@ textarea { resize: vertical; min-height: 80px; }
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-weight: 600;
-  color: var(--blue-ink);
+  /* Ink (not blue-ink) — editorial section label; the typesetting carries
+     the weight, color stays out of the way. */
+  color: var(--ink);
 }
 
 .brief-date {
@@ -1979,7 +2146,9 @@ textarea { resize: vertical; min-height: 80px; }
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-weight: 600;
-  color: var(--green-ink);
+  /* Ink (not green-ink) — green is reserved for actual positive signals
+     (high-fit scores). Section labels are typesetting, not branding. */
+  color: var(--ink);
 }
 
 .weekly-date {
@@ -1996,6 +2165,27 @@ textarea { resize: vertical; min-height: 80px; }
 
 .weekly[open] .weekly-chevron {
   transform: rotate(180deg);
+}
+
+/* Native <details> body animation. Uses the modern interpolate-size +
+   ::details-content recipe so the open/close transitions smoothly
+   without JS. Chrome / Edge 129+ apply the animation; Safari and
+   Firefox fall back to the legacy snap (graceful degradation).
+   The CSS Grid trick used on settings' .section-body doesn't work
+   here because <details> manages content visibility itself — this is
+   the dedicated mechanism for animating a native disclosure widget. */
+@media (prefers-reduced-motion: no-preference) {
+  html { interpolate-size: allow-keywords; }
+  .weekly::details-content {
+    block-size: 0;
+    overflow: clip;
+    opacity: 0;
+    transition: block-size 280ms ease-out, opacity 200ms ease-out;
+  }
+  .weekly[open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
 }
 
 .weekly-body {
@@ -2227,6 +2417,117 @@ button[disabled] {
   to { transform: rotate(360deg); }
 }
 
+/* ============ ADD-A-ROLE PAGE ============
+   AI-first: the URL row is at top, manual form is hidden and reveals
+   on auto-fill (success or failure) or via the divider. Uses shared
+   primitives — .result-card panels, .btn primary, .form-help, and
+   .test-result — so the page is a sibling of ignored/settings, not a
+   bespoke surface. The page-specific bits below are all functional:
+   the URL row layout, the divider affordance, the applied-toggle
+   sub-block, and the reveal stagger.
+   ========================================= */
+
+/* URL + button row inside the first .result-card. Button hugs the
+   right; input fills the rest. Wraps under ~440px so the button
+   doesn't squeeze the input. */
+.url-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+.url-row input { flex: 1; min-width: 200px; margin: 0; }
+.url-row .btn { margin: 0; white-space: nowrap; }
+
+/* Divider that reveals the manual form. Plain text-button on a
+   hairline rule — same Geist typography as everything else. Once
+   the form is open the divider goes inert (clicking it would be a
+   no-op). */
+.manual-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin: 24px 0;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  transition: color 0.15s ease;
+}
+.manual-divider::before,
+.manual-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  transition: background 0.15s ease;
+}
+.manual-divider:hover { color: var(--ink-2); }
+.manual-divider:hover::before,
+.manual-divider:hover::after { background: var(--ink-2); }
+.manual-divider:focus-visible { outline: none; color: var(--ink-2); }
+.manual-divider[aria-expanded="true"] {
+  cursor: default;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+/* Manual form: panel comes from .result-card. .manual-form layers only
+   the per-page bits — override .result-card's default top margin (the
+   divider already provides the gap) and the per-child stagger that
+   animates the reveal. */
+.manual-form { margin-top: 0; }
+.manual-form > * { animation: rowIn 260ms ease-out backwards; }
+.manual-form > *:nth-child(1) { animation-delay: 20ms; }
+.manual-form > *:nth-child(2) { animation-delay: 50ms; }
+.manual-form > *:nth-child(3) { animation-delay: 80ms; }
+.manual-form > *:nth-child(4) { animation-delay: 110ms; }
+.manual-form > *:nth-child(5) { animation-delay: 140ms; }
+.manual-form > *:nth-child(6) { animation-delay: 170ms; }
+.manual-form > *:nth-child(7) { animation-delay: 200ms; }
+@media (prefers-reduced-motion: reduce) {
+  .manual-form > * { animation: none; }
+}
+
+.applied-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+.applied-toggle input { width: auto; margin: 0; }
+
+.applied-fields {
+  margin-top: 12px;
+  padding: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+}
+.applied-help {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.manual-form .submit-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 15px;
+  margin-top: 16px;
+  justify-content: center;
+}
+
 /* Row/card entrance: rows cascade in on first paint. Only the first ~8
    visible get the stagger; we cap --i in JS so a 60-listing day doesn't
    take 2 seconds to reveal. The `backwards` fill keeps each row hidden
@@ -2243,6 +2544,26 @@ button[disabled] {
 }
 @media (prefers-reduced-motion: reduce) {
   .is-entering { animation: none; }
+}
+
+/* Page-load entrance for the .panel container system + .page-head.
+   The header arrives first (no delay), then panels cascade in via
+   :nth-of-type stagger so every page with stacked panels (profile,
+   settings, paste, future) composes itself top-down on first paint.
+   Reuses the rowIn keyframe — one motion vocabulary for the whole app. */
+@media (prefers-reduced-motion: no-preference) {
+  .page-head {
+    animation: rowIn 220ms ease-out backwards;
+  }
+  .panel {
+    animation: rowIn 260ms ease-out backwards;
+  }
+  .panel:nth-of-type(1) { animation-delay:  40ms; }
+  .panel:nth-of-type(2) { animation-delay:  90ms; }
+  .panel:nth-of-type(3) { animation-delay: 140ms; }
+  .panel:nth-of-type(4) { animation-delay: 190ms; }
+  .panel:nth-of-type(5) { animation-delay: 240ms; }
+  .panel:nth-of-type(6) { animation-delay: 290ms; }
 }
 
 /* Shimmer skeletons — used on pages where initial paint is empty pending an
@@ -2596,16 +2917,63 @@ button[disabled] {
    page-scoped layouts, not reusable atomics.
    ========================================================================= */
 
-/* ----- Accordion section ----- */
-/* Used for the Settings page's collapsible cards (Sources, Notifications,
-   Preferences, Spend) and available to any page that wants the same shape. */
-.section {
+/* ----- Panel ----- */
+/* Canonical container card. The single source of truth for "section
+   wrapped in a card" — bg, border, radius, padding, elevation, stacking
+   rhythm. Consumed by .profile-section (profile), .section (settings
+   accordion adds its own behavior on top), .result-card (paste page),
+   and any future page that needs a sectional container.
+
+   This is a static container, not a tappable card. Mobile listing cards
+   use .card (different beast — clickable, hover-lift, smaller radius). */
+.panel {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xs);
+  padding: 24px 28px;
   margin-bottom: 16px;
+}
+.panel:last-of-type { margin-bottom: 0; }
+
+/* Heading region inside a .panel. Bottom margin owns the gap to the
+   panel body; child elements shouldn't add their own top-margin. The
+   descendant selectors let a panel-head wrap a plain <h2>/<p> without
+   needing explicit class names — but the .panel-title / .panel-subtitle
+   classes are available for non-standard markup (e.g. settings uses
+   .section-title which mirrors .panel-title manually). */
+.panel-head { margin-bottom: 16px; }
+.panel-head h2,
+.panel-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.panel-head p,
+.panel-subtitle {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 60ch;
+}
+
+/* Tighter side padding on small screens — 28px gutter eats most of the
+   viewport on a 375px phone, leaving inputs too narrow. */
+@media (max-width: 600px) {
+  .panel { padding: 20px 18px; }
+}
+
+/* ----- Accordion section ----- */
+/* Settings/Notify use the .panel surface (added via class composition
+   in markup: <div class="panel section open">) and layer collapsible
+   behavior on top. Behavior-only rules live here; surface props on .panel.
+   The .section overrides .panel's padding to 0 because the head/body
+   each own their own padding. */
+.section {
   overflow: hidden;
+  padding: 0;
 }
 .section-head {
   display: flex; justify-content: space-between; align-items: center;
@@ -2613,9 +2981,9 @@ button[disabled] {
 }
 .section-head:hover { background: var(--surface-2); }
 .section-title {
-  font-family: var(--font-display);
   font-weight: 600; font-size: 18px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  color: var(--ink);
 }
 .section-sub {
   font-size: 12px; color: var(--muted); margin-top: 2px;
@@ -2625,8 +2993,33 @@ button[disabled] {
   transition: transform 0.2s ease;
 }
 .section.open .section-chevron { transform: rotate(180deg); }
-.section-body { display: none; padding: 4px 20px 20px; border-top: 1px solid var(--border); }
-.section.open .section-body { display: block; padding-top: 16px; }
+
+/* Accordion body animation — grid-template-rows: 0fr → 1fr is the modern
+   technique for height-animating from collapsed to natural content
+   height. The browser interpolates between two concrete grid sizes
+   (auto can't transition), and overflow:hidden on the inner wrapper
+   reveals content from the top as the row grows. Opacity comes along
+   for a softer reveal. Border/padding live on .section-body-inner so
+   they only render when the body has height — no hairline floating in
+   empty space mid-animation. */
+.section-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 280ms ease-out, opacity 200ms ease-out;
+}
+.section-body-inner {
+  overflow: hidden;
+  padding: 16px 20px 20px;
+  border-top: 1px solid var(--border);
+}
+.section.open .section-body {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .section-body { transition: none; }
+}
 
 /* ----- Kind badge ----- */
 /* Inline pill identifying a source kind (greenhouse, lever, smartfetch, etc).
@@ -2692,6 +3085,29 @@ button[disabled] {
 .form-help {
   font-size: 12px; color: var(--muted); margin-top: 4px;
   font-style: italic;
+}
+
+/* Non-italic muted descriptive text. Used for "all recipients receive…"
+   style explanatory copy below labels and inside toggle descriptions —
+   different shape from .form-help (which sits under a form control as a
+   field hint). Margin omitted so callers control rhythm in context. */
+.help-text {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* Row layout — label/text on the left, primary action on the right.
+   Recurring pattern in settings.html (status message + Save button,
+   Run-now caption + Run button, etc.). Gap defaults to 8px; callers
+   add margin-top inline where they need scope-specific positioning.
+   flex-wrap so the action drops below on narrow widths. */
+.row-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* ----- Toggle row ----- */
