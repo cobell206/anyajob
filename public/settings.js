@@ -1,6 +1,6 @@
 import {
   $, $$, escapeHtml, api,
-  confirmDialog, alertDialog, setStatus, renderEmptyState,
+  confirmDialog, alertDialog, setStatus,
 } from './app.js';
 
 // Inline SVGs replace emoji glyphs in the source-card row. Lucide-style
@@ -8,6 +8,8 @@ import {
 const SVG_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 4 20 12 6 20"/></svg>';
 const SVG_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
 const SVG_SEARCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+const SVG_DOTS = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>';
+const SVG_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>';
 const SVG_ALERT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="13" height="13"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
 
 // Section accordion
@@ -19,7 +21,36 @@ $$('.section-head').forEach((h) => {
 
 // ===== Sources =====
 let sourcesData = { sources: [] };
+let sourcesLoaded = false;
+let firstSourceRender = true;     // gate the per-card entrance cascade
 let activeKind = 'greenhouse';
+// Tracked separately so loadSources() and loadPendingDiscoveries() can each
+// update the section sub-line independently without overwriting the other's
+// contribution. Initialized to null so the first sub-line write doesn't
+// claim "0 pending review" before pending discoveries have been fetched.
+let pendingCount = null;
+
+// Single source of truth for the "Sources" section sub-line — writes
+// "X configured · Y enabled · Z pending review" and toggles the pink
+// pending-dot on the collapsed section title. Replaces three previously-
+// inlined writers that each rendered their own template.
+// Guarded on sourcesLoaded so an early pending fetch can't briefly render
+// "0 configured · 0 enabled · N pending review" while sources are still
+// in flight; once sources load, it pulls in whatever pendingCount holds.
+function updateSourcesSub() {
+  if (!sourcesLoaded) return;
+  const sub = $('#sources-sub');
+  if (!sub) return;
+  const total = sourcesData.sources.length;
+  const enabled = sourcesData.sources.filter((x) => x.enabled).length;
+  let txt = `${total} configured · ${enabled} enabled`;
+  if (pendingCount && pendingCount > 0) {
+    txt += ` · ${pendingCount} pending review`;
+  }
+  sub.textContent = txt;
+  const section = document.getElementById('section-sources');
+  if (section) section.classList.toggle('has-pending', !!pendingCount);
+}
 
 function fmtRel(iso) {
   if (!iso) return 'never';
@@ -38,9 +69,18 @@ function isRepairable(s) {
 }
 
 function renderSource(s) {
+  // Meta line surfaces the source's identifying detail (slug or URL) only when
+  // it adds information beyond the name itself. For greenhouse/lever the slug
+  // often matches the name (e.g. "ACLU" / aclu) — show it only when they
+  // differ. Missing-slug error state is surfaced via .source-stats below, so
+  // we don't double-report it here.
   let configLine = '';
-  if (s.kind === 'greenhouse' || s.kind === 'lever') configLine = 'slug: ' + (s.config?.slug || '?');
-  else if (s.kind === 'smartfetch' || s.kind === 'bookmark') configLine = s.config?.url || '?';
+  if (s.kind === 'greenhouse' || s.kind === 'lever') {
+    const slug = s.config?.slug || '';
+    if (slug && slug.toLowerCase() !== s.name.toLowerCase()) configLine = slug;
+  } else if (s.kind === 'smartfetch' || s.kind === 'bookmark') {
+    configLine = s.config?.url || '';
+  }
 
   let stats = '';
   if (s.kind !== 'bookmark') {
@@ -63,9 +103,6 @@ function renderSource(s) {
   // Bookmarks don't fetch — runOne short-circuits — so no "Run now" button.
   const runBtn = s.kind === 'bookmark' ? '' :
     `<button class="icon-btn-sm run-btn" data-run="${s.id}" title="Run now" aria-label="Run ${safeName} now">${SVG_PLAY}<span>Run</span></button>`;
-  const repairBtn = isRepairable(s)
-    ? `<button class="repair-btn" data-repair="${s.id}" title="Use AI web search to find the new URL" aria-label="Find new URL for ${safeName}">${SVG_SEARCH}<span>Find URL</span></button>`
-    : '';
 
   // The wrapping <label> already provides the accessible name to the
   // checkbox via the visible "On"/"Off" text, so no explicit aria-label
@@ -78,19 +115,37 @@ function renderSource(s) {
     </label>
   `;
 
+  // Overflow menu — destructive + rare actions live here so they're one
+  // tap further from Run. Keeps data-delete / data-repair so the existing
+  // delegated handlers still fire; the menu wrapper handles open/close.
+  const repairItem = isRepairable(s)
+    ? `<button role="menuitem" class="source-menuitem" data-repair="${s.id}">${SVG_SEARCH}<span>Find new URL</span></button>`
+    : '';
+  const menu = `
+    <div class="source-menu-wrap" data-menu-wrap="${s.id}">
+      <button class="icon-btn-sm source-menu-btn" data-menu-btn="${s.id}"
+              aria-haspopup="menu" aria-expanded="false"
+              title="More actions" aria-label="More actions for ${safeName}">${SVG_DOTS}</button>
+      <div class="source-menu" data-menu="${s.id}" role="menu"
+           aria-label="Actions for ${safeName}" hidden>
+        ${repairItem}
+        <button role="menuitem" class="source-menuitem danger" data-delete="${s.id}">${SVG_TRASH}<span>Delete source</span></button>
+      </div>
+    </div>
+  `;
+
   return `
     <div class="source-card ${s.enabled ? '' : 'disabled'}">
       <div class="source-info">
-        <div class="source-name"><span>${safeName}</span>${s.builtIn ? '<span class="source-builtin">· built-in</span>' : ''}</div>
-        <div class="source-meta">${escapeHtml(configLine)}</div>
+        <div class="source-name">${safeName}</div>
+        ${configLine ? `<div class="source-meta">${escapeHtml(configLine)}</div>` : ''}
         <div class="source-stats">${stats}</div>
         <div class="run-result" data-run-result="${s.id}" style="display:none"></div>
       </div>
       <div class="source-actions">
-        ${repairBtn}
         ${toggle}
         ${runBtn}
-        <button class="icon-btn-sm danger" data-delete="${s.id}" title="Delete" aria-label="Delete ${safeName}">${SVG_X}</button>
+        ${menu}
       </div>
     </div>
   `;
@@ -106,15 +161,17 @@ function renderSource(s) {
 function renderCandidateCard(c, { actionsHtml, dataAttr = '' }) {
   const isStructured = c.kind === 'greenhouse' || c.kind === 'lever';
   // Slug is the canonical identifier for structured sources, so we surface
-  // it as metadata. For smartfetch/bookmark the slug is absent and the URL
-  // is the only identifier — show it once, as a link, never duplicated.
+  // it as one short line of metadata. The standalone URL line was dropped:
+  // the name itself is now the link, with a small external-link glyph
+  // inline. One affordance to the source, not two, and the long URL
+  // string no longer eats half the card's height.
   const slugLine = isStructured && c.config?.slug
     ? `<div class="source-meta">slug: ${escapeHtml(c.config.slug)}</div>`
     : '';
   const url = c.url || c.config?.url;
-  const urlLine = url
-    ? `<div class="source-meta"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:var(--blue-ink);text-decoration:none">${escapeHtml(url)} ↗</a></div>`
-    : '';
+  const nameInner = url
+    ? `<a class="candidate-name-link" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="${escapeHtml(url)}" aria-label="${escapeHtml(c.name)} (opens in new tab)">${escapeHtml(c.name)}<svg class="ext-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12" aria-hidden="true"><path d="M7 17 17 7"/><path d="M9 7h8v8"/></svg></a>`
+    : escapeHtml(c.name);
   // Confidence chip rides in the header row to the right of the name. The
   // word "confidence" is dropped — context (the badge color + position next
   // to a discovery suggestion) makes "HIGH" / "MEDIUM" / "LOW" unambiguous.
@@ -138,15 +195,16 @@ function renderCandidateCard(c, { actionsHtml, dataAttr = '' }) {
   return `
     <div class="source-card candidate-card"${dataAttr}>
       <div class="candidate-header">
-        ${kindTag}
-        <div class="source-name">${escapeHtml(c.name)}</div>
-        ${confBadge}
+        <div class="candidate-header-text">
+          ${kindTag}
+          <div class="source-name">${nameInner}</div>
+          ${confBadge}
+        </div>
+        <div class="candidate-actions">${actionsHtml}</div>
       </div>
       ${slugLine}
-      ${urlLine}
       ${rationale}
       ${overlapWarning}
-      <div class="candidate-actions">${actionsHtml}</div>
     </div>
   `;
 }
@@ -196,8 +254,7 @@ async function runSourceNow(s, btn) {
     // inline result we just rendered.
     try {
       sourcesData = await api('/api/sources');
-      const enabled = sourcesData.sources.filter((x) => x.enabled).length;
-      $('#sources-sub').textContent = `${sourcesData.sources.length} configured · ${enabled} enabled`;
+      updateSourcesSub();
     } catch { /* ignore */ }
   }
 }
@@ -319,9 +376,22 @@ async function runRepair(source) {
 
 async function loadSources() {
   sourcesData = await api('/api/sources');
-  const enabled = sourcesData.sources.filter((s) => s.enabled).length;
-  $('#sources-sub').textContent = `${sourcesData.sources.length} configured · ${enabled} enabled`;
+  sourcesLoaded = true;
+  updateSourcesSub();
   $('#source-list').innerHTML = sourcesData.sources.map(renderSource).join('');
+
+  // First-paint cascade only — gating the .is-entering class to the
+  // initial render keeps toggle/delete re-renders snappy instead of
+  // re-animating every card on every interaction. Capped at 8 cards
+  // so a long source list doesn't take 2 seconds to reveal.
+  if (firstSourceRender) {
+    $$('#source-list .source-card').forEach((card, i) => {
+      if (i >= 8) return;
+      card.style.setProperty('--i', i);
+      card.classList.add('is-entering');
+    });
+    firstSourceRender = false;
+  }
 
   $$('[data-toggle]').forEach((input) => {
     input.addEventListener('change', () => {
@@ -343,9 +413,7 @@ async function loadSources() {
         if (status) status.textContent = enabled ? 'Active' : 'Inactive';
         input.setAttribute('aria-label', enabled ? 'Active' : 'Inactive');
         card?.classList.toggle('disabled', !enabled);
-        const total = sourcesData.sources.length;
-        const on = sourcesData.sources.filter((x) => x.enabled).length;
-        $('#sources-sub').textContent = `${total} configured · ${on} enabled`;
+        updateSourcesSub();
       };
 
       applyVisual(newEnabled);
@@ -405,7 +473,84 @@ async function loadSources() {
       if (s) runRepair(s);
     });
   });
+
+  wireSourceMenus();
 }
+
+// Overflow menu wiring. Per-row open/close, arrow-key navigation between
+// items, and a single document-level listener (installed once) for
+// click-outside and Escape so we don't pile up handlers on every re-render.
+function wireSourceMenus() {
+  $$('[data-menu-btn]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.menuBtn;
+      const menu = document.querySelector(`[data-menu="${id}"]`);
+      if (!menu) return;
+      const willOpen = menu.hidden;
+      closeAllSourceMenus();
+      if (willOpen) openSourceMenu(btn, menu);
+    });
+  });
+
+  $$('.source-menu').forEach((menu) => {
+    menu.addEventListener('keydown', (e) => {
+      const items = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+      const idx = items.indexOf(document.activeElement);
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        items[(idx + 1) % items.length]?.focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        items[(idx - 1 + items.length) % items.length]?.focus();
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        items[0]?.focus();
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        items[items.length - 1]?.focus();
+      }
+    });
+    // Close on item activation — the underlying data-delete / data-repair
+    // handlers already ran (event delegation attaches them above).
+    menu.querySelectorAll('[role="menuitem"]').forEach((item) => {
+      item.addEventListener('click', () => closeAllSourceMenus());
+    });
+  });
+}
+
+function openSourceMenu(btn, menu) {
+  menu.hidden = false;
+  btn.setAttribute('aria-expanded', 'true');
+  const first = menu.querySelector('[role="menuitem"]');
+  first?.focus();
+}
+
+function closeAllSourceMenus() {
+  $$('.source-menu').forEach((menu) => {
+    if (!menu.hidden) {
+      menu.hidden = true;
+      const id = menu.dataset.menu;
+      const btn = document.querySelector(`[data-menu-btn="${id}"]`);
+      btn?.setAttribute('aria-expanded', 'false');
+    }
+  });
+}
+
+// Installed once at module load — click-outside and Escape close any open
+// source menu. Survives loadSources() re-renders because it lives on document.
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.source-menu-wrap')) closeAllSourceMenus();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const open = document.querySelector('.source-menu:not([hidden])');
+  if (!open) return;
+  const id = open.dataset.menu;
+  const btn = document.querySelector(`[data-menu-btn="${id}"]`);
+  closeAllSourceMenus();
+  btn?.focus();
+});
 
 // ===== Add source form =====
 function renderFormFields() {
@@ -605,22 +750,32 @@ async function loadPendingDiscoveries() {
     data = await api('/api/discoveries');
   } catch {
     wrap.style.display = 'none';
+    pendingCount = 0;
+    updateSourcesSub();
     return;
   }
   const pending = data.pending || [];
   if (pending.length === 0) {
     wrap.style.display = 'none';
+    pendingCount = 0;
+    updateSourcesSub();
     return;
   }
 
+  pendingCount = pending.length;
+  updateSourcesSub();
   wrap.style.display = 'block';
-  // The pink left-border on each .candidate-card now carries the "this is
-  // pending review" signal, so the section just needs a quiet caption above.
+  // Soft pink callout anchors the AI's summary copy to the cards below
+  // (which share the same pink left-accent), so the summary actually gets
+  // read instead of skimmed past as label-adjacent metadata. The label +
+  // count sit in a head row; the summary is the body of the callout.
   wrap.innerHTML = `
-    <div class="pending-caption">
-      <span class="pending-caption-label">Pending review</span>
-      <span class="pending-caption-count">${pending.length} ${pending.length === 1 ? 'candidate' : 'candidates'}</span>
-      ${data.lastSummary ? `<span class="pending-caption-summary">${escapeHtml(data.lastSummary)}</span>` : ''}
+    <div class="pending-caption${data.lastSummary ? '' : ' is-empty'}">
+      <div class="pending-caption-head">
+        <span class="pending-caption-label">Pending review</span>
+        <span class="pending-caption-count">${pending.length} ${pending.length === 1 ? 'candidate' : 'candidates'}</span>
+      </div>
+      ${data.lastSummary ? `<p class="pending-caption-summary">${escapeHtml(data.lastSummary)}</p>` : ''}
     </div>
     <div style="display:flex;flex-direction:column;gap:8px" id="pending-list"></div>
   `;
@@ -682,93 +837,161 @@ async function loadPendingDiscoveries() {
   }
 }
 
-// ===== Source discovery (live, button-triggered) =====
-$('#discover-btn').addEventListener('click', async () => {
-  const panel = $('#discover-panel');
-  const status = $('#discover-status');
-  const summary = $('#discover-summary');
-  const list = $('#discover-candidates');
-  const btn = $('#discover-btn');
+// ===== Source discovery (modal-driven) =====
+// "Find new sources" opens a focused modal: textarea for the optional
+// steering hint, loading state during the 30–60s AI run, then a result
+// panel that summarizes the outcome. Candidates themselves never render
+// inside the modal — they land in the pending-discoveries zone, which
+// is the single canonical surface for "candidates awaiting review".
+// This kills the prior live-vs-persisted duplication where the same
+// candidate could be dismissed in two different places with two
+// different behaviors.
+let _discoverBackdrop = null;
+let _discoverState = 'idle'; // 'idle' | 'form' | 'loading' | 'result'
 
-  panel.style.display = 'block';
-  status.innerHTML = '<span class="spinner sm"></span> Searching the web for sources matching your profile…';
-  status.style.color = 'var(--muted)';
-  summary.style.display = 'none';
-  list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">This usually takes 30-60 seconds…</div>';
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner sm"></span> Searching…';
+function getDiscoverBackdrop() {
+  if (_discoverBackdrop) return _discoverBackdrop;
+  _discoverBackdrop = document.createElement('div');
+  _discoverBackdrop.className = 'modal-backdrop discover-backdrop';
+  _discoverBackdrop.innerHTML = `
+    <div class="modal discover-modal" role="dialog" aria-modal="true" aria-labelledby="discover-modal-title">
+      <div class="modal-head">
+        <div class="modal-title" id="discover-modal-title">Find new sources</div>
+        <button class="modal-close" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body" id="discover-body"></div>
+    </div>
+  `;
+  document.body.appendChild(_discoverBackdrop);
+  _discoverBackdrop.addEventListener('click', (e) => {
+    // Click on the backdrop dismisses; clicks inside the modal don't.
+    // Loading state blocks dismissal — the run is still in flight and
+    // the user explicitly chose "stay open through completion".
+    if (e.target === _discoverBackdrop && _discoverState !== 'loading') closeDiscover();
+  });
+  _discoverBackdrop.querySelector('.modal-close').addEventListener('click', () => {
+    if (_discoverState !== 'loading') closeDiscover();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape'
+      && _discoverBackdrop.classList.contains('open')
+      && _discoverState !== 'loading') closeDiscover();
+  });
+  return _discoverBackdrop;
+}
+
+function openDiscover() {
+  const backdrop = getDiscoverBackdrop();
+  backdrop.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  renderDiscoverForm();
+  // Focus the textarea so she can start typing immediately. Defer one
+  // frame so the modal is laid out before focus moves into it.
+  requestAnimationFrame(() => {
+    document.getElementById('discover-hint')?.focus();
+  });
+}
+
+function closeDiscover() {
+  if (_discoverBackdrop) _discoverBackdrop.classList.remove('open');
+  document.body.style.overflow = '';
+  _discoverState = 'idle';
+}
+
+// Form state: textarea + Cancel/Find buttons. Re-rendered after errors
+// (with the user's previous hint preserved) so she can edit and retry.
+function renderDiscoverForm(prefillHint = '') {
+  _discoverState = 'form';
+  const body = $('#discover-body');
+  body.innerHTML = `
+    <div class="discover-form">
+      <label class="discover-form-label" for="discover-hint">Steer this run (optional)</label>
+      <textarea id="discover-hint" rows="4" maxlength="500" placeholder="e.g. focus on environmental nonprofits in NYC, or more federal/policy roles, less BigLaw"></textarea>
+      <p class="discover-form-help">Tell the AI what direction to bias toward. Only applies to this run — not saved.</p>
+    </div>
+    <div class="discover-form-footer">
+      <button class="btn ghost" id="discover-cancel">Cancel</button>
+      <button class="btn primary" id="discover-submit">Find sources</button>
+    </div>
+  `;
+  if (prefillHint) {
+    const ta = document.getElementById('discover-hint');
+    if (ta) ta.value = prefillHint;
+  }
+  $('#discover-cancel').addEventListener('click', closeDiscover);
+  $('#discover-submit').addEventListener('click', runDiscover);
+}
+
+async function runDiscover() {
+  const hint = ($('#discover-hint')?.value || '').trim();
+  _discoverState = 'loading';
+  const body = $('#discover-body');
+  body.innerHTML = `
+    <div class="repair-loading">
+      <div class="repair-spinner"></div>
+      <div>Searching the web for sources matching her profile…</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">This usually takes 30–60 seconds.</div>
+    </div>
+  `;
 
   try {
-    const hintInput = $('#discover-hint');
-    const hint = (hintInput?.value || '').trim();
     const data = await api('/api/sources/discover', { method: 'POST', body: hint ? { hint } : {} });
     if (data.error) throw new Error(data.error);
-
-    if (hintInput) hintInput.value = '';
-
-    const cands = data.candidates || [];
-    status.textContent = `Found ${cands.length} candidate${cands.length === 1 ? '' : 's'}.`;
-    status.style.color = 'var(--green-ink)';
-    if (data.summary) {
-      summary.textContent = data.summary;
-      summary.style.display = 'block';
-    }
-
-    if (cands.length === 0) {
-      list.innerHTML = renderEmptyState('No new candidates found. The structured sources you already have may cover your search well.');
-    } else {
-      list.innerHTML = cands.map((c, i) => renderCandidateCard(c, {
-        dataAttr: ` data-cand-idx="${i}"`,
-        actionsHtml: `
-          <button class="btn primary" data-add-idx="${i}">Add to sources</button>
-          <button class="btn ghost" data-skip-idx="${i}">Dismiss</button>
-        `,
-      })).join('');
-
-      // Wire up Add buttons
-      $$('[data-add-idx]').forEach((b) => {
-        b.addEventListener('click', async () => {
-          const c = cands[parseInt(b.dataset.addIdx, 10)];
-          const originalLabel = b.innerHTML;
-          b.disabled = true;
-          b.innerHTML = '<span class="spinner sm on-primary"></span>';
-          try {
-            await api('/api/sources', {
-              method: 'POST',
-              body: { kind: c.kind, name: c.name, config: c.config, enabled: true },
-            });
-            // Mark this card as added
-            const card = b.closest('.source-card');
-            card.style.opacity = '0.5';
-            b.textContent = '✓ Added';
-            loadSources();
-          } catch (err) {
-            b.disabled = false;
-            b.innerHTML = originalLabel;
-            alertDialog({ title: 'Add failed', message: err.message });
-          }
-        });
-      });
-
-      // Wire up Dismiss buttons. Live candidates are persisted server-side
-      // by /api/sources/discover but the response doesn't surface their IDs,
-      // so dismiss here is DOM-only — they'll reappear in the pending panel
-      // on next page load. Plumbing IDs through is a follow-up.
-      $$('[data-skip-idx]').forEach((b) => {
-        b.addEventListener('click', () => {
-          b.closest('.source-card').remove();
-        });
-      });
-    }
+    renderDiscoverResult(data);
   } catch (err) {
-    status.textContent = '✗ Discovery failed: ' + err.message;
-    status.style.color = 'var(--bad)';
-    list.innerHTML = '';
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '✨ Find new sources';
+    renderDiscoverError(err, hint);
   }
-});
+}
+
+function renderDiscoverResult(data) {
+  _discoverState = 'result';
+  const cands = data.candidates || [];
+  const summary = data.summary
+    ? `<div class="discover-result-summary">${escapeHtml(data.summary)}</div>`
+    : '';
+  const message = cands.length === 0
+    ? '<div class="discover-result-message empty">No new candidates found. The structured sources she already has may cover the search well.</div>'
+    : `<div class="discover-result-message ok">Found ${cands.length} new candidate${cands.length === 1 ? '' : 's'}. Review them in the Pending zone above.</div>`;
+  const body = $('#discover-body');
+  body.innerHTML = `
+    <div class="discover-result">
+      ${message}
+      ${summary}
+    </div>
+    <div class="discover-result-footer">
+      <button class="btn primary" id="discover-done">Done</button>
+    </div>
+  `;
+  $('#discover-done').addEventListener('click', () => {
+    closeDiscover();
+    // Refresh pending zone (new candidates landed there server-side) and
+    // scroll it into view so she can see what arrived.
+    loadPendingDiscoveries().then(() => {
+      if (cands.length > 0) {
+        document.getElementById('section-sources')?.classList.add('open');
+        $('#pending-discoveries')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+}
+
+function renderDiscoverError(err, prevHint) {
+  _discoverState = 'result';
+  const body = $('#discover-body');
+  body.innerHTML = `
+    <div class="discover-result">
+      <div class="discover-result-message err">Discovery failed: ${escapeHtml(err.message)}</div>
+    </div>
+    <div class="discover-result-footer">
+      <button class="btn ghost" id="discover-error-close">Close</button>
+      <button class="btn primary" id="discover-retry">Retry</button>
+    </div>
+  `;
+  $('#discover-error-close').addEventListener('click', closeDiscover);
+  $('#discover-retry').addEventListener('click', () => renderDiscoverForm(prevHint));
+}
+
+$('#discover-btn').addEventListener('click', openDiscover);
 
 // ===== Preferences (shared state) =====
 let prefs = null;
