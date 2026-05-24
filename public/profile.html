@@ -6,337 +6,514 @@
   <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#f7faf9">
   <title>Profile · AnyaJob</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Geist:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/style.css?v=__CACHE_VERSION__">
   <style>
-    .profile-card {
+    /* =====================================================================
+       PROFILE PAGE — page-specific styles only.
+       Shared editorial primitives (.page-head.is-dossier, .page-eyebrow,
+       .section-eyebrow*, .chip*, .field-grid, .btn-link) live in style.css
+       so they can be adopted by other pages. What stays here is genuinely
+       profile-only: the auto-save masthead row, the résumé artifact
+       treatments, the discovery zone with its corner-fold flourish,
+       and the staggered chapter entrance.
+       ===================================================================== */
+
+    /* Slightly narrower max-width for editorial readability — long-form
+       structured pages read better at ~880px than the dashboard 1200px. */
+    main.dossier { max-width: 880px; padding-top: 48px; }
+    @media (max-width: 600px) { main.dossier { padding-top: 24px; } }
+
+    /* Masthead status row — profile-specific. The auto-save indicator
+       has a pulsing dot and the "Discard pending changes" link fades in
+       only when there are unsaved edits (controlled by is-dirty class
+       toggled in profile.js setStatus()). */
+    .mast-status-row {
+      margin-top: 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-family: var(--font-ui);
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+    .save-status { color: var(--muted); transition: color 0.2s; }
+    .save-status.dirty { color: var(--warn-ink); }
+    .save-status.saved { color: var(--green-ink); }
+    .save-status::before {
+      content: '';
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      margin-right: 7px;
+      vertical-align: middle;
+      opacity: 0.7;
+    }
+    .save-status.dirty::before { animation: profile-pulse 1.4s ease-in-out infinite; }
+    @keyframes profile-pulse {
+      0%, 100% { opacity: 0.3; transform: scale(0.85); }
+      50%      { opacity: 0.9; transform: scale(1.1); }
+    }
+    /* The reset button extends the shared .btn-link with hide-until-dirty
+       behavior. Sits in the masthead status row; revealed by setStatus()
+       toggling .is-dirty on the row when the user starts editing. */
+    .mast-reset {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s;
+    }
+    .mast-status-row.is-dirty .mast-reset {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* Staggered chapter entrance — masthead first, then each section.
+       Uses transform+opacity only (avoid layout-trigger properties).
+       Killed entirely under reduced-motion. */
+    .page-head.is-dossier,
+    .dossier-section {
+      animation: dossier-rise 360ms ease-out backwards;
+    }
+    .page-head.is-dossier { animation-delay: 0ms; }
+    .dossier-section { margin-bottom: 56px; }
+    .dossier-section:last-of-type { margin-bottom: 0; }
+    .dossier-section:nth-of-type(1) { animation-delay: 80ms; }
+    .dossier-section:nth-of-type(2) { animation-delay: 140ms; }
+    .dossier-section:nth-of-type(3) { animation-delay: 200ms; }
+    .dossier-section:nth-of-type(4) { animation-delay: 260ms; }
+    @keyframes dossier-rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .page-head.is-dossier, .dossier-section { animation: none; }
+    }
+
+    /* ---------- Resume zone ---------- */
+    .resume-blank {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 44px 24px;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-sm);
-      padding: 20px 22px;
-      margin-bottom: 16px;
-    }
-    .profile-card h2 {
-      font-family: var(--font-display);
-      font-size: 18px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      margin: 0 0 4px;
-    }
-    .profile-card .card-sub {
-      font-size: 13px;
+      border-radius: 4px;
+      text-align: center;
+      cursor: pointer;
       color: var(--muted);
+      transition: border-color 0.18s, background 0.18s, color 0.18s;
+      position: relative;
+      overflow: hidden;
+    }
+    .resume-blank::before {
+      /* corner-fold flourish — a faint diagonal at the top-right */
+      content: '';
+      position: absolute;
+      top: 0; right: 0;
+      width: 28px; height: 28px;
+      background:
+        linear-gradient(225deg, var(--surface-2) 50%, transparent 50%);
+      border-left: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .resume-blank:hover,
+    .resume-blank.dragover {
+      border-color: var(--ink-2);
+      color: var(--ink-2);
+    }
+    .resume-blank.dragover { background: var(--surface-2); }
+    .resume-blank svg {
+      width: 32px; height: 32px;
+      color: var(--ink-2);
+      stroke-width: 1.5;
+    }
+    .resume-blank-prompt {
+      font-family: var(--font-display);
+      font-style: italic;
+      font-weight: 400;
+      font-size: 19px;
+      color: var(--ink);
+      font-variation-settings: 'opsz' 36;
+    }
+    .resume-blank-prompt em {
+      font-style: normal;
+      color: var(--blue-ink);
+      text-decoration: underline;
+      text-decoration-color: var(--blue-soft);
+      text-underline-offset: 3px;
+    }
+    .resume-blank-help {
+      font-family: var(--font-ui);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .resume-current {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 18px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--ink-2);
+      border-radius: 2px;
+    }
+    .resume-current-icon {
+      width: 36px; height: 36px;
+      color: var(--ink-2);
+      flex-shrink: 0;
+    }
+    .resume-current-icon svg { width: 100%; height: 100%; stroke-width: 1.5; }
+    .resume-current-info { flex: 1; min-width: 0; }
+    .resume-current-name {
+      font-family: var(--font-display);
+      font-weight: 500;
+      font-size: 16px;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+      word-break: break-all;
+      font-variation-settings: 'opsz' 24;
+    }
+    .resume-current-meta {
+      font-family: var(--font-ui);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-top: 4px;
+      text-transform: uppercase;
+    }
+    .resume-actions {
+      display: flex; gap: 2px; flex-shrink: 0;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    /* Subtle uploading/removing state injected by JS — matches the
+       .resume-current geometry so the swap doesn't shift layout. */
+    .resume-pending {
+      display: flex; align-items: center; gap: 12px;
+      padding: 18px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--muted);
+      font-family: var(--font-display);
+      font-style: italic;
+      font-size: 15px;
+    }
+
+    /* Use the shared .field-grid + global input styling; this page only
+       tweaks vertical rhythm between paired field rows to read like a
+       form on a printed sheet rather than a settings panel. */
+    .field-grid { gap: 18px 24px; }
+
+    /* ---------- Discovery zone ---------- */
+    .discovery-zone {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      padding: 28px 28px 24px;
+      position: relative;
+    }
+    .discovery-zone::before {
+      /* faint corner mark — same vocab as resume corner-fold */
+      content: '';
+      position: absolute;
+      top: 0; right: 0;
+      width: 24px; height: 24px;
+      background: linear-gradient(225deg, var(--blue-soft) 50%, transparent 50%);
+      border-left: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .discovery-pitch {
+      font-family: var(--font-display);
+      font-style: italic;
+      font-weight: 400;
+      font-size: 17px;
+      line-height: 1.55;
+      color: var(--ink-2);
+      max-width: 32em;
+      margin-bottom: 18px;
+      font-variation-settings: 'opsz' 36;
+    }
+    .discovery-pitch strong {
+      font-style: normal;
+      font-weight: 500;
+      color: var(--ink);
+    }
+    .discovery-action-row {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+    /* Discovery action uses the shared .btn.primary — the arrow is added
+       via SVG markup so we only need to handle the hover-slide here. */
+    #discover-btn .arrow {
+      width: 14px; height: 14px; flex-shrink: 0;
+      transition: transform 0.2s;
+    }
+    #discover-btn:hover .arrow { transform: translateX(2px); }
+    .discovery-meta {
+      font-family: var(--font-ui);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .discovery-meta strong { color: var(--ink-2); font-weight: 600; }
+
+    .discovery-results { margin-top: 0; }
+    .discovery-results:not(:empty) {
+      margin-top: 22px;
+      padding-top: 22px;
+      border-top: 1px solid var(--border);
+    }
+    .discovery-pending {
+      display: flex; align-items: center; gap: 12px;
+      font-family: var(--font-display);
+      font-style: italic;
+      font-size: 14.5px;
+      line-height: 1.5;
+      color: var(--ink-2);
+    }
+    .discovery-empty {
+      font-family: var(--font-display);
+      font-style: italic;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+    .discovery-error { color: var(--bad-ink); }
+    .discovery-summary {
+      font-family: var(--font-ui);
+      font-size: 12.5px;
+      letter-spacing: 0.02em;
+      color: var(--ink-2);
       margin-bottom: 14px;
     }
-
-    .field {
-      display: flex; flex-direction: column;
-      margin-bottom: 12px;
-    }
-    .field label {
-      font-size: 12px; font-weight: 600;
-      color: var(--ink-2);
-      letter-spacing: 0.02em;
-      margin-bottom: 4px;
-    }
-    .field input,
-    .field textarea,
-    .field select {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 8px 10px;
-      font-family: inherit;
-      font-size: 14px;
-      color: var(--ink);
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-    .field input:focus,
-    .field textarea:focus,
-    .field select:focus {
-      outline: none;
-      border-color: var(--blue);
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-    }
-    .field textarea { min-height: 72px; resize: vertical; }
-    .field-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-    @media (max-width: 600px) {
-      .field-row { grid-template-columns: 1fr; }
-    }
-
-    /* Resume drop zone */
-    .resume-dropzone {
-      border: 2px dashed var(--border-strong);
-      border-radius: var(--radius);
-      padding: 24px;
-      text-align: center;
-      color: var(--muted);
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .resume-dropzone:hover,
-    .resume-dropzone.dragover {
-      border-color: var(--blue);
-      background: var(--blue-soft);
-      color: var(--blue-ink);
-    }
-    .resume-dropzone strong { color: var(--ink); }
-    .resume-current {
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 12px;
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 14px;
-    }
-    .resume-current-info { min-width: 0; flex: 1; }
-    .resume-current-name { font-weight: 600; font-size: 14px; color: var(--ink); word-break: break-all; }
-    .resume-current-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
-    .resume-actions { display: flex; gap: 6px; flex-shrink: 0; }
-    .btn-link {
-      background: transparent; border: 0; padding: 4px 8px;
-      font-size: 13px; color: var(--blue-ink); cursor: pointer;
-      border-radius: 6px;
-    }
-    .btn-link:hover { background: var(--blue-soft); }
-    .btn-link.danger { color: var(--bad); }
-    .btn-link.danger:hover { background: rgba(220, 38, 38, 0.08); }
-
-    /* Chip input */
-    .chip-input {
-      display: flex; flex-wrap: wrap; gap: 6px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 6px 8px;
-      min-height: 38px;
-      align-items: center;
-    }
-    .chip-input:focus-within {
-      border-color: var(--blue);
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-    }
-    .chip {
-      display: inline-flex; align-items: center; gap: 4px;
-      background: var(--blue-soft);
-      color: var(--blue-ink);
-      font-size: 13px;
+    .discovery-summary strong {
+      font-family: var(--font-display);
       font-weight: 500;
-      padding: 3px 4px 3px 9px;
-      border-radius: 999px;
-    }
-    .chip-x {
-      background: transparent; border: 0; cursor: pointer;
-      color: var(--blue-ink); opacity: 0.6;
-      width: 18px; height: 18px;
-      border-radius: 50%;
-      display: inline-flex; align-items: center; justify-content: center;
-      font-size: 14px; line-height: 1;
-    }
-    .chip-x:hover { opacity: 1; background: rgba(37, 99, 235, 0.18); }
-    .chip-input input {
-      flex: 1; min-width: 80px;
-      border: 0; outline: 0;
-      background: transparent;
-      font-size: 14px;
+      font-size: 17px;
       color: var(--ink);
-      padding: 4px;
+      margin-right: 2px;
     }
-
-    /* Save bar — sits at the natural end of the page. With auto-save on,
-       the buttons are an escape hatch, not a primary action, so they don't
-       earn sticky real estate. */
-    .save-bar {
-      display: flex; justify-content: flex-end; align-items: center;
-      gap: 12px;
-      margin: 16px 0 24px;
-    }
-    .save-status { font-size: 13px; color: var(--muted); }
-    .save-status.dirty { color: var(--warn); }
-    .save-status.saved { color: var(--green-ink); }
-    .btn-primary {
-      background: var(--blue);
-      color: white;
-      border: 0;
-      padding: 9px 18px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .btn-primary:hover { background: var(--blue-ink); }
-    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-secondary {
-      background: var(--surface);
-      border: 1px solid var(--border);
+    .discovery-summary a {
       color: var(--ink);
-      padding: 9px 18px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-color: var(--ink-2);
+      text-underline-offset: 3px;
     }
-    .btn-secondary:hover { border-color: var(--border-strong); background: var(--surface-2); }
-
-    /* Discovery results */
-    .discovery-results { margin-top: 14px; }
+    .discovery-summary a:hover { text-decoration-color: var(--blue); color: var(--blue-ink); }
     .discovery-result {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 10px 12px;
-      margin-bottom: 8px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
     }
-    .discovery-result-name { font-weight: 600; font-size: 14px; }
+    .discovery-result:last-child { border-bottom: 0; }
+    .discovery-result-name {
+      font-family: var(--font-display);
+      font-weight: 500;
+      font-size: 17px;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+    }
     .discovery-result-kind {
       display: inline-block;
-      font-size: 10px; font-weight: 600;
+      font-family: var(--font-ui);
+      font-size: 9px; font-weight: 600;
       text-transform: uppercase;
-      padding: 1px 6px;
-      border-radius: 4px;
-      background: var(--surface);
+      letter-spacing: 0.14em;
+      padding: 2px 7px;
+      border-radius: 2px;
+      background: var(--surface-2);
       color: var(--muted);
-      margin-left: 6px;
+      margin-left: 8px;
+      vertical-align: middle;
     }
-    .discovery-result-rationale { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
-    .discovery-result-meta { font-size: 11px; color: var(--muted); margin-top: 4px; word-break: break-all; }
+    .discovery-result-rationale {
+      font-family: var(--font-display);
+      font-style: italic;
+      font-size: 14.5px;
+      line-height: 1.55;
+      color: var(--ink-2);
+      margin-top: 6px;
+      max-width: 42em;
+    }
+    .discovery-result-meta {
+      font-family: var(--font-ui);
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+      word-break: break-all;
+      letter-spacing: 0.02em;
+    }
+    .discovery-result-meta a { color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 2px; }
+    .discovery-result-meta a:hover { color: var(--ink); text-decoration-color: var(--ink-2); }
+
+    /* ---------- Fin marker at the foot of the page ---------- */
+    .dossier-fin {
+      margin-top: 64px;
+      text-align: center;
+      font-family: var(--font-display);
+      font-style: italic;
+      font-size: 16px;
+      color: var(--border-strong);
+      letter-spacing: 0.3em;
+      font-variation-settings: 'opsz' 36;
+      user-select: none;
+    }
   </style>
 </head>
 <body>
-  <header>
-    <div class="header-inner">
-      <a href="/" class="brand">
-        <span class="brand-mark">L</span>
-        <span>AnyaJob</span>
-      </a>
-      <nav>
-        <a href="/">Roles</a>
-        <a href="/profile.html" class="active">Profile</a>
-        <a href="/paste.html">Paste JD</a>
-        <a href="/settings.html">Settings</a>
-      </nav>
-    </div>
-  </header>
+  <!-- nav:header -->
 
-  <main>
-    <div class="page-head">
-      <div>
-        <h1 class="page-title">Your profile</h1>
-        <div class="page-sub">Drives scoring and source discovery. Saves automatically as you type.</div>
+  <main class="dossier">
+
+    <div class="page-head is-dossier">
+      <div class="page-eyebrow">
+        <span>Private Dossier</span>
+        <span class="page-eyebrow-dot"></span>
+        <span>Law · Class of 2027</span>
+      </div>
+      <h1 class="page-title"><em>Your</em> profile</h1>
+      <p class="page-sub">
+        The ground truth I read against every job listing — résumé, vital stats, where you want to land, what you want to do once you get there.
+      </p>
+      <div class="mast-status-row" id="mast-status-row">
+        <span class="save-status" id="save-status">auto-saves as you type</span>
+        <button class="btn-link mast-reset" id="reset-btn" type="button">Discard pending changes</button>
       </div>
     </div>
 
-    <!-- Resume -->
-    <section class="profile-card">
-      <h2>Resume</h2>
-      <div class="card-sub">Used as ground truth for qualification scoring and to anchor the source-discovery search.</div>
-      <div id="resume-state"></div>
+    <!-- I — Résumé. The artifact. -->
+    <section class="dossier-section">
+      <div class="section-eyebrow">
+        <span class="section-eyebrow-numeral">I</span>
+        <span class="section-eyebrow-label">Résumé</span>
+        <span class="section-eyebrow-rule"></span>
+      </div>
+      <p class="section-eyebrow-desc">
+        The document Claude reads first. It anchors qualification scoring and the source-discovery search — without it, both fall back to the structured fields below.
+      </p>
+      <div id="resume-state">
+        <!-- Skeleton on first paint; renderResume() replaces with dropzone or current-resume card. -->
+        <div class="resume-pending" aria-hidden="true">
+          <span class="skel skel-line-lg" style="width:55%"></span>
+        </div>
+      </div>
       <input type="file" id="resume-file" accept=".pdf,.docx,.doc,.txt" style="display:none">
     </section>
 
-    <!-- About you -->
-    <section class="profile-card">
-      <h2>About you</h2>
-      <div class="card-sub">Structured details that complement the resume.</div>
-      <div class="field-row">
-        <div class="field">
+    <!-- II — Evidence. Vital stats that supplement the résumé. -->
+    <section class="dossier-section">
+      <div class="section-eyebrow">
+        <span class="section-eyebrow-numeral">II</span>
+        <span class="section-eyebrow-label">Evidence</span>
+        <span class="section-eyebrow-rule"></span>
+      </div>
+      <p class="section-eyebrow-desc">
+        Structured facts the scoring rubric checks against. Anything you'd put on the first page of an application.
+      </p>
+      <div class="field-grid">
+        <div>
           <label for="f-name">Name</label>
-          <input id="f-name" type="text" autocomplete="name">
+          <input id="f-name" type="text" autocomplete="name" placeholder="Your name">
         </div>
-        <div class="field">
+        <div>
           <label for="f-currentRole">Current role</label>
-          <input id="f-currentRole" type="text">
+          <input id="f-currentRole" type="text" placeholder="e.g. Marketing Coordinator">
         </div>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label for="f-yearsOutOfUndergrad">Years out of undergrad</label>
-          <input id="f-yearsOutOfUndergrad" type="number" min="0" max="20">
+        <div>
+          <label for="f-undergradSchool">Undergrad</label>
+          <input id="f-undergradSchool" type="text" placeholder="e.g. Cornell">
         </div>
-        <div class="field">
-          <label for="f-undergradSchool">Undergrad school</label>
-          <input id="f-undergradSchool" type="text">
+        <div>
+          <label for="f-yearsOutOfUndergrad">Years out</label>
+          <input id="f-yearsOutOfUndergrad" type="number" min="0" max="20" placeholder="e.g. 2">
         </div>
-      </div>
-      <div class="field-row">
-        <div class="field">
+        <div>
           <label for="f-gpaRange">GPA range</label>
-          <input id="f-gpaRange" type="text" placeholder="e.g. 3.7-3.9">
+          <input id="f-gpaRange" type="text" placeholder="e.g. 3.7–3.9">
         </div>
-        <div class="field">
+        <div>
           <label for="f-lsatStatus">LSAT status</label>
           <input id="f-lsatStatus" type="text" placeholder="e.g. studying, target Sept">
         </div>
-      </div>
-      <div class="field">
-        <label for="f-geo">Geography</label>
-        <input id="f-geo" type="text" placeholder="e.g. NYC">
-      </div>
-      <div class="field">
-        <label for="f-additionalContext">Anything else worth knowing</label>
-        <textarea id="f-additionalContext" placeholder="Languages, volunteer work, certifications, anything that would change how a role is scored."></textarea>
-      </div>
-    </section>
-
-    <!-- Target schools -->
-    <section class="profile-card">
-      <h2>Target law schools</h2>
-      <div class="card-sub">Discovery and scoring use these to weight career-pipeline signals.</div>
-      <div class="chip-input" id="schools-chips">
-        <input id="schools-input" type="text" placeholder="Type a school + Enter">
+        <div class="full">
+          <label for="f-geo">Geography</label>
+          <input id="f-geo" type="text" placeholder="e.g. NYC">
+        </div>
+        <div class="full">
+          <label for="f-additionalContext">Anything else worth knowing</label>
+          <textarea id="f-additionalContext" placeholder="Languages, volunteer work, certifications — anything that would change how a role is scored."></textarea>
+        </div>
       </div>
     </section>
 
-    <!-- Interest areas -->
-    <section class="profile-card">
-      <h2>Interest areas</h2>
-      <div class="card-sub">Practice areas, role types, sectors — anything you want surfaced.</div>
-      <div class="chip-input" id="interests-chips">
-        <input id="interests-input" type="text" placeholder="e.g. immigration, voting rights, federal clerkships">
+    <!-- III — Intent. What you're aiming at. -->
+    <section class="dossier-section">
+      <div class="section-eyebrow">
+        <span class="section-eyebrow-numeral">III</span>
+        <span class="section-eyebrow-label">Intent</span>
+        <span class="section-eyebrow-rule"></span>
+      </div>
+      <p class="section-eyebrow-desc">
+        Two flavours of signal: the schools you're applying to (weighted heavily by source discovery and career-pipeline scoring) and the kinds of work you want to do.
+      </p>
+
+      <div style="margin-bottom:24px">
+        <label for="schools-input">Target law schools</label>
+        <div class="chip-input" id="schools-chips">
+          <input id="schools-input" type="text" placeholder="Add a school, press Enter">
+        </div>
+      </div>
+
+      <div>
+        <label for="interests-input">Interest areas</label>
+        <div class="chip-input" id="interests-chips">
+          <input id="interests-input" type="text" placeholder="e.g. immigration, voting rights, federal clerkships">
+        </div>
       </div>
     </section>
 
-    <!-- Find sources -->
-    <section class="profile-card">
-      <h2>Find sources for you</h2>
-      <div class="card-sub">Runs Claude with web search against your profile + resume. Costs about $0.50 and takes ~30 seconds. Candidates are queued for approval on the Settings page.</div>
-      <button class="btn-primary" id="discover-btn">Find sources</button>
-      <div class="discovery-results" id="discovery-results"></div>
+    <!-- IV — Discovery. The action. -->
+    <section class="dossier-section">
+      <div class="section-eyebrow">
+        <span class="section-eyebrow-numeral">IV</span>
+        <span class="section-eyebrow-label">Discovery</span>
+        <span class="section-eyebrow-rule"></span>
+      </div>
+      <div class="discovery-zone">
+        <p class="discovery-pitch">
+          Run Claude with web search against everything above — <strong>résumé, evidence, intent</strong> — to surface job sources you aren't yet tracking. Candidates queue up on the Settings page for your approval.
+        </p>
+        <div class="discovery-action-row">
+          <button class="btn primary" id="discover-btn" type="button">
+            <span>Find sources</span>
+            <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </button>
+          <span class="discovery-meta"><strong>~$0.50</strong> · 30–60 sec</span>
+        </div>
+        <div class="discovery-results" id="discovery-results"></div>
+      </div>
     </section>
 
-    <div class="save-bar">
-      <div class="save-status" id="save-status">Loading…</div>
-      <button class="btn-secondary" id="reset-btn" type="button">Reset</button>
-      <button class="btn-primary" id="save-btn" type="button">Save changes</button>
-    </div>
+    <div class="dossier-fin" aria-hidden="true">§</div>
   </main>
 
   <script type="module" src="/profile.js?v=__CACHE_VERSION__"></script>
 
-  <nav class="tab-bar" aria-label="Main">
-    <div class="tab-bar-inner">
-      <a href="/">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-        <span>Roles</span>
-      </a>
-      <a href="/profile.html" class="active" aria-current="page">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        <span>Profile</span>
-      </a>
-      <a href="/paste.html">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-        <span>Paste</span>
-      </a>
-      <a href="/settings.html">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        <span>Settings</span>
-      </a>
-    </div>
-  </nav>
+  <!-- nav:tab-bar -->
 </body>
 </html>

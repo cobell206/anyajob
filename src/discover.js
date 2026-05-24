@@ -110,6 +110,17 @@ export function formatDismissedSignal(discoveries) {
   return `\n\nPreviously dismissed sources (do not re-suggest):\n${keys.map((k) => `- ${k}`).join('\n')}`;
 }
 
+// One-shot steer the user typed into the Settings page for this run only.
+// Trimmed + capped to keep prompt cost predictable and to defuse pathological
+// inputs. Not persisted anywhere — lives for the duration of one request.
+export const HINT_MAX_CHARS = 500;
+export function formatHintBlock(hint) {
+  if (typeof hint !== 'string') return '';
+  const trimmed = hint.trim().slice(0, HINT_MAX_CHARS);
+  if (!trimmed) return '';
+  return `\n\nFOCUS FOR THIS RUN (her steer — weight this above the standing signals above):\n"""\n${trimmed}\n"""`;
+}
+
 export function buildDiscoveryUserMessage({
   prefs,
   existingList,
@@ -117,6 +128,7 @@ export function buildDiscoveryUserMessage({
   listings = [],
   feedback = {},
   discoveries = { candidates: [] },
+  hint = '',
   maxCandidates = 12,
 }) {
   const targetSchools = prefs.profile?.targetSchools || [];
@@ -124,6 +136,7 @@ export function buildDiscoveryUserMessage({
   const positiveBlock = formatPositiveSignal(listings, feedback);
   const negativeBlock = formatNegativeSignal(feedback);
   const dismissedBlock = formatDismissedSignal(discoveries);
+  const hintBlock = formatHintBlock(hint);
 
   return `Find new sources for her search. Return up to ${maxCandidates} carefully-chosen candidates.
 
@@ -144,7 +157,7 @@ ALREADY TRACKING (do NOT suggest these):
 ${existingList || '(none)'}
 
 ALREADY ON ALWAYS-SHOW LIST (good signal of types she likes):
-${(prefs.companies?.alwaysShow || []).join(', ')}${resumeBlock}${positiveBlock}${negativeBlock}${dismissedBlock}
+${(prefs.companies?.alwaysShow || []).join(', ')}${resumeBlock}${positiveBlock}${negativeBlock}${dismissedBlock}${hintBlock}
 
 Use the web_search tool to find candidates. Prioritize sources that:
 1. align with her stated interest areas and geography
@@ -175,7 +188,7 @@ async function readJsonOrDefault(path, fallback) {
   }
 }
 
-export async function discoverSources({ maxCandidates = 12 } = {}) {
+export async function discoverSources({ maxCandidates = 12, hint = '' } = {}) {
   const prefs = JSON.parse(await readFile(PREFS_PATH, 'utf-8'));
   const existing = await loadSources();
   const resumeText = await getProfileResumeText();
@@ -204,6 +217,7 @@ export async function discoverSources({ maxCandidates = 12 } = {}) {
     listings: listingsData.listings || [],
     feedback,
     discoveries,
+    hint,
     maxCandidates,
   });
 

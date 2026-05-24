@@ -11,6 +11,8 @@ import {
   formatPositiveSignal,
   formatNegativeSignal,
   formatDismissedSignal,
+  formatHintBlock,
+  HINT_MAX_CHARS,
 } from './discover.js';
 
 const basePrefs = {
@@ -227,5 +229,45 @@ describe('buildDiscoveryUserMessage', () => {
     assert.match(msg, /KEYWORDS/);
     assert.match(msg, /ALREADY TRACKING/);
     assert.match(msg, /greenhouse:cravath/);
+  });
+
+  it('includes the hint block when a non-empty hint is passed', () => {
+    const msg = buildDiscoveryUserMessage({
+      ...baseArgs,
+      hint: 'focus on environmental nonprofits in NYC',
+    });
+    assert.match(msg, /FOCUS FOR THIS RUN/);
+    assert.match(msg, /focus on environmental nonprofits in NYC/);
+  });
+
+  it('omits the hint block when hint is empty / whitespace / missing', () => {
+    assert.doesNotMatch(buildDiscoveryUserMessage(baseArgs), /FOCUS FOR THIS RUN/);
+    assert.doesNotMatch(buildDiscoveryUserMessage({ ...baseArgs, hint: '' }), /FOCUS FOR THIS RUN/);
+    assert.doesNotMatch(buildDiscoveryUserMessage({ ...baseArgs, hint: '   \n  ' }), /FOCUS FOR THIS RUN/);
+  });
+});
+
+describe('formatHintBlock', () => {
+  it('returns empty for missing / non-string / empty / whitespace hints', () => {
+    assert.equal(formatHintBlock(undefined), '');
+    assert.equal(formatHintBlock(null), '');
+    assert.equal(formatHintBlock(123), '');
+    assert.equal(formatHintBlock(''), '');
+    assert.equal(formatHintBlock('   \t\n  '), '');
+  });
+
+  it('trims surrounding whitespace', () => {
+    const block = formatHintBlock('   more federal policy roles   ');
+    assert.match(block, /"""\nmore federal policy roles\n"""/);
+    assert.doesNotMatch(block, /   more federal/);
+  });
+
+  it('caps hint at HINT_MAX_CHARS', () => {
+    const huge = 'x'.repeat(HINT_MAX_CHARS + 250);
+    const block = formatHintBlock(huge);
+    // The body between the triple quotes should be exactly HINT_MAX_CHARS x's
+    const match = block.match(/"""\n(x+)\n"""/);
+    assert.ok(match, 'expected fenced hint body');
+    assert.equal(match[1].length, HINT_MAX_CHARS);
   });
 });

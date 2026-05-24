@@ -1,9 +1,9 @@
 /* public/style.css
    Bright modern app, blue/green accents, subtle shadows.
    Typography: Fraunces (display serif) for headings, Geist (precise sans) for UI.
+   Fonts are loaded via <link> in each HTML <head> (with preconnect) — see
+   index.html etc. CSS @import here would serialize the request chain.
 */
-
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Geist:wght@400;500;600;700&display=swap');
 
 /* Lock to light mode — prevent dark-mode browsers/OS from inverting */
 :root { color-scheme: light; }
@@ -22,8 +22,7 @@ html { background: #f7faf9; }
   /* Ink */
   --ink: #0f1d2e;
   --ink-2: #3b4a5c;
-  --muted: #6b7886;
-  --muted-2: #9ba6b3;
+  --muted: #5b6878;
 
   /* Brand */
   --blue: #2563eb;
@@ -38,8 +37,10 @@ html { background: #f7faf9; }
   --good-soft: var(--green-soft);
   --warn: #d97706;
   --warn-soft: #fef3c7;
+  --warn-ink: #92400e;
   --bad: #dc2626;
   --bad-soft: #fee2e2;
+  --bad-ink: #991b1b;
   --info: var(--blue);
   --info-soft: var(--blue-soft);
 
@@ -47,12 +48,21 @@ html { background: #f7faf9; }
   --shadow-xs: 0 1px 2px rgba(15, 29, 46, 0.04);
   --shadow-sm: 0 1px 3px rgba(15, 29, 46, 0.06), 0 1px 2px rgba(15, 29, 46, 0.04);
   --shadow-md: 0 4px 12px rgba(15, 29, 46, 0.06), 0 1px 3px rgba(15, 29, 46, 0.04);
+  --shadow-popover: 0 8px 24px rgba(15, 29, 46, 0.12), 0 2px 6px rgba(15, 29, 46, 0.06);
   --shadow-lg: 0 12px 32px rgba(15, 29, 46, 0.08), 0 4px 12px rgba(15, 29, 46, 0.04);
 
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 14px;
   --radius-xl: 20px;
+
+  /* z-index scale — keep all stacking contexts on this ladder.
+     0:   ground / default
+     1:   scoped sticky inside a container (filter-panel-head, modal close)
+     20:  dropdowns / popovers (filter-popup)
+     40:  sticky page chrome (header, tab-bar)
+     100: modal / sheet
+     200: full-screen overlays (preview backdrop) */
 
   --font-display: 'Fraunces', 'Times New Roman', serif;
   --font-ui: 'Geist', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -74,11 +84,16 @@ body {
 header {
   position: sticky;
   top: 0;
+  padding-top: env(safe-area-inset-top, 0px);
   background: rgba(247, 250, 249, 0.85);
   backdrop-filter: saturate(140%) blur(12px);
   -webkit-backdrop-filter: saturate(140%) blur(12px);
   border-bottom: 1px solid var(--border);
-  z-index: 50;
+  z-index: 40;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  header { background: var(--bg); }
 }
 
 .header-inner {
@@ -101,6 +116,13 @@ header {
   align-items: center;
   gap: 10px;
   text-decoration: none;
+  padding: 8px 0;
+  border-radius: var(--radius-sm);
+}
+
+.brand:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
 .brand-mark {
@@ -131,10 +153,15 @@ nav a {
   font-weight: 500;
   padding: 8px 14px;
   border-radius: var(--radius);
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 nav a:hover { color: var(--ink); background: var(--surface-2); }
+
+nav a:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
 
 nav a.active {
   color: var(--blue-ink);
@@ -171,6 +198,112 @@ main {
   font-size: 14px;
   color: var(--muted);
   margin-top: 4px;
+}
+
+/* Editorial / "dossier" variant of .page-head. Opt-in via .is-dossier on
+   the same element. Used by pages that read as documents rather than
+   dashboards (profile). Keeps the shared anchor classes (.page-head,
+   .page-title, .page-sub) so other styling and JS keep working. */
+.page-head.is-dossier {
+  display: block;
+  margin-bottom: 48px;
+}
+.page-head.is-dossier .page-title {
+  font-size: clamp(40px, 7vw, 64px);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  font-weight: 500;
+  font-variation-settings: 'opsz' 144;
+  margin-top: 22px;
+}
+.page-head.is-dossier .page-title em {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.page-head.is-dossier .page-sub {
+  margin-top: 16px;
+  max-width: 32em;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 16.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  font-variation-settings: 'opsz' 24;
+}
+
+/* Tracked-out kicker line used above an editorial page title. A short
+   hairline leads in to anchor the eye. Reusable on any page that wants
+   the "filed document" feel above its .page-title. */
+.page-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.page-eyebrow::before {
+  content: '';
+  width: 32px; height: 1px;
+  background: var(--ink-2);
+  flex-shrink: 0;
+}
+.page-eyebrow-dot {
+  width: 3px; height: 3px;
+  background: currentColor;
+  border-radius: 50%;
+  opacity: 0.5;
+}
+
+/* Chapter eyebrow for sections inside an editorial page. Roman numeral
+   (or any short marker) + tracked label + a hairline rule that extends
+   to the right edge of the content area. Sits above the section body. */
+.section-eyebrow {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.section-eyebrow-numeral {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 22px;
+  color: var(--ink-2);
+  font-variation-settings: 'opsz' 72;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+.section-eyebrow-label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+.section-eyebrow-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--border-strong);
+  align-self: center;
+  transform: translateY(-1px);
+}
+.section-eyebrow-desc {
+  margin: -8px 0 22px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 48em;
 }
 
 /* ============ STAT TILES ============ */
@@ -292,7 +425,7 @@ main {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 10px);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--shadow-popover);
   padding: 4px;
   display: flex;
   flex-direction: column;
@@ -1282,6 +1415,23 @@ td {
 }
 .btn.success:hover { background: var(--green-ink); }
 
+/* Ghost: lighter than default — for secondary actions next to a primary
+   (Cancel, Dismiss). Same shape, more recessive. */
+.btn.ghost {
+  background: transparent;
+  color: var(--ink-2);
+}
+.btn.ghost:hover { background: var(--surface-2); border-color: var(--border-strong); }
+
+/* Destructive: for confirm-modal "Delete X" actions. Soft fill rather than
+   solid red so it doesn't compete visually with .primary on the same modal. */
+.btn.danger {
+  background: var(--bad-soft);
+  border-color: var(--bad);
+  color: var(--bad-ink);
+}
+.btn.danger:hover { background: var(--bad); color: white; border-color: var(--bad); }
+
 .btn.up.active {
   background: var(--green-soft);
   color: var(--green-ink);
@@ -1348,6 +1498,10 @@ textarea { resize: vertical; min-height: 80px; }
    overlap in narrow modals. */
 .field-grid > * { min-width: 0; }
 .field-grid input { width: 100%; min-width: 0; }
+/* Span a single child across both grid columns — used when one field
+   (geography, free-text textarea) should stretch full-width inside an
+   otherwise 2-up grid. */
+.field-grid > .full { grid-column: 1 / -1; }
 
 /* Date pickers crowd two-up below ~600px in a typical modal width. Stack
    earlier than the rest of the breakpoints so the calendar icon never
@@ -1355,6 +1509,58 @@ textarea { resize: vertical; min-height: 80px; }
 @media (max-width: 600px) {
   .field-grid { grid-template-columns: 1fr; }
 }
+
+/* ============ CHIP INPUT ============
+   Pill-style multi-value input. Shared so the same chip vocabulary
+   reads identically wherever tags/lists-of-values appear (profile
+   target-schools and interest-areas; future filter chips, etc.).
+   Drives the makeChipInput() factory in public/profile.js — markup
+   is <div.chip-input> wrapping rendered <span.chip> children plus a
+   trailing <input> for free entry. */
+.chip-input {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  min-height: 40px;
+  align-items: center;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.chip-input:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
+.chip-input input {
+  flex: 1; min-width: 100px;
+  border: 0; outline: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 14px;
+  color: var(--ink);
+  padding: 4px;
+  border-radius: 0;
+  width: auto;
+}
+.chip-input input:focus { box-shadow: none; }
+.chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  background: var(--blue-soft);
+  color: var(--blue-ink);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 3px 4px 3px 10px;
+  border-radius: 999px;
+}
+.chip-x {
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--blue-ink); opacity: 0.55;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; line-height: 1;
+}
+.chip-x:hover { opacity: 1; background: rgba(37, 99, 235, 0.18); }
 
 /* ============ IGNORED PAGE ============ */
 
@@ -1388,7 +1594,7 @@ textarea { resize: vertical; min-height: 80px; }
 .ignored-link-count {
   font-variant-numeric: tabular-nums;
   font-weight: 500;
-  color: var(--muted-2);
+  color: var(--muted);
 }
 
 .ignored-list { display: flex; flex-direction: column; gap: 24px; }
@@ -1542,7 +1748,7 @@ textarea { resize: vertical; min-height: 80px; }
   .table-toolbar {
     border-bottom: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--shadow-sm);
     margin-bottom: 12px;
     flex-wrap: wrap;
     gap: 8px;
@@ -1576,7 +1782,7 @@ textarea { resize: vertical; min-height: 80px; }
   justify-content: space-between;
   padding: 6px 0;
   font-size: 13px;
-  color: var(--muted-2);
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1595,6 +1801,42 @@ textarea { resize: vertical; min-height: 80px; }
 
 .status-message.success { color: var(--green-ink); }
 .status-message.error { color: var(--bad); }
+
+/* Placeholder for empty lists / loading slots. Render via renderEmptyState()
+   in app.js. Replaces the padded-centered-muted div that recurred inline. */
+.empty-state {
+  padding: 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Toggle switch — the standalone (notification-prefs) variant. The compact
+   in-row variant (.source-toggle, with adjacent status text) lives in
+   settings.html since it's settings-specific. */
+.switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute; cursor: pointer; inset: 0;
+  background: var(--border-strong);
+  transition: background 0.2s;
+  border-radius: 999px;
+}
+.slider:before {
+  position: absolute; content: '';
+  height: 18px; width: 18px;
+  left: 3px; top: 3px;
+  background: white;
+  transition: transform 0.2s;
+  border-radius: 50%;
+  box-shadow: var(--shadow-xs);
+}
+.switch input:checked + .slider { background: var(--blue); }
+.switch input:checked + .slider:before { transform: translateX(18px); }
+.switch input:focus-visible + .slider {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+}
 
 /* ============ DAILY BRIEF ============ */
 
@@ -1782,21 +2024,44 @@ textarea { resize: vertical; min-height: 80px; }
   flex-shrink: 0;
 }
 
+/* Small square icon button — used in source rows (settings), document rows,
+   and anywhere a single-glyph action button is needed alongside text. 36×36
+   matches the touch-target floor; transparent at rest reads as recessive
+   against any surface, then fills on hover. The .danger variant carries a
+   subtle red border at rest so destructive actions are visually distinct
+   without needing a hover. */
 .icon-btn-sm {
-  background: var(--surface);
+  width: 36px; height: 36px;
+  background: transparent;
   border: 1px solid var(--border);
-  width: 32px;
-  height: 32px;
   border-radius: 8px;
-  font-size: 14px;
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--ink-2);
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
   text-decoration: none;
+  transition: background 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
 }
-.icon-btn-sm:hover { background: var(--surface-2); border-color: var(--border-strong); }
+.icon-btn-sm:hover { background: var(--surface); color: var(--ink); }
+.icon-btn-sm:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+}
+.icon-btn-sm.danger {
+  color: var(--bad-ink);
+  border-color: rgba(220, 38, 38, 0.3);
+}
+.icon-btn-sm.danger:hover {
+  background: var(--bad-soft);
+  color: var(--bad-ink);
+  border-color: var(--bad);
+}
+.icon-btn-sm.danger:focus-visible {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.25);
+}
+.icon-btn-sm svg { width: 16px; height: 16px; }
 
 .doc-empty {
   display: flex;
@@ -1899,6 +2164,47 @@ button[disabled] {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Row/card entrance: rows cascade in on first paint. Only the first ~8
+   visible get the stagger; we cap --i in JS so a 60-listing day doesn't
+   take 2 seconds to reveal. The `backwards` fill keeps each row hidden
+   until its delay elapses, so the cascade reads as a sequence not a fade.
+   Transform + opacity only (avoid layout-trigger properties). Killed
+   entirely under reduced-motion. */
+@keyframes rowIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.is-entering {
+  animation: rowIn 220ms ease-out backwards;
+  animation-delay: calc(var(--i, 0) * 35ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .is-entering { animation: none; }
+}
+
+/* Shimmer skeletons — used on pages where initial paint is empty pending an
+   API fetch (settings, profile). Matches the final layout's shape so there's
+   no layout shift when real data swaps in. Reduced-motion drops the shimmer
+   but keeps the placeholder geometry so space is still reserved. */
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+.skel {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 4px;
+  display: block;
+}
+.skel-line { height: 12px; }
+.skel-line-sm { height: 10px; }
+.skel-line-lg { height: 16px; }
+.skel-block { border-radius: 8px; }
+@media (prefers-reduced-motion: reduce) {
+  .skel { animation: none; }
 }
 
 /* Resume vs JD alignment box */
@@ -2139,12 +2445,16 @@ button[disabled] {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 50;
+  z-index: 40;
   background: rgba(247,250,249,0.92);
   backdrop-filter: saturate(150%) blur(14px);
   -webkit-backdrop-filter: saturate(150%) blur(14px);
   border-top: 1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tab-bar { background: var(--bg); }
 }
 
 .tab-bar-inner {
@@ -2214,3 +2524,145 @@ button[disabled] {
   .brand { font-size: 19px; gap: 8px; }
   .brand-mark { width: 26px; height: 26px; font-size: 13px; }
 }
+
+/* =========================================================================
+   SHARED COMPONENTS LIFTED FROM PAGE-LOCAL STYLES
+   --------------------------------------------------------------------------
+   These were previously redefined in settings.html's <style> block. They're
+   now centralized so other pages can adopt the same vocabulary without
+   copy-paste. Keep settings-specific compositions (.source-card, .repair-*,
+   .candidate-*, .add-form, .source-toggle) where they live — those are
+   page-scoped layouts, not reusable atomics.
+   ========================================================================= */
+
+/* ----- Accordion section ----- */
+/* Used for the Settings page's collapsible cards (Sources, Notifications,
+   Preferences, Spend) and available to any page that wants the same shape. */
+.section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.section-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px; cursor: pointer; user-select: none;
+}
+.section-head:hover { background: var(--surface-2); }
+.section-title {
+  font-family: var(--font-display);
+  font-weight: 600; font-size: 18px;
+  letter-spacing: -0.02em;
+}
+.section-sub {
+  font-size: 12px; color: var(--muted); margin-top: 2px;
+}
+.section-chevron {
+  color: var(--muted);
+  transition: transform 0.2s ease;
+}
+.section.open .section-chevron { transform: rotate(180deg); }
+.section-body { display: none; padding: 4px 20px 20px; border-top: 1px solid var(--border); }
+.section.open .section-body { display: block; padding-top: 16px; }
+
+/* ----- Kind badge ----- */
+/* Inline pill identifying a source kind (greenhouse, lever, smartfetch, etc).
+   The kind names mirror SOURCE_KINDS in src/constants.js so this palette
+   tracks the domain enum, not a styling whim. */
+.kind-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+/* Integration sources (API + scraper): blue. Smartfetch (URL + AI): green.
+   Bookmark (manual): neutral with a border so it reads as "not auto-fetched". */
+.kind-greenhouse, .kind-lever, .kind-usajobs,
+.kind-idealist, .kind-nycbar, .kind-psjd { background: var(--blue-soft); color: var(--blue-ink); }
+.kind-smartfetch { background: var(--green-soft); color: var(--green-ink); }
+.kind-bookmark { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+
+/* ----- Confidence badge ----- */
+/* Generic high/medium/low pill — used on Discovery candidates today, but the
+   semantic three-tier shape works anywhere confidence/severity matters. */
+.confidence-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.confidence-high { background: var(--green-soft); color: var(--green-ink); }
+.confidence-medium { background: var(--warn-soft); color: var(--warn-ink); }
+.confidence-low { background: var(--bad-soft); color: var(--bad-ink); }
+
+/* ----- Test / action result ----- */
+/* The "we tried something, here's how it went" block — used after Test
+   Extraction on the add-source form, but reusable as a structured result
+   panel beneath any action button. */
+.test-result {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.test-result.ok { border-color: var(--green); background: var(--green-soft); }
+.test-result.err { border-color: var(--bad); background: var(--bad-soft); }
+.test-result h4 {
+  font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted);
+  margin-top: 8px; font-weight: 600;
+}
+.test-result ul { margin-top: 4px; padding-left: 18px; font-size: 12px; }
+
+/* ----- Form helper text ----- */
+/* Italic muted hint below a form control. Was duplicated in settings.html. */
+.form-help {
+  font-size: 12px; color: var(--muted); margin-top: 4px;
+  font-style: italic;
+}
+
+/* ----- Toggle row ----- */
+/* Container that pairs a label/description with a switch on the right.
+   The actual switch widget lives elsewhere (.switch + .slider in the
+   forms section above, or .source-toggle for source cards). */
+.toggle-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 14px; gap: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 8px;
+}
+.toggle-label { flex: 1; min-width: 0; }
+
+/* ----- Kind tab pills ----- */
+/* Horizontal pill-tab row for kind-style selectors (currently the add-source
+   "Greenhouse / Lever / Smart fetch / Bookmark" picker). Pattern is generic
+   enough for any small wizard-like kind chooser. */
+.kind-tabs {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-bottom: 14px;
+}
+.kind-tab {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 12px; font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer; user-select: none;
+  font-family: inherit;
+}
+.kind-tab.active { background: var(--blue); color: white; border-color: var(--blue); }

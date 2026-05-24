@@ -22,6 +22,7 @@ import discoveriesRouter from './routes/discoveries.js';
 import logsRouter from './routes/logs.js';
 import diagnosticRouter from './routes/diagnostic.js';
 import adminRouter from './routes/admin.js';
+import pageRouter from './routes/page.js';
 import { createLogger } from './log.js';
 
 const log = createLogger('server');
@@ -35,6 +36,13 @@ const app = express();
 // of seeing every request as coming from 127.0.0.1.
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
+
+// Inline initial data into GET / so the listings page can render
+// synchronously without a fetch round-trip. Mounted BEFORE express.static
+// so it intercepts the root request; on any failure it calls next() and
+// static serves the raw HTML as fallback.
+app.use(pageRouter);
+
 app.use(express.static(join(ROOT, 'public'), {
   // `path` is the resolved file path on disk (express.static's second
   // setHeaders arg). Don't read res.req.path here — that's the URL path,
@@ -42,8 +50,16 @@ app.use(express.static(join(ROOT, 'public'), {
   // the served index.html as a non-HTML asset and apply the immutable
   // long-cache header. With Cloudflare in front, that pins stale HTML
   // at the edge for a year.
+  //
+  // In dev (NODE_ENV != 'production') everything is served no-cache. The
+  // HTML cache-bust query (?v=__CACHE_VERSION__) only gets substituted at
+  // deploy time by the GitHub Action, so locally that placeholder is a
+  // literal string and the immutable header would pin stale CSS/JS for
+  // the entire dev session. no-cache lets the browser revalidate on each
+  // reload without losing the long-cache behavior in production.
   setHeaders: (res, path) => {
-    if (path.endsWith('.html')) {
+    const isDev = process.env.NODE_ENV !== 'production';
+    if (path.endsWith('.html') || isDev) {
       res.setHeader('Cache-Control', 'no-cache');
     } else {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');

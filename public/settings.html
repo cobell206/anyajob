@@ -5,37 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light only">
   <title>Settings · Job Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Geist:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="/style.css?v=__CACHE_VERSION__">
   <style>
-    /* Section accordion */
-    .section {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-xs);
-      margin-bottom: 16px;
-      overflow: hidden;
-    }
-    .section-head {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 16px 20px; cursor: pointer; user-select: none;
-    }
-    .section-head:hover { background: var(--surface-2); }
-    .section-title {
-      font-family: var(--font-display);
-      font-weight: 600; font-size: 18px;
-      letter-spacing: -0.02em;
-    }
-    .section-sub {
-      font-size: 12px; color: var(--muted); margin-top: 2px;
-    }
-    .section-chevron {
-      color: var(--muted);
-      transition: transform 0.2s ease;
-    }
-    .section.open .section-chevron { transform: rotate(180deg); }
-    .section-body { display: none; padding: 4px 20px 20px; border-top: 1px solid var(--border); }
-    .section.open .section-body { display: block; padding-top: 16px; }
+    /* Shared atomics — .section accordion, .icon-btn-sm, .kind-badge,
+       .confidence-badge, .test-result, .form-help, .toggle-row, .kind-tabs
+       — live in style.css. The rules below are the settings-specific
+       compositions that build on top of those primitives. */
 
     /* Source cards */
     .source-list { display: flex; flex-direction: column; gap: 8px; }
@@ -47,47 +25,49 @@
       display: flex; justify-content: space-between; align-items: center;
       gap: 10px;
     }
-    .source-card.disabled { opacity: 0.55; }
+    /* Disabled source: keep the name legible (she still has to identify
+       which one to re-enable) — dim only the secondary metadata and the
+       built-in tag that sits inline within the name row. */
+    .source-card.disabled .source-meta,
+    .source-card.disabled .source-stats,
+    .source-card.disabled .source-name .source-builtin { opacity: 0.55; }
     .source-info { flex: 1; min-width: 0; }
+    .source-builtin { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 4px; }
     .source-name { font-weight: 600; font-size: 14px; color: var(--ink); }
-    .source-meta { font-size: 11px; color: var(--muted); margin-top: 2px; word-break: break-all; }
+    .source-meta { font-size: 12px; color: var(--muted); margin-top: 2px; word-break: break-all; }
     .source-stats {
-      font-size: 11px; color: var(--muted); margin-top: 4px;
-      display: flex; gap: 10px; flex-wrap: wrap;
+      font-size: 12px; color: var(--muted); margin-top: 4px;
+      display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
     }
     .source-stats .stat-good { color: var(--green-ink); }
-    .source-stats .stat-bad { color: var(--bad); }
-    .source-stats .stat-warn { color: var(--warn); }
+    .source-stats .stat-bad { color: var(--bad-ink); display: inline-flex; align-items: center; gap: 4px; }
+    .source-stats .stat-warn { color: var(--warn-ink); }
     .source-actions {
       display: flex; align-items: center; gap: 6px; flex-shrink: 0;
     }
-    .icon-btn-sm {
-      width: 28px; height: 28px;
-      background: transparent; border: 1px solid var(--border);
-      border-radius: 8px;
-      display: inline-flex; align-items: center; justify-content: center;
-      cursor: pointer; color: var(--muted);
-      font-size: 13px;
-    }
-    .icon-btn-sm:hover { background: var(--surface); color: var(--ink); }
-    .icon-btn-sm.danger:hover { color: var(--bad); border-color: var(--bad); }
-
     /* Repair button — shown when a source is failing with 404/403 */
     .repair-btn {
-      background: #fff7ed;
-      border: 1px solid #fed7aa;
-      color: #c2410c;
+      background: var(--warn-soft);
+      border: 1px solid var(--warn);
+      color: var(--warn-ink);
       border-radius: 8px;
-      padding: 4px 10px;
-      font-size: 11px;
+      padding: 6px 10px;
+      font-size: 12px;
       font-weight: 600;
       cursor: pointer;
       font-family: inherit;
       white-space: nowrap;
-      transition: background 0.15s, border-color 0.15s;
+      display: inline-flex; align-items: center; gap: 4px;
+      min-height: 36px;
+      transition: background 0.15s, border-color 0.15s, box-shadow 0.12s;
     }
-    .repair-btn:hover { background: #ffedd5; border-color: #fdba74; }
-    .repair-btn:active { background: #fed7aa; }
+    .repair-btn svg { width: 14px; height: 14px; }
+    .repair-btn:hover { background: #fde68a; }
+    .repair-btn:active { background: #fcd34d; }
+    .repair-btn:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.3);
+    }
 
     /* Repair modal */
     .repair-modal { max-width: 540px; }
@@ -134,36 +114,103 @@
       margin-top: 4px;
     }
 
-    /* Confidence badges */
-    .confidence-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 10px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-    .confidence-high { background: var(--green-soft); color: var(--green-ink); }
-    .confidence-medium { background: var(--warn-soft); color: #92400e; }
-    .confidence-low { background: var(--bad-soft); color: var(--bad); }
+    /* .confidence-badge moved to style.css */
 
-    .kind-badge {
-      display: inline-block;
-      padding: 2px 7px;
-      border-radius: 999px;
-      font-size: 10px;
+    /* Candidate card (pending Discovery + live "Find new sources" results).
+       Variant of .source-card: flips to a column layout because the card is
+       a "read → decide" surface, not a "tweak status" one. Pink left-border
+       carries the "this isn't a real source yet" signal so the section
+       above doesn't need a banner. Shared template lives in settings.js. */
+    .source-card.candidate-card {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0;
+      border-left: 3px solid #ec4899;
+      padding-left: 13px; /* compensate so content doesn't shift left by 1px */
+    }
+
+    /* Top row: kind chip · name (eats the middle) · confidence chip right-aligned.
+       Replaces the old orphan chip row + name row stack. */
+    .candidate-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0; /* let the name truncate before pushing the badge */
+    }
+    .candidate-header .source-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* When the confidence chip sits in the header row, drop kind-badge's
+       default margin-right — the flex gap is already handling spacing. */
+    .candidate-header .kind-badge { margin-right: 0; }
+
+    .candidate-rationale {
+      margin-top: 8px;
+      font-size: 12px;
+      font-style: italic;
+      line-height: 1.45;
+      color: var(--ink-2);
+    }
+    .candidate-overlap {
+      margin-top: 8px;
+      padding: 8px 10px;
+      background: var(--warn-soft);
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--warn-ink);
+    }
+
+    /* Bottom action bar: a thin divider, then right-aligned buttons.
+       Visually anchors the buttons to the rationale they follow, instead of
+       floating mid-card like the old vertically-centered right-column. */
+    .source-card.candidate-card .candidate-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: center;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+    .candidate-actions .btn {
+      font-size: 12px;
+      padding: 6px 12px;
+    }
+
+    /* Quiet caption that replaces the old gradient banner. Pink accent is
+       still here (matches the card's left-border), just much smaller. */
+    .pending-caption {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 8px 0 12px;
+      padding-left: 2px;
+      font-size: 12px;
+    }
+    .pending-caption-label {
+      color: #be185d;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      margin-right: 6px;
-      vertical-align: middle;
     }
-    .kind-greenhouse, .kind-lever { background: #e0e7ff; color: #4338ca; }
-    .kind-usajobs { background: #dcfce7; color: #166534; }
-    .kind-idealist, .kind-nycbar, .kind-psjd { background: #fef3c7; color: #92400e; }
-    .kind-smartfetch { background: #fce7f3; color: #be185d; }
-    .kind-bookmark { background: #e0f2fe; color: #075985; }
+    .pending-caption-count { color: var(--ink-2); }
+    .pending-caption-summary {
+      color: var(--muted);
+      font-style: italic;
+      flex: 1 1 100%;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    /* .kind-badge (+ palette), .kind-tabs/.kind-tab, .form-help, .test-result
+       moved to style.css */
 
     .add-form {
       background: var(--surface-2);
@@ -172,47 +219,31 @@
       padding: 16px;
       margin-top: 12px;
     }
-    .kind-tabs {
-      display: flex; flex-wrap: wrap; gap: 6px;
-      margin-bottom: 14px;
-    }
-    .kind-tab {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 5px 11px;
-      font-size: 12px; font-weight: 500;
-      color: var(--ink-2);
-      cursor: pointer; user-select: none;
-      font-family: inherit;
-    }
-    .kind-tab.active { background: var(--blue); color: white; border-color: var(--blue); }
-    .form-help {
-      font-size: 12px; color: var(--muted); margin-top: 4px;
-      font-style: italic;
-    }
-    .test-result {
-      margin-top: 10px;
-      padding: 10px 12px;
-      border-radius: var(--radius);
-      font-size: 13px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-    }
-    .test-result.ok { border-color: var(--green); background: var(--green-soft); }
-    .test-result.err { border-color: var(--bad); background: var(--bad-soft); }
 
-    /* "Run now" per-source button — text + icon, sits alongside the icon-btn-sm
-       toggle/delete in source-actions. */
+    /* "Run now" per-source button — text + icon, sits alongside the toggle
+       and delete in source-actions. Soft blue accent at rest so it reads as
+       a real action button against the surface-2 card bg (a transparent
+       muted-grey button disappeared into the card). */
     .icon-btn-sm.run-btn {
-      width: auto; padding: 0 10px; gap: 4px;
-      font-size: 12px; font-weight: 500;
+      width: auto; padding: 0 12px; gap: 5px;
+      font-size: 12px; font-weight: 600;
+      background: var(--surface);
+      color: var(--blue-ink);
+      border-color: var(--border-strong);
     }
-    .icon-btn-sm.run-btn:hover { color: var(--blue); border-color: var(--blue); }
+    .icon-btn-sm.run-btn:hover {
+      background: var(--blue-soft);
+      color: var(--blue-ink);
+      border-color: var(--blue);
+    }
+    .icon-btn-sm.run-btn:focus-visible {
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+    }
     .icon-btn-sm.run-btn:disabled {
       opacity: 0.6; cursor: progress; color: var(--muted);
-      border-color: var(--border); background: transparent;
+      border-color: var(--border); background: var(--surface);
     }
+    .icon-btn-sm.run-btn svg { width: 11px; height: 11px; }
 
     /* Inline run-result, mirrors .test-result styling (ok/err) but compact. */
     .run-result {
@@ -237,6 +268,13 @@
       font-size: 11px; font-weight: 600;
       color: var(--muted);
       text-transform: uppercase; letter-spacing: 0.04em;
+      /* min-height matches sibling icon-btn-sm so the track lines up.
+         margin:0 is load-bearing — the global `label` rule applies
+         margin-top:16px/margin-bottom:6px, and that asymmetric margin
+         shifts this toggle ~5px below the buttons in the flex row. */
+      min-height: 36px;
+      padding: 0 2px;
+      margin: 0;
     }
     .source-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
     .source-toggle-track {
@@ -258,55 +296,42 @@
     }
     .source-toggle input:checked ~ .source-toggle-track { background: var(--green); }
     .source-toggle input:checked ~ .source-toggle-track .source-toggle-thumb { transform: translateX(12px); }
+    .source-toggle input:focus-visible ~ .source-toggle-track {
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+    }
     .source-toggle.is-on { color: var(--green-ink); }
+
+    /* Source card mobile: stack info above actions; toggle status text hides
+       to save horizontal space (the switch itself still communicates state). */
+    @media (max-width: 600px) {
+      .source-card {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .source-actions {
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        margin-top: 4px;
+      }
+      .source-toggle .source-toggle-status { display: none; }
+    }
 
     /* Confirm modal: narrower than the listing modal, no two-column layout. */
     .confirm-backdrop .modal.confirm-modal { max-width: 420px; }
-    .test-result h4 {
-      font-size: 11px; text-transform: uppercase;
-      letter-spacing: 0.06em; color: var(--muted);
-      margin-top: 8px; font-weight: 600;
-    }
-    .test-result ul { margin-top: 4px; padding-left: 18px; font-size: 12px; }
-    /* Email recipient list */
+
+    /* Email recipient list — settings-only composition (notifications page
+       has its own one-off layout). */
     .email-list { display: flex; flex-direction: column; gap: 6px; }
     .email-row { display: flex; gap: 6px; align-items: center; }
     .email-row input { flex: 1; }
     .email-row .icon-btn-sm { flex-shrink: 0; }
 
-    /* Toggle switches */
-    .toggle-row {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 12px 14px; gap: 12px;
-      background: var(--surface-2); border: 1px solid var(--border);
-      border-radius: var(--radius); margin-top: 8px;
-    }
-    .toggle-label { flex: 1; min-width: 0; }
-    .switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; inset: 0; background: var(--border-strong); transition: background 0.2s; border-radius: 999px; }
-    .slider:before { position: absolute; content: ''; height: 18px; width: 18px; left: 3px; top: 3px; background: white; transition: transform 0.2s; border-radius: 50%; box-shadow: var(--shadow-xs); }
-    input:checked + .slider { background: var(--blue); }
-    input:checked + .slider:before { transform: translateX(18px); }
+    /* .test-result h4/ul, .toggle-row, .toggle-label moved to style.css */
 
   </style>
 </head>
 <body>
-  <header>
-    <div class="header-inner">
-      <a href="/" class="brand">
-        <span class="brand-mark">L</span>
-        <span>AnyaJob</span>
-      </a>
-      <nav>
-        <a href="/">Roles</a>
-        <a href="/profile.html">Profile</a>
-        <a href="/paste.html">Paste</a>
-        <a href="/notifications.html">Notifications</a>
-        <a href="/settings.html" class="active">Settings</a>
-      </nav>
-    </div>
-  </header>
+  <!-- nav:header -->
 
   <main style="max-width:840px">
 
@@ -320,11 +345,49 @@
         <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
       <div class="section-body">
-        <div class="source-list" id="source-list"></div>
+        <div class="source-list" id="source-list">
+          <!-- Skeleton placeholders on first paint; loadSources() replaces them. -->
+          <div class="source-card" aria-hidden="true">
+            <div class="source-info">
+              <span class="skel skel-line-sm" style="width:64px"></span>
+              <span class="skel skel-line-lg" style="width:55%;margin-top:6px"></span>
+              <span class="skel skel-line" style="width:38%;margin-top:6px"></span>
+            </div>
+            <div class="source-actions">
+              <span class="skel skel-block" style="width:36px;height:36px"></span>
+            </div>
+          </div>
+          <div class="source-card" aria-hidden="true">
+            <div class="source-info">
+              <span class="skel skel-line-sm" style="width:54px"></span>
+              <span class="skel skel-line-lg" style="width:42%;margin-top:6px"></span>
+              <span class="skel skel-line" style="width:60%;margin-top:6px"></span>
+            </div>
+            <div class="source-actions">
+              <span class="skel skel-block" style="width:36px;height:36px"></span>
+            </div>
+          </div>
+          <div class="source-card" aria-hidden="true">
+            <div class="source-info">
+              <span class="skel skel-line-sm" style="width:74px"></span>
+              <span class="skel skel-line-lg" style="width:48%;margin-top:6px"></span>
+              <span class="skel skel-line" style="width:30%;margin-top:6px"></span>
+            </div>
+            <div class="source-actions">
+              <span class="skel skel-block" style="width:36px;height:36px"></span>
+            </div>
+          </div>
+        </div>
 
-        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+        <div style="margin-top:14px">
+          <label for="discover-hint" style="display:block;font-size:12px;font-weight:600;color:var(--ink-2);margin-bottom:4px">Steer this run (optional)</label>
+          <textarea id="discover-hint" rows="2" maxlength="500" placeholder="e.g. focus on environmental nonprofits in NYC, or more federal/policy roles, less BigLaw" style="font-size:13px;line-height:1.5;width:100%"></textarea>
+          <p class="form-help" style="margin-top:4px">Only applies to the next "Find new sources" run. Not saved.</p>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
           <button class="btn primary" id="show-add-form">+ Add a source</button>
-          <button class="btn" id="discover-btn" title="Use AI web search to suggest new sources matching her profile">✨ Find new sources</button>
+          <button class="btn" id="discover-btn" title="Use AI web search to suggest new sources matching her profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="14" height="14" style="vertical-align:-2px;margin-right:6px"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>Find new sources</button>
         </div>
 
         <div class="add-form" id="add-form" style="display:none">
@@ -499,25 +562,6 @@
 
   <script type="module" src="/settings.js?v=__CACHE_VERSION__"></script>
 
-  <nav class="tab-bar" aria-label="Main">
-    <div class="tab-bar-inner">
-      <a href="/">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-        <span>Roles</span>
-      </a>
-      <a href="/paste.html">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-        <span>Paste</span>
-      </a>
-      <a href="/notifications.html">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-        <span>Notify</span>
-      </a>
-      <a href="/settings.html" class="active" aria-current="page">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        <span>Settings</span>
-      </a>
-    </div>
-  </nav>
+  <!-- nav:tab-bar -->
 </body>
 </html>

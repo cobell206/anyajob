@@ -1,4 +1,14 @@
-import { $, $$, escapeHtml, api } from './app.js';
+import {
+  $, $$, escapeHtml, api,
+  confirmDialog, alertDialog, setStatus, renderEmptyState,
+} from './app.js';
+
+// Inline SVGs replace emoji glyphs in the source-card row. Lucide-style
+// 24×24 stroked icons, sized by the parent (.icon-btn-sm svg { 16px }).
+const SVG_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 4 20 12 6 20"/></svg>';
+const SVG_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+const SVG_SEARCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+const SVG_ALERT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="13" height="13"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
 
 // Section accordion
 $$('.section-head').forEach((h) => {
@@ -10,10 +20,6 @@ $$('.section-head').forEach((h) => {
 // ===== Sources =====
 let sourcesData = { sources: [] };
 let activeKind = 'greenhouse';
-
-function kindBadge(k) {
-  return `<span class="kind-badge kind-${k}">${k}</span>`;
-}
 
 function fmtRel(iso) {
   if (!iso) return 'never';
@@ -39,10 +45,12 @@ function renderSource(s) {
   let stats = '';
   if (s.kind !== 'bookmark') {
     if (s.lastError) {
-      stats = `<span class="stat-bad">⚠ ${escapeHtml(s.lastError).slice(0, 60)}</span>`;
+      stats = `<span class="stat-bad">${SVG_ALERT}<span>${escapeHtml(s.lastError).slice(0, 60)}</span></span>`;
     } else if (typeof s.lastCount === 'number') {
-      const cls = s.lastCount === 0 ? 'stat-warn' : 'stat-good';
-      stats = `<span class="${cls}">${s.lastCount} listing${s.lastCount === 1 ? '' : 's'}</span>`;
+      // Zero listings isn't an error (boards have quiet days), so keep it
+      // in the default muted color and reserve stat-warn for actual problems.
+      const cls = s.lastCount > 0 ? 'stat-good' : '';
+      stats = `<span${cls ? ` class="${cls}"` : ''}>${s.lastCount} listing${s.lastCount === 1 ? '' : 's'}</span>`;
     }
     stats += ` <span>last run ${fmtRel(s.lastRunAt)}</span>`;
   } else {
@@ -50,82 +58,97 @@ function renderSource(s) {
     if (s.lastBriefedAt) stats += ` <span>last shown ${fmtRel(s.lastBriefedAt)}</span>`;
   }
 
+  const safeName = escapeHtml(s.name);
+
   // Bookmarks don't fetch — runOne short-circuits — so no "Run now" button.
   const runBtn = s.kind === 'bookmark' ? '' :
-    `<button class="icon-btn-sm run-btn" data-run="${s.id}" title="Run now">▶ Run</button>`;
+    `<button class="icon-btn-sm run-btn" data-run="${s.id}" title="Run now" aria-label="Run ${safeName} now">${SVG_PLAY}<span>Run</span></button>`;
   const repairBtn = isRepairable(s)
-    ? `<button class="repair-btn" data-repair="${s.id}" title="Use AI web search to find the new URL">🔍 Find URL</button>`
+    ? `<button class="repair-btn" data-repair="${s.id}" title="Use AI web search to find the new URL" aria-label="Find new URL for ${safeName}">${SVG_SEARCH}<span>Find URL</span></button>`
     : '';
 
+  // The wrapping <label> already provides the accessible name to the
+  // checkbox via the visible "On"/"Off" text, so no explicit aria-label
+  // on the input — that would shadow the visible label.
   const toggle = `
-    <label class="source-toggle ${s.enabled ? 'is-on' : ''}" data-toggle-wrap="${s.id}" title="${s.enabled ? 'Disable this source' : 'Enable this source'}">
-      <input type="checkbox" data-toggle="${s.id}" ${s.enabled ? 'checked' : ''} aria-label="${s.enabled ? 'Active' : 'Inactive'}">
+    <label class="source-toggle ${s.enabled ? 'is-on' : ''}" data-toggle-wrap="${s.id}">
+      <input type="checkbox" data-toggle="${s.id}" ${s.enabled ? 'checked' : ''}>
       <span class="source-toggle-track"><span class="source-toggle-thumb"></span></span>
-      <span class="source-toggle-status" data-toggle-status="${s.id}">${s.enabled ? 'Active' : 'Inactive'}</span>
+      <span class="source-toggle-status" data-toggle-status="${s.id}">${s.enabled ? 'On' : 'Off'}</span>
     </label>
   `;
 
   return `
     <div class="source-card ${s.enabled ? '' : 'disabled'}">
       <div class="source-info">
-        <div class="source-name">${kindBadge(s.kind)}${escapeHtml(s.name)}${s.builtIn ? ' <span style="color:var(--muted);font-weight:400;font-size:11px">· built-in</span>' : ''}</div>
+        <div class="source-name"><span>${safeName}</span>${s.builtIn ? '<span class="source-builtin">· built-in</span>' : ''}</div>
         <div class="source-meta">${escapeHtml(configLine)}</div>
         <div class="source-stats">${stats}</div>
         <div class="run-result" data-run-result="${s.id}" style="display:none"></div>
       </div>
       <div class="source-actions">
         ${repairBtn}
-        ${runBtn}
         ${toggle}
-        <button class="icon-btn-sm danger" data-delete="${s.id}" title="Delete">×</button>
+        ${runBtn}
+        <button class="icon-btn-sm danger" data-delete="${s.id}" title="Delete" aria-label="Delete ${safeName}">${SVG_X}</button>
       </div>
     </div>
   `;
 }
 
-// Reusable confirmation modal. Reuses the existing .modal-backdrop + .modal
-// styles from style.css; the bottom-sheet → centered transition there works
-// for confirmations too. Resolves true on confirm, false on cancel/dismiss.
-function confirmDialog({ title, message, confirmLabel = 'Confirm', cancelLabel = 'Cancel' }) {
-  return new Promise((resolve) => {
-    const backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop confirm-backdrop';
-    backdrop.innerHTML = `
-      <div class="modal confirm-modal" role="dialog" aria-modal="true">
-        <div class="modal-head">
-          <div class="modal-title">${escapeHtml(title)}</div>
-          <button class="modal-close" aria-label="Close">×</button>
-        </div>
-        <div class="modal-body">
-          <p style="font-size:14px;color:var(--ink-2);line-height:1.5;margin:0 0 18px">${escapeHtml(message)}</p>
-          <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
-            <button class="btn ghost" data-act="cancel">${escapeHtml(cancelLabel)}</button>
-            <button class="btn primary" data-act="confirm">${escapeHtml(confirmLabel)}</button>
-          </div>
-        </div>
+// Shared template for a Discovery candidate row — used by both the live
+// "Find new sources" panel and the persisted "Pending source candidates"
+// panel. Keeping a single template prevents the two from drifting on copy,
+// layout, or which fields are surfaced. Callers pass the action buttons
+// (Add/Dismiss) because their data attributes differ: live uses position
+// index (cands aren't persisted with IDs in the response), pending uses
+// the candidate id.
+function renderCandidateCard(c, { actionsHtml, dataAttr = '' }) {
+  const isStructured = c.kind === 'greenhouse' || c.kind === 'lever';
+  // Slug is the canonical identifier for structured sources, so we surface
+  // it as metadata. For smartfetch/bookmark the slug is absent and the URL
+  // is the only identifier — show it once, as a link, never duplicated.
+  const slugLine = isStructured && c.config?.slug
+    ? `<div class="source-meta">slug: ${escapeHtml(c.config.slug)}</div>`
+    : '';
+  const url = c.url || c.config?.url;
+  const urlLine = url
+    ? `<div class="source-meta"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:var(--blue-ink);text-decoration:none">${escapeHtml(url)} ↗</a></div>`
+    : '';
+  // Confidence chip rides in the header row to the right of the name. The
+  // word "confidence" is dropped — context (the badge color + position next
+  // to a discovery suggestion) makes "HIGH" / "MEDIUM" / "LOW" unambiguous.
+  const conf = c.confidence;
+  const confBadge = conf
+    ? `<span class="confidence-badge confidence-${escapeHtml(conf)}" title="${escapeHtml(conf)} confidence">${escapeHtml(conf)}</span>`
+    : '';
+  const rationale = c.rationale
+    ? `<div class="candidate-rationale">${escapeHtml(c.rationale)}</div>`
+    : '';
+  const overlapWarning = c.overlapsWith
+    ? `<div class="candidate-overlap">⚠ Overlaps with smartfetch source <strong>${escapeHtml(c.overlapsWith.name)}</strong>. Adding this would cause double-fetching — consider disabling that source after.</div>`
+    : '';
+  // Kind badge is only shown for bookmarks — they behave differently (no
+  // auto-fetch, surfaced on a cadence) and that's a decision-relevant fact
+  // for her before approving. Auto-fetching kinds (greenhouse, lever,
+  // smartfetch) don't need a badge: behavior is uniform.
+  const kindTag = c.kind === 'bookmark'
+    ? '<span class="kind-badge kind-bookmark">Manual</span>'
+    : '';
+  return `
+    <div class="source-card candidate-card"${dataAttr}>
+      <div class="candidate-header">
+        ${kindTag}
+        <div class="source-name">${escapeHtml(c.name)}</div>
+        ${confBadge}
       </div>
-    `;
-    document.body.appendChild(backdrop);
-    document.body.style.overflow = 'hidden';
-    // Allow the transform/opacity transition to take effect.
-    requestAnimationFrame(() => backdrop.classList.add('open'));
-
-    const finish = (val) => {
-      backdrop.classList.remove('open');
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
-      setTimeout(() => backdrop.remove(), 220);
-      resolve(val);
-    };
-    const onKey = (e) => { if (e.key === 'Escape') finish(false); };
-
-    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) finish(false); });
-    backdrop.querySelector('.modal-close').addEventListener('click', () => finish(false));
-    backdrop.querySelector('[data-act="cancel"]').addEventListener('click', () => finish(false));
-    backdrop.querySelector('[data-act="confirm"]').addEventListener('click', () => finish(true));
-    document.addEventListener('keydown', onKey);
-    backdrop.querySelector('[data-act="confirm"]').focus();
-  });
+      ${slugLine}
+      ${urlLine}
+      ${rationale}
+      ${overlapWarning}
+      <div class="candidate-actions">${actionsHtml}</div>
+    </div>
+  `;
 }
 
 async function runSourceNow(s, btn) {
@@ -139,7 +162,8 @@ async function runSourceNow(s, btn) {
   const resultEl = document.querySelector(`[data-run-result="${s.id}"]`);
   const originalLabel = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>';
+  btn.setAttribute('aria-busy', 'true');
+  btn.innerHTML = '<span class="spinner sm"></span><span>Running…</span>';
   if (resultEl) {
     resultEl.style.display = 'none';
     resultEl.className = 'run-result';
@@ -166,6 +190,7 @@ async function runSourceNow(s, btn) {
     }
   } finally {
     btn.disabled = false;
+    btn.removeAttribute('aria-busy');
     btn.innerHTML = originalLabel;
     // Refresh stats (lastCount, lastRunAt, lastError) without nuking the
     // inline result we just rendered.
@@ -268,8 +293,7 @@ async function runRepair(source) {
           method: 'PATCH',
           body: { config: newConfig, kind },
         });
-        status.textContent = '✓ Updated';
-        status.className = 'status-message success';
+        setStatus(status, '✓ Updated', 'success');
         setTimeout(() => {
           closeRepair();
           loadSources();
@@ -277,8 +301,7 @@ async function runRepair(source) {
       } catch (err) {
         btn.disabled = false;
         btn.textContent = 'Apply';
-        status.textContent = 'Update failed: ' + err.message;
-        status.className = 'status-message error';
+        setStatus(status, 'Update failed: ' + err.message, 'error');
       }
     });
   } catch (err) {
@@ -344,18 +367,34 @@ async function loadSources() {
 
   $$('[data-delete]').forEach((b) => {
     b.addEventListener('click', async () => {
-      if (!confirm('Delete this source? This cannot be undone.')) return;
+      const s = sourcesData.sources.find((x) => x.id === b.dataset.delete);
+      if (!s) return;
+      const ok = await confirmDialog({
+        title: 'Delete ' + s.name + '?',
+        message: 'This source will be removed. This cannot be undone.',
+        confirmLabel: 'Delete',
+        destructive: true,
+      });
+      if (!ok) return;
+
+      const resultEl = document.querySelector(`[data-run-result="${s.id}"]`);
       const originalLabel = b.innerHTML;
       b.disabled = true;
+      b.setAttribute('aria-busy', 'true');
       b.innerHTML = '<span class="spinner sm"></span>';
       try {
-        const res = await fetch(`/api/sources/${b.dataset.delete}`, { method: 'DELETE' });
+        const res = await fetch(`/api/sources/${s.id}`, { method: 'DELETE' });
         await res.json();
         loadSources();
       } catch (err) {
         b.disabled = false;
+        b.removeAttribute('aria-busy');
         b.innerHTML = originalLabel;
-        alert('Delete failed: ' + err.message);
+        if (resultEl) {
+          resultEl.style.display = '';
+          resultEl.className = 'run-result err';
+          resultEl.textContent = '✗ Delete failed: ' + err.message;
+        }
       }
     });
   });
@@ -509,7 +548,7 @@ $('#save-btn').addEventListener('click', async () => {
     $('#cancel-btn').click();
     loadSources();
   } catch (err) {
-    alert('Save failed: ' + err.message);
+    alertDialog({ title: 'Save failed', message: err.message });
   } finally {
     btn.disabled = false;
     btn.innerHTML = originalLabel;
@@ -528,8 +567,7 @@ $('#run-daily-btn').addEventListener('click', async () => {
   });
   if (!ok) return;
 
-  status.textContent = '';
-  status.className = 'status-message';
+  setStatus(status, '');
   const originalLabel = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Running…';
@@ -545,18 +583,14 @@ $('#run-daily-btn').addEventListener('click', async () => {
       const t = data.startedAt
         ? new Date(data.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
         : 'earlier';
-      status.textContent = 'Already running since ' + t;
-      status.className = 'status-message error';
+      setStatus(status, 'Already running since ' + t, 'error');
     } else if (!res.ok) {
       throw new Error(data.error || `HTTP ${res.status}`);
     } else {
-      status.textContent = '✓ Started — check back in a few minutes';
-      status.className = 'status-message success';
-      setTimeout(() => { status.textContent = ''; }, 8000);
+      setStatus(status, '✓ Started — check back in a few minutes', 'success', 8000);
     }
   } catch (err) {
-    status.textContent = '✗ ' + err.message;
-    status.className = 'status-message error';
+    setStatus(status, '✗ ' + err.message, 'error');
   } finally {
     btn.disabled = false;
     btn.innerHTML = originalLabel;
@@ -580,54 +614,25 @@ async function loadPendingDiscoveries() {
   }
 
   wrap.style.display = 'block';
+  // The pink left-border on each .candidate-card now carries the "this is
+  // pending review" signal, so the section just needs a quiet caption above.
   wrap.innerHTML = `
-    <div style="padding:14px 16px;background:linear-gradient(135deg, #fdf4ff 0%, #fef3c7 100%);border:1px solid #fbcfe8;border-radius:var(--radius);margin-bottom:10px">
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#be185d;font-weight:700">✨ Pending source candidates</div>
-      <div style="margin-top:4px;font-size:13px;color:var(--ink-2)">
-        ${pending.length} ${pending.length === 1 ? 'candidate is' : 'candidates are'} waiting for your review.
-        ${data.lastSummary ? ' <span style="font-style:italic">' + escapeHtml(data.lastSummary) + '</span>' : ''}
-      </div>
+    <div class="pending-caption">
+      <span class="pending-caption-label">Pending review</span>
+      <span class="pending-caption-count">${pending.length} ${pending.length === 1 ? 'candidate' : 'candidates'}</span>
+      ${data.lastSummary ? `<span class="pending-caption-summary">${escapeHtml(data.lastSummary)}</span>` : ''}
     </div>
     <div style="display:flex;flex-direction:column;gap:8px" id="pending-list"></div>
   `;
 
   const list = $('#pending-list');
-  list.innerHTML = pending.map((c) => {
-    const configLine = c.config?.slug
-      ? 'slug: ' + escapeHtml(c.config.slug)
-      : escapeHtml(c.config?.url || '');
-    const conf = c.confidence || 'medium';
-    const confColor = conf === 'high' ? 'var(--green-ink)' : conf === 'low' ? 'var(--muted)' : 'var(--ink-2)';
-    const url = c.url || c.config?.url;
-    const urlLine = url
-      ? `<div class="source-meta"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:var(--blue-ink);text-decoration:none">${escapeHtml(url)} ↗</a></div>`
-      : '';
-    const overlapWarning = c.overlapsWith ? `
-      <div style="margin-top:8px;padding:8px 10px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#92400e">
-        ⚠ Overlaps with smartfetch source <strong>${escapeHtml(c.overlapsWith.name)}</strong>.
-        Approving this will cause double-fetching — consider disabling that source after approval.
-      </div>
-    ` : '';
-    return `
-      <div class="source-card" data-cand-id="${c.id}">
-        <div class="source-info">
-          <div class="source-name">
-            <span class="kind-badge kind-${escapeHtml(c.kind)}">${escapeHtml(c.kind)}</span>
-            ${escapeHtml(c.name)}
-            <span style="color:${confColor};font-weight:400;font-size:11px;margin-left:4px">· ${conf} confidence</span>
-          </div>
-          <div class="source-meta">${configLine}</div>
-          ${urlLine}
-          <div class="source-stats" style="margin-top:6px;font-style:italic;color:var(--ink-2)">${escapeHtml(c.rationale || '')}</div>
-          ${overlapWarning}
-        </div>
-        <div style="display:flex;gap:6px;flex-shrink:0;flex-direction:column">
-          <button class="btn primary" data-approve-id="${c.id}" style="font-size:12px;padding:6px 12px">Approve</button>
-          <button class="btn ghost" data-dismiss-id="${c.id}" style="font-size:12px;padding:6px 12px">Dismiss</button>
-        </div>
-      </div>
-    `;
-  }).join('');
+  list.innerHTML = pending.map((c) => renderCandidateCard(c, {
+    dataAttr: ` data-cand-id="${c.id}"`,
+    actionsHtml: `
+      <button class="btn primary" data-approve-id="${c.id}">Add to sources</button>
+      <button class="btn ghost" data-dismiss-id="${c.id}">Dismiss</button>
+    `,
+  })).join('');
 
   $$('[data-approve-id]').forEach((b) => {
     b.addEventListener('click', async () => {
@@ -636,15 +641,15 @@ async function loadPendingDiscoveries() {
       b.innerHTML = '<span class="spinner sm on-primary"></span>';
       try {
         await api('/api/discoveries/' + id + '/approve', { method: 'POST', body: {} });
-        b.textContent = '✓ Approved';
+        b.textContent = '✓ Added';
         b.closest('.source-card').style.opacity = '0.5';
         loadSources();
         // Refresh after a short delay so she sees the success state
         setTimeout(loadPendingDiscoveries, 800);
       } catch (err) {
-        alert('Approve failed: ' + err.message);
+        alertDialog({ title: 'Add failed', message: err.message });
         b.disabled = false;
-        b.textContent = 'Approve';
+        b.textContent = 'Add to sources';
       }
     });
   });
@@ -663,7 +668,7 @@ async function loadPendingDiscoveries() {
           setTimeout(loadPendingDiscoveries, 300);
         }
       } catch (err) {
-        alert('Dismiss failed: ' + err.message);
+        alertDialog({ title: 'Dismiss failed', message: err.message });
         b.disabled = false;
         b.innerHTML = originalLabel;
       }
@@ -694,8 +699,12 @@ $('#discover-btn').addEventListener('click', async () => {
   btn.innerHTML = '<span class="spinner sm"></span> Searching…';
 
   try {
-    const data = await api('/api/sources/discover', { method: 'POST', body: {} });
+    const hintInput = $('#discover-hint');
+    const hint = (hintInput?.value || '').trim();
+    const data = await api('/api/sources/discover', { method: 'POST', body: hint ? { hint } : {} });
     if (data.error) throw new Error(data.error);
+
+    if (hintInput) hintInput.value = '';
 
     const cands = data.candidates || [];
     status.textContent = `Found ${cands.length} candidate${cands.length === 1 ? '' : 's'}.`;
@@ -706,37 +715,15 @@ $('#discover-btn').addEventListener('click', async () => {
     }
 
     if (cands.length === 0) {
-      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No new candidates found. The structured sources you already have may cover your search well.</div>';
+      list.innerHTML = renderEmptyState('No new candidates found. The structured sources you already have may cover your search well.');
     } else {
-      list.innerHTML = cands.map((c, i) => {
-        const configLine = c.config?.slug
-          ? 'slug: ' + escapeHtml(c.config.slug)
-          : escapeHtml(c.config?.url || '');
-        const conf = c.confidence || 'medium';
-        const confColor = conf === 'high' ? 'var(--green-ink)' : conf === 'low' ? 'var(--muted)' : 'var(--ink-2)';
-        const url = c.url || c.config?.url;
-        const urlLine = url
-          ? `<div class="source-meta"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:var(--blue-ink);text-decoration:none">${escapeHtml(url)} ↗</a></div>`
-          : '';
-        return `
-          <div class="source-card" data-cand-idx="${i}">
-            <div class="source-info">
-              <div class="source-name">
-                <span class="kind-badge kind-${escapeHtml(c.kind)}">${escapeHtml(c.kind)}</span>
-                ${escapeHtml(c.name)}
-                <span style="color:${confColor};font-weight:400;font-size:11px;margin-left:4px">· ${conf} confidence</span>
-              </div>
-              <div class="source-meta">${configLine}</div>
-              ${urlLine}
-              <div class="source-stats" style="margin-top:6px;font-style:italic;color:var(--ink-2)">${escapeHtml(c.rationale || '')}</div>
-            </div>
-            <div style="display:flex;gap:6px;flex-shrink:0">
-              <button class="btn primary" data-add-idx="${i}" style="font-size:12px;padding:6px 12px">Add</button>
-              <button class="icon-btn-sm" data-skip-idx="${i}" title="Skip">×</button>
-            </div>
-          </div>
-        `;
-      }).join('');
+      list.innerHTML = cands.map((c, i) => renderCandidateCard(c, {
+        dataAttr: ` data-cand-idx="${i}"`,
+        actionsHtml: `
+          <button class="btn primary" data-add-idx="${i}">Add to sources</button>
+          <button class="btn ghost" data-skip-idx="${i}">Dismiss</button>
+        `,
+      })).join('');
 
       // Wire up Add buttons
       $$('[data-add-idx]').forEach((b) => {
@@ -758,12 +745,15 @@ $('#discover-btn').addEventListener('click', async () => {
           } catch (err) {
             b.disabled = false;
             b.innerHTML = originalLabel;
-            alert('Failed to add: ' + err.message);
+            alertDialog({ title: 'Add failed', message: err.message });
           }
         });
       });
 
-      // Wire up skip (× button)
+      // Wire up Dismiss buttons. Live candidates are persisted server-side
+      // by /api/sources/discover but the response doesn't surface their IDs,
+      // so dismiss here is DOM-only — they'll reappear in the pending panel
+      // on next page load. Plumbing IDs through is a follow-up.
       $$('[data-skip-idx]').forEach((b) => {
         b.addEventListener('click', () => {
           b.closest('.source-card').remove();
@@ -796,8 +786,7 @@ $('#save-prefs').addEventListener('click', async () => {
   try {
     parsed = JSON.parse($('#json').value);
   } catch (err) {
-    status.textContent = 'Invalid JSON: ' + err.message;
-    status.className = 'status-message error';
+    setStatus(status, 'Invalid JSON: ' + err.message, 'error');
     return;
   }
   btn.disabled = true;
@@ -806,12 +795,9 @@ $('#save-prefs').addEventListener('click', async () => {
     await api('/api/preferences', { method: 'POST', body: parsed });
     prefs = parsed;
     renderNotifySection(); // pick up changes if user edited notifications JSON directly
-    status.textContent = '✓ Saved';
-    status.className = 'status-message success';
-    setTimeout(() => { status.textContent = ''; }, 2000);
+    setStatus(status, '✓ Saved', 'success', 2000);
   } catch (err) {
-    status.textContent = 'Save failed: ' + err.message;
-    status.className = 'status-message error';
+    setStatus(status, 'Save failed: ' + err.message, 'error');
   } finally {
     btn.disabled = false;
     btn.innerHTML = originalLabel;
@@ -819,9 +805,16 @@ $('#save-prefs').addEventListener('click', async () => {
 });
 
 $('#reset-prefs').addEventListener('click', async () => {
-  if (!confirm('Reset preferences to defaults? This will overwrite the current profile, keywords, and companies. Notifications will be preserved.')) return;
+  const ok = await confirmDialog({
+    title: 'Reset preferences to defaults?',
+    message: 'This will overwrite the current profile, keywords, and companies. Notifications will be preserved.',
+    confirmLabel: 'Reset',
+    destructive: true,
+  });
+  if (!ok) return;
   const btn = $('#reset-prefs');
   const originalLabel = btn.innerHTML;
+  const status = $('#prefs-status');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner sm"></span> Loading…';
   try {
@@ -829,11 +822,9 @@ $('#reset-prefs').addEventListener('click', async () => {
     // Preserve current notifications so we don't blow away her email setup
     if (prefs?.notifications) defaults.notifications = prefs.notifications;
     $('#json').value = JSON.stringify(defaults, null, 2);
-    $('#prefs-status').textContent = 'Defaults loaded — review then click Save';
-    $('#prefs-status').className = 'status-message';
+    setStatus(status, 'Defaults loaded — review then click Save');
   } catch (err) {
-    $('#prefs-status').textContent = 'Reset failed: ' + err.message;
-    $('#prefs-status').className = 'status-message error';
+    setStatus(status, 'Reset failed: ' + err.message, 'error');
   } finally {
     btn.disabled = false;
     btn.innerHTML = originalLabel;
@@ -903,8 +894,7 @@ $('#save-notify').addEventListener('click', async () => {
   // Light validation: each must look like an email
   const bad = to.find((s) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s));
   if (bad) {
-    status.textContent = 'Invalid email: ' + bad;
-    status.className = 'status-message error';
+    setStatus(status, 'Invalid email: ' + bad, 'error');
     return;
   }
   btn.disabled = true;
@@ -924,12 +914,9 @@ $('#save-notify').addEventListener('click', async () => {
     prefs = updated;
     $('#json').value = JSON.stringify(updated, null, 2);
     renderNotifySection();
-    status.textContent = '✓ Saved';
-    status.className = 'status-message success';
-    setTimeout(() => { status.textContent = ''; }, 2000);
+    setStatus(status, '✓ Saved', 'success', 2000);
   } catch (err) {
-    status.textContent = 'Save failed: ' + err.message;
-    status.className = 'status-message error';
+    setStatus(status, 'Save failed: ' + err.message, 'error');
   } finally {
     btn.disabled = false;
     btn.innerHTML = originalLabel;

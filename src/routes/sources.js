@@ -98,6 +98,7 @@ router.post('/discover', discoverLimiter, async (req, res) => {
     const { discoverSources, persistDiscoveryResult } = await import('../discover.js');
     const result = await discoverSources({
       maxCandidates: req.body?.maxCandidates || 12,
+      hint: typeof req.body?.hint === 'string' ? req.body.hint : '',
     });
     const persisted = await persistDiscoveryResult(result);
     log.info({ ...persisted }, 'live discovery persisted');

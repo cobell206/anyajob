@@ -1,6 +1,9 @@
 // public/profile.js — drives the profile page
 
-import { $, $$, escapeHtml, api, fmtDateLong } from './app.js';
+import {
+  $, $$, escapeHtml, api, fmtDateLong,
+  alertDialog,
+} from './app.js';
 
 let prefs = null;
 let dirty = false;
@@ -21,10 +24,19 @@ const PROFILE_FIELDS = [
 function renderResume(meta) {
   const root = $('#resume-state');
   if (!meta) {
+    // Empty-state: a dignified drop target with a paper-document glyph and
+    // editorial copy. Click anywhere on the surface opens the file picker;
+    // drag-and-drop is wired by wireDropzone().
     root.innerHTML = `
-      <div class="resume-dropzone" id="resume-drop">
-        <div><strong>Drop your resume here</strong> or click to choose</div>
-        <div style="margin-top:6px;font-size:12px">PDF, DOCX, DOC, or TXT — up to 5MB</div>
+      <div class="resume-blank" id="resume-drop">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="8" y1="13" x2="14" y2="13"/>
+          <line x1="8" y1="17" x2="16" y2="17"/>
+        </svg>
+        <div class="resume-blank-prompt">Drag a résumé here, or <em>click to browse</em>.</div>
+        <div class="resume-blank-help">PDF · DOCX · DOC · TXT — up to 5 MB</div>
       </div>
     `;
     wireDropzone();
@@ -33,9 +45,17 @@ function renderResume(meta) {
   const sizeKb = Math.round((meta.sizeBytes || 0) / 1024);
   root.innerHTML = `
     <div class="resume-current">
+      <div class="resume-current-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="8" y1="13" x2="14" y2="13"/>
+          <line x1="8" y1="17" x2="16" y2="17"/>
+        </svg>
+      </div>
       <div class="resume-current-info">
         <div class="resume-current-name">${escapeHtml(meta.originalName || meta.file)}</div>
-        <div class="resume-current-meta">Uploaded ${fmtDateLong(meta.uploadedAt)} · ${sizeKb} KB</div>
+        <div class="resume-current-meta">Filed ${fmtDateLong(meta.uploadedAt)} · ${sizeKb} KB</div>
       </div>
       <div class="resume-actions">
         <button class="btn-link" id="resume-view-btn" type="button">View</button>
@@ -69,7 +89,7 @@ function wireDropzone() {
 
 async function uploadResume(file) {
   const root = $('#resume-state');
-  root.innerHTML = '<div style="padding:14px;color:var(--muted)"><span class="spinner sm"></span> Uploading…</div>';
+  root.innerHTML = '<div class="resume-pending"><span class="spinner sm"></span> Filing résumé…</div>';
   const fd = new FormData();
   fd.append('file', file);
   try {
@@ -78,7 +98,7 @@ async function uploadResume(file) {
     if (!res.ok) throw new Error(data.error || 'upload failed');
     renderResume(data.resume);
   } catch (err) {
-    alert('Upload failed: ' + err.message);
+    alertDialog({ title: 'Upload failed', message: err.message });
     await loadResume();
   }
 }
@@ -187,12 +207,16 @@ function setStatus(text, cls = '') {
   const el = $('#save-status');
   el.textContent = text;
   el.className = 'save-status ' + cls;
+  // Reveal the "Discard pending changes" link only while dirty —
+  // controlled by a class on the masthead row so CSS owns the fade.
+  const row = $('#mast-status-row');
+  if (row) row.classList.toggle('is-dirty', cls === 'dirty');
 }
 
 function markDirty() {
   if (!dirty) {
     dirty = true;
-    setStatus('Unsaved changes', 'dirty');
+    setStatus('Unsaved — pen still down', 'dirty');
   }
 }
 
@@ -223,18 +247,22 @@ async function save() {
       interestAreas: prefs.profile?.interestAreas || [],
     },
   };
-  $('#save-btn').disabled = true;
+  // The legacy bottom "Save changes" button no longer exists in the
+  // dossier layout (auto-save handles everything). Guard the disabled
+  // toggle so older cached HTML doesn't crash here either.
+  const saveBtn = $('#save-btn');
+  if (saveBtn) saveBtn.disabled = true;
   setStatus('Saving…');
   try {
     await api('/api/preferences', { method: 'POST', body: updated });
     prefs = updated;
     dirty = false;
-    setStatus('Saved', 'saved');
-    setTimeout(() => { if (!dirty) setStatus(''); }, 1500);
+    setStatus('Filed', 'saved');
+    setTimeout(() => { if (!dirty) setStatus('auto-saves as you type'); }, 1800);
   } catch (err) {
     setStatus('Save failed: ' + err.message, 'dirty');
   } finally {
-    $('#save-btn').disabled = false;
+    if (saveBtn) saveBtn.disabled = false;
   }
 }
 
@@ -243,21 +271,35 @@ async function save() {
 async function runDiscovery() {
   const btn = $('#discover-btn');
   const out = $('#discovery-results');
+  // Cache the original button content (SVG arrow + label) so the finally
+  // block can restore it verbatim — naïvely writing the text back would
+  // erase the arrow.
+  const originalBtnHtml = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner sm"></span> Searching the web…';
-  out.innerHTML = '<div style="padding:12px;color:var(--muted)"><span class="spinner sm"></span> This usually takes 20–40 seconds.</div>';
+  btn.innerHTML = '<span class="spinner sm on-primary"></span><span>Searching…</span>';
+  out.innerHTML = `
+    <p class="discovery-pending">
+      <span class="spinner sm"></span>
+      <span>Working — Claude is searching the web. Usually 20–40 seconds.</span>
+    </p>
+  `;
   try {
     const data = await api('/api/sources/discover', { method: 'POST', body: { maxCandidates: 12 } });
     const candidates = data.candidates || [];
     if (!candidates.length) {
-      out.innerHTML = '<div style="padding:12px;color:var(--muted)">No new candidates found. The model didn\'t see anything beyond what you\'re already tracking.</div>';
+      out.innerHTML = `
+        <p class="discovery-empty">
+          Nothing new. The model didn't see anything beyond what you're already tracking.
+        </p>
+      `;
       return;
     }
     out.innerHTML = `
-      <div style="font-size:13px;color:var(--muted);margin-bottom:8px">
-        ${candidates.length} candidate${candidates.length === 1 ? '' : 's'} found.
-        Approve or dismiss them on the <a href="/settings.html#discoveries" style="color:var(--blue-ink)">Settings page</a>.
-      </div>
+      <p class="discovery-summary">
+        <strong>${candidates.length}</strong> candidate${candidates.length === 1 ? '' : 's'} found.
+        Approve or dismiss them on the
+        <a href="/settings.html#discoveries">Settings page</a>.
+      </p>
       ${candidates.map((c) => {
         const url = c.url || c.config?.url;
         return `
@@ -267,16 +309,16 @@ async function runDiscovery() {
             <span class="discovery-result-kind">${escapeHtml(c.kind || '')}</span>
           </div>
           ${c.rationale ? `<div class="discovery-result-rationale">${escapeHtml(c.rationale)}</div>` : ''}
-          ${url ? `<div class="discovery-result-meta"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:var(--blue-ink)">${escapeHtml(url)} ↗</a></div>` :
+          ${url ? `<div class="discovery-result-meta"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)} ↗</a></div>` :
             (c.config?.slug ? `<div class="discovery-result-meta">${escapeHtml(c.config.slug)}</div>` : '')}
         </div>
       `;}).join('')}
     `;
   } catch (err) {
-    out.innerHTML = `<div style="padding:12px;color:var(--bad)">Discovery failed: ${escapeHtml(err.message)}</div>`;
+    out.innerHTML = `<p class="discovery-empty discovery-error">Discovery failed: ${escapeHtml(err.message)}</p>`;
   } finally {
     btn.disabled = false;
-    btn.innerHTML = 'Find sources';
+    btn.innerHTML = originalBtnHtml;
   }
 }
 
@@ -320,14 +362,17 @@ async function init() {
     if (dirty && saveTimer) flushSave();
   });
 
-  $('#save-btn').addEventListener('click', flushSave);
+  // The dossier layout drops the bottom "Save" button (auto-save covers
+  // it). Guard for safety in case a stale cached HTML is served.
+  $('#save-btn')?.addEventListener('click', flushSave);
+
   $('#reset-btn').addEventListener('click', async () => {
     prefs = await api('/api/preferences');
     renderProfileFields();
     schools.render();
     interests.render();
     dirty = false;
-    setStatus('');
+    setStatus('auto-saves as you type');
   });
 
   $('#resume-file').addEventListener('change', (e) => {
@@ -338,7 +383,7 @@ async function init() {
   $('#discover-btn').addEventListener('click', runDiscovery);
 
   await loadResume();
-  setStatus('');
+  setStatus('auto-saves as you type');
 }
 
 init().catch((err) => {

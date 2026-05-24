@@ -54,3 +54,98 @@ export const STATUSES = [
   { value: 'offer', label: 'Offer' },
   { value: 'rejected', label: 'Ignored', pickerLabel: 'Ignore' },
 ];
+
+// ============================================================
+// UI helpers — small bits shared across pages. Kept here (rather
+// than a separate ui.js) because app.js is the existing utility
+// module and the helpers are small enough not to warrant a split.
+// ============================================================
+
+// Updates an element's text content and toggles a state class. The base
+// class is the element's first className token, captured on first call so
+// callers don't have to repeat it (e.g. 'status-message' or 'save-status').
+// Pass state='' to clear. autoClearMs blanks the message after a delay,
+// but only if the text hasn't been replaced in the meantime.
+export function setStatus(el, text, state = '', autoClearMs = 0) {
+  if (!el) return;
+  if (el._statusBase === undefined) {
+    el._statusBase = (el.className.split(/\s+/)[0] || '');
+  }
+  el.textContent = text;
+  el.className = state ? `${el._statusBase} ${state}` : el._statusBase;
+  if (autoClearMs > 0 && text) {
+    setTimeout(() => {
+      if (el.textContent === text) {
+        el.textContent = '';
+        el.className = el._statusBase;
+      }
+    }, autoClearMs);
+  }
+}
+
+// Placeholder for empty / loading / no-results lists. Styled by .empty-state
+// in style.css. Replaces the inline padded-centered-muted divs that were
+// scattered across settings.js and documents.js.
+export function renderEmptyState(message) {
+  return `<div class="empty-state">${escapeHtml(message)}</div>`;
+}
+
+// Reusable confirmation modal. Reuses .modal-backdrop + .modal styles from
+// style.css. Resolves true on confirm, false on cancel/dismiss. Pass
+// cancelLabel: null to hide the cancel button (alertDialog uses this).
+export function confirmDialog({
+  title,
+  message,
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  destructive = false,
+}) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop confirm-backdrop';
+    const confirmClass = destructive ? 'btn danger' : 'btn primary';
+    const cancelBtn = cancelLabel
+      ? `<button class="btn ghost" data-act="cancel">${escapeHtml(cancelLabel)}</button>`
+      : '';
+    backdrop.innerHTML = `
+      <div class="modal confirm-modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <div class="modal-title">${escapeHtml(title)}</div>
+          <button class="modal-close" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:14px;color:var(--ink-2);line-height:1.5;margin:0 0 18px">${escapeHtml(message)}</p>
+          <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+            ${cancelBtn}
+            <button class="${confirmClass}" data-act="confirm">${escapeHtml(confirmLabel)}</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => backdrop.classList.add('open'));
+
+    const finish = (val) => {
+      backdrop.classList.remove('open');
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+      setTimeout(() => backdrop.remove(), 220);
+      resolve(val);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') finish(false); };
+
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) finish(false); });
+    backdrop.querySelector('.modal-close').addEventListener('click', () => finish(false));
+    backdrop.querySelector('[data-act="cancel"]')?.addEventListener('click', () => finish(false));
+    backdrop.querySelector('[data-act="confirm"]').addEventListener('click', () => finish(true));
+    document.addEventListener('keydown', onKey);
+    backdrop.querySelector('[data-act="confirm"]').focus();
+  });
+}
+
+// Acknowledge-only dialog. Replaces native alert() for in-app errors and
+// notices so they match the rest of the modal styling.
+export function alertDialog({ title = 'Heads up', message, label = 'OK' }) {
+  return confirmDialog({ title, message, confirmLabel: label, cancelLabel: null });
+}
