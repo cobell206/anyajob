@@ -1,6 +1,6 @@
-// public/documents.js — application materials section in the listing modal
+// public/components/documents.js — application materials section in the listing modal
 
-import { $, escapeHtml, api } from './app.js';
+import { $, escapeHtml, api } from '../app.js';
 
 const ALLOWED = '.pdf,.docx,.doc,.txt';
 

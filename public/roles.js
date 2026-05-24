@@ -5,9 +5,9 @@
 // (HTML + same-named JS sibling). No behavior change.
 
 import { $, $$, escapeHtml, api, fmtSalary, fmtDate, scoreClass, STATUSES, SVG_THUMB_UP, SVG_THUMB_DOWN } from './app.js';
-import { openModal } from './modal.js';
-import { openAddRoleModal } from './add-role-modal.js';
-import { openReviewCandidatesModal } from './review-candidates-modal.js';
+import { openModal } from './components/modal.js';
+import { openAddRoleModal } from './components/add-role-modal.js';
+import { openReviewCandidatesModal } from './components/review-candidates-modal.js';
 
 let allListings = [];
 let sortKey = 'score';

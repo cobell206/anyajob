@@ -2,7 +2,7 @@ import {
   $, $$, escapeHtml, api,
   confirmDialog, alertDialog, setStatus,
 } from './app.js';
-import { renderCandidateCard } from './candidates.js';
+import { renderCandidateCard } from './components/candidates.js';
 
 // Inline SVGs replace emoji glyphs in the source-card row. Lucide-style
 // 24×24 stroked icons, sized by the parent (.icon-btn-sm svg { 16px }).

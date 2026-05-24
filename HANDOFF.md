@@ -68,14 +68,17 @@ scripts/
 
 public/
   index.html             ← main listings table/cards
-  modal.js               ← listing detail modal
   app.js                 ← shared frontend utilities
-  documents.js           ← document upload/score UI
   settings.html          ← settings page (markup only)
   settings.js            ← settings page logic (extracted from HTML)
   (notifications UI lives inside settings.html → Notifications section)
-  add-role-modal.js      ← manual paste-and-score modal (mounts on index.html)
   style.css
+  components/            ← reusable UI modules, imported by page scripts
+    modal.js               ← listing detail modal
+    add-role-modal.js      ← manual paste-and-score modal (mounts on index.html)
+    review-candidates-modal.js ← pending source candidates (mounts on index.html)
+    candidates.js          ← shared source-candidate card renderer
+    documents.js           ← document upload/score UI
 
 bin/
   anyajob-logs          ← laptop CLI for fetching redacted logs over CF Access
@@ -190,7 +193,7 @@ GitHub Actions runs `npm test` before any deploy. PRs to main run tests but don'
 ### Frontend conventions
 
 - ES modules served as static files
-- One module per page logic file (`app.js`, `modal.js`, `settings.js`, `documents.js`)
+- One module per page logic file (`roles.js`, `ignored.js`, `profile.js`, `settings.js`); shared UI modules live under `components/`
 - HTML files contain markup + minimal styles + a single `<script type="module" src="...">` reference
 - No build step, no bundler, no React. Vanilla JS with module imports.
 - Mobile-first; the user is mostly on her phone

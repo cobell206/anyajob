@@ -1,4 +1,4 @@
-// public/candidates.js — shared source-candidate card renderer.
+// public/components/candidates.js — shared source-candidate card renderer.
 //
 // Two consumers right now:
 //   1. settings.js → renders the "Pending review" list inside the Sources
@@ -9,7 +9,7 @@
 // Kept here (rather than re-implementing in each call site) so the two
 // surfaces can't drift on copy, layout, or which fields are surfaced.
 
-import { escapeHtml } from './app.js';
+import { escapeHtml } from '../app.js';
 
 // Render a single candidate card. The action buttons differ per caller —
 // live discovery uses position-indexed approve buttons (cands aren't

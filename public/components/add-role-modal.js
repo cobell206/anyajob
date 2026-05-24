@@ -1,4 +1,4 @@
-// public/add-role-modal.js — modal flow for adding a new role.
+// public/components/add-role-modal.js — modal flow for adding a new role.
 //
 // Replaces the standalone /paste.html page. The flow is unchanged:
 //   1. URL hero — paste a job URL, click Auto-fill, server extracts fields.
@@ -11,7 +11,7 @@
 // Backdrop is its own DOM element, kept separate from modal.js's listing-
 // detail backdrop so both can co-exist on the page without state collision.
 
-import { $, $$, api, alertDialog } from './app.js';
+import { $, $$, api, alertDialog } from '../app.js';
 
 let isOpen = false;
 let onAddedCallback = null;

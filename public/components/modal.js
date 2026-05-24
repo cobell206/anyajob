@@ -1,6 +1,6 @@
-// public/modal.js — reusable detail modal for a listing
+// public/components/modal.js — reusable detail modal for a listing
 
-import { $, $$, escapeHtml, api, fmtSalary, fmtDateLong, scoreClass, STATUSES, SVG_THUMB_UP, SVG_THUMB_DOWN } from './app.js';
+import { $, $$, escapeHtml, api, fmtSalary, fmtDateLong, scoreClass, STATUSES, SVG_THUMB_UP, SVG_THUMB_DOWN } from '../app.js';
 import { renderDocumentsSection, wireDocumentActions } from './documents.js';
 
 let currentListing = null;
@@ -54,7 +54,7 @@ export function openModal(listing, onUpdate) {
       <div class="modal-grid">
         <div class="modal-stat">
           <div class="modal-stat-label">Score</div>
-          <div class="modal-stat-value" style="color: var(--${overall >= 8 ? 'green' : 'blue'}-ink)">${overall}/10</div>
+          <div class="modal-stat-value ${scoreClass(overall)}">${overall}/10</div>
         </div>
         <div class="modal-stat">
           <div class="modal-stat-label">Qualification fit</div>

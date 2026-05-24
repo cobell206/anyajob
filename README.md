@@ -93,9 +93,12 @@ job-tracker/
     │                       (email previews + test send live in settings.html → Notifications section)
     ├── style.css
     ├── app.js
-    ├── modal.js              ← listing detail modal
-    ├── add-role-modal.js     ← manual JD scorer modal (opens from roles page)
-    └── documents.js          ← upload UI
+    └── components/
+        ├── modal.js                    ← listing detail modal
+        ├── add-role-modal.js           ← manual JD scorer modal (opens from roles page)
+        ├── review-candidates-modal.js  ← pending source candidates (opens from roles page)
+        ├── candidates.js               ← shared source-candidate card renderer
+        └── documents.js                ← upload UI
 ```
 
 ## Setup (on laptop)

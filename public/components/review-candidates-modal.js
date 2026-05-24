@@ -1,4 +1,4 @@
-// public/review-candidates-modal.js — surfaced from the roles page so
+// public/components/review-candidates-modal.js — surfaced from the roles page so
 // pending source candidates can be reviewed without navigating to settings.
 //
 // Mirrors the settings-page "Pending review" zone:
@@ -12,7 +12,7 @@
 // Backdrop is owned by this module, kept separate from modal.js (listing
 // detail) and add-role-modal.js (paste flow) so all three can coexist.
 
-import { $, $$, api, alertDialog } from './app.js';
+import { $, $$, api, alertDialog } from '../app.js';
 import { renderCandidateCard } from './candidates.js';
 
 let isOpen = false;

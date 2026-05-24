@@ -5,7 +5,7 @@
 // (HTML + same-named JS sibling). No behavior change.
 
 import { $, $$, escapeHtml, api, fmtSalary, fmtDateLong, scoreClass } from './app.js';
-import { openModal } from './modal.js';
+import { openModal } from './components/modal.js';
 
 // Labels for both reject-reason vocabularies (modal chips + card chips).
 const REASON_LABELS = {
