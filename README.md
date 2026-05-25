@@ -2,6 +2,68 @@
 
 Daily job-search pipeline for someone applying to Columbia or NYU Law. Scrapes legal-relevant roles from reliable sources, scores them with Claude on two axes (qualification fit + law school admissions value), and presents a sortable, filterable shortlist with status pipeline tracking.
 
+## Operating this thing — start here
+
+If you're a new contributor or AI agent picking this up, read this section first. It covers the load-bearing facts about how production runs and how to debug it without SSH'ing in.
+
+### Production
+
+- **URL:** <https://jobs.anyalawgirly.com>
+- **Host:** EC2 (us-east-1) behind a Cloudflare Tunnel + **Cloudflare Access** (zero-trust SSO). Every endpoint redirects to an SSO login page unless authenticated.
+- **Deploy:** GitHub Actions on push to `main` → SSH to EC2 → `git pull` → restart systemd. See `.github/workflows/deploy.yml`.
+
+### Remote log access (no SSH required)
+
+The server exposes redacted logs + a diagnostic bundle behind Cloudflare Access:
+- `GET /api/logs/sources` — what log files exist
+- `GET /api/logs/:source?since=1h&level=warn&limit=500` — one log, filtered + redacted
+- `GET /api/diagnostic` — curated state bundle (sources, listings counts, spend, log tails)
+
+To hit these from a laptop or from a Claude Code session, you need a **Cloudflare Access service token**:
+
+1. **Create the token** — Cloudflare Zero Trust → Access → Service Auth → Create Service Token → name it `claude-debug` (or similar).
+2. **Add the token to the Access policy** for `jobs.anyalawgirly.com` as an Include rule → Service Auth → your token.
+3. **Save to `.env.local`** (gitignored, local-only — never commit):
+   ```
+   ANYAJOB_URL=https://jobs.anyalawgirly.com
+   CF_CLIENT_ID=<token client id>
+   CF_CLIENT_SECRET=<token client secret>
+   ```
+4. **Hit the endpoints** with the matching headers:
+   ```bash
+   set -a; source .env.local; set +a
+   curl -H "CF-Access-Client-Id: $CF_CLIENT_ID" \
+        -H "CF-Access-Client-Secret: $CF_CLIENT_SECRET" \
+        "$ANYAJOB_URL/api/logs/server?since=2h&level=warn"
+   ```
+
+> **Heads up:** the shell CLI in `bin/lawbound-logs` wraps the same auth but reads from differently-named env vars (`LAWBOUND_HOST` / `LAWBOUND_CF_CLIENT_ID` / `LAWBOUND_CF_CLIENT_SECRET`). The mismatch with `.env.local`'s `ANYAJOB_*` / `CF_*` names is a known wart — tracked in `OUTSTANDING.md` along with a planned rename to `bin/anyajob-logs`.
+
+### Deploy quirks worth knowing
+
+The deploy script (`.github/workflows/deploy.yml`) does two non-obvious things that matter when debugging cache issues:
+
+1. **HTML cache-bust** — sed replaces every literal `__CACHE_VERSION__` in `public/*.html` with the current commit SHA. So `<script src="/foo.js?v=__CACHE_VERSION__">` becomes `?v=abc1234`. The non-HTML static files are served with `Cache-Control: public, max-age=31536000, immutable` from Cloudflare's CDN — the commit-SHA query string is what forces browsers to refetch on every deploy.
+2. **JS import cache-bust** — same idea but for ES module imports inside `public/**/*.js`. The regex (`\.+/[^'?]*\.js`) rewrites `from './foo.js'` and `from '../app.js'` to include `?v=$COMMIT_SHA`. **Burned us on 2026-05-25:** the earlier version of the regex only matched same-directory imports (`./`), so after the `components/` subdir refactor every `from '../app.js'` import silently pinned to a year-old immutable-cached copy of `/app.js`. Latent bug — only surfaced when a downstream file actually referenced a new export. Fixed in `169b7bf`. **If you add a transitive import path the regex still doesn't match** (e.g. absolute paths, deep relatives, anything funky), check that file after deploy or the same class of bug returns.
+
+### Codebase entry points
+
+- **Server:** `src/server.js` (Express, mounts route files)
+- **Daily pipeline (cron):** `src/daily.js` — scrape → score → email → cleanup
+- **Routes:** `src/routes/{listings,sources,profile,documents,logs,diagnostic,…}.js`
+- **AI prompts (centralized):** `src/prompts.js` — all of them in one file
+- **Frontend pages:** `public/{index,profile,settings,ignored}.html` + matching `.js`
+- **Shared frontend modules:** `public/components/`, `public/app.js`
+- **Vendored libraries:** `public/vendor/pdfjs/` — pdfjs-dist for the résumé feedback PDF viewer
+
+### Where to look next
+
+- `DEPLOY.md` — EC2 + Cloudflare Tunnel + SES setup, deploy details
+- `HANDOFF.md` — design rationale and the "ongoing concerns" file
+- `OUTSTANDING.md` — known production issues by severity
+- `GITHUB.md` — repo + push-to-deploy setup
+- `data/preferences.example.json` — schema for `data/preferences.json` (gitignored, holds Anya's profile)
+
 ## What's in this version
 
 **Scoring engine**
