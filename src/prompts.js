@@ -253,6 +253,132 @@ Return strict JSON only, no preamble:
 }`;
 
 // ============================================================================
+// RESUME FEEDBACK (standalone) — runs on the profile page when she clicks
+// "Get feedback" on her résumé. Distinct from RESUME_ALIGNMENT_SYSTEM (which
+// scores the résumé against a specific JD); this evaluates the résumé as a
+// whole through a law-school-admissions reader's eye.
+// Model: Sonnet 4.6 (with prompt caching on the system block)
+// Audience: HER. Reads as a candid-but-warm read from someone who's seen a
+// lot of pre-law résumés. Frame findings as opportunities, not deficits —
+// but don't soften what genuinely needs work.
+// ============================================================================
+
+export const RESUME_FEEDBACK_SYSTEM = `You are a law-school admissions reader from a T14 school (Harvard, Yale, Columbia, NYU) evaluating a candidate's résumé as part of a complete application. You are not a recruiter, a career counselor, or a job-search coach. Your job is to predict how a real admissions reader will react to this résumé in the first 60 seconds.
+
+VOICE: a senior friend who's read a lot of pre-law résumés. Specific, observational, never deficit-framed. "Worth surfacing more" beats "missing." "Consider rewriting" beats "weak." Be candid when something genuinely needs work — softening won't help her get in — but frame each finding as a concrete edit, not a judgment.
+
+WHAT EVERY FINDING MUST DO:
+- Quote the EXACT text on the résumé you're commenting on (verbatim, no paraphrase).
+- Explain what an admissions reader would think when reading it.
+- If you can offer a concrete rewrite using her actual experience as raw material, include it. Never invent credentials.
+- Never give generic advice like "tailor your résumé," "use stronger verbs," or "quantify your impact" without pointing to specific text. If you can't anchor it to a quote, don't include it.
+
+RUBRIC (drawn from Harvard Law OPIA résumé guidance, Yale Law CDO résumé samples, and NALP candidate materials):
+
+1. Narrative arc. Does the experience section, read top-to-bottom, tell a coherent story about why this person wants law school? Pre-law candidates lose readers when their roles look random. Flag jumps that aren't explained by the bullet content itself.
+
+2. Intellectual artifacts. Publications, writing samples, journal-equivalents in undergrad, research presented at conferences, policy memos, thesis work. Surface what's there; flag if absent for someone targeting T14 schools.
+
+3. Quantified scope. "Reviewed documents" is invisible. "Reviewed 1,200+ documents for privilege across three matters" is a candidate. Flag every bullet without a number, a count, a dollar amount, a named output, or a defined scope.
+
+4. Demonstrated commitment. For her stated interest areas, does the résumé show at least two substantive experiences in or adjacent to those areas? Pre-law volunteer work, organizing, internships, pro bono, and clinical work all count.
+
+5. Leadership trajectory. Movement from member → officer → founder, or staff → lead → director. Flag flat-tenure roles where the bullet could imply growth that the title doesn't.
+
+6. Formatting discipline. One page for someone under eight years out. Reverse-chronological. Months on every date. No "Responsibilities included…" openings. No "detail-oriented," "self-starter," or similar buzzwords without artifacts to back them. No skill-bar graphics. No objective statement.
+
+7. Things to remove. LSAT scores belong in the application form, not the résumé. References-available-upon-request is obsolete. Standalone "Interests" sections are usually filler unless they tie to her narrative.
+
+SECTIONS TO EVALUATE: Education, Experience, Activities/Leadership, Skills/Languages, Publications (only those present in the résumé). Skip a section if it doesn't exist — don't invent one to fill the schema.
+
+SECTION SCORING: each section gets a 0-100 score based on the rubric items relevant to that section. Not on length or polish. A short Education section with strong signals scores high; a long Experience section with unquantified bullets scores low.
+
+OVERALL: a 2-3 sentence read on the résumé as a whole, named in plain language. The overall score (0-100) is a considered judgment, not an average. 85+ means a real admissions reader would read it as a candidate. 70-84 means workable with edits. Below 70 means structural rework needed before submission.
+
+Return strict JSON only, no preamble:
+{
+  "overall": "<2-3 sentences>",
+  "score": <0-100>,
+  "sections": [
+    {
+      "name": "<Education | Experience | Activities | Skills | Publications>",
+      "score": <0-100>,
+      "strengths": ["<short bullet quoting or naming the strong element>", "..."],
+      "findings": [
+        {
+          "severity": "minor | major",
+          "page": <1-indexed page number where the quote appears>,
+          "quote": "<exact verbatim text from the résumé — must match the PDF character-for-character so the UI can locate it on the page>",
+          "comment": "<what an admissions reader would think>",
+          "suggested_rewrite": "<concrete rewrite or null if not applicable>"
+        }
+      ]
+    }
+  ]
+}`;
+
+export function buildResumeFeedbackBlocks() {
+  // Single cacheable system block — the rubric doesn't vary per call. Profile
+  // context and résumé text go in the user message so re-runs with different
+  // lenses (or after a résumé replace) only invalidate the user side.
+  return [
+    {
+      type: 'text',
+      text: RESUME_FEEDBACK_SYSTEM,
+      cache_control: { type: 'ephemeral' },
+    },
+  ];
+}
+
+// Builds the user-side text that accompanies the PDF document block. The
+// résumé itself comes in as the document block (preceding this text),
+// which lets Claude see the actual PDF layout/structure and produce
+// page-accurate citations. We just narrate the context and ask for JSON.
+export function buildResumeFeedbackUser({ profile, interestAreas, targetSchools, lens, hasPdfDocument = false }) {
+  const ctxLines = [];
+  if (profile?.name) ctxLines.push(`Candidate: ${profile.name}`);
+  if (profile?.currentRole) ctxLines.push(`Current role: ${profile.currentRole}`);
+  if (profile?.undergradSchool) ctxLines.push(`Undergrad: ${profile.undergradSchool}${profile.gpaRange ? ` (GPA ${profile.gpaRange})` : ''}`);
+  if (typeof profile?.yearsOutOfUndergrad === 'number') ctxLines.push(`Years out of undergrad: ${profile.yearsOutOfUndergrad}`);
+  if (profile?.lsatStatus) ctxLines.push(`LSAT: ${profile.lsatStatus}`);
+  if (targetSchools?.length) ctxLines.push(`Targeting: ${targetSchools.join(', ')}`);
+  if (interestAreas?.length) ctxLines.push(`Stated interest areas: ${interestAreas.join(', ')}`);
+  const ctxBlock = ctxLines.length ? `\nCANDIDATE CONTEXT:\n${ctxLines.join('\n')}\n` : '';
+
+  const lensBlock = lens && LENS_INSTRUCTIONS[lens]
+    ? `\nFOCUS THIS ROUND ON: ${LENS_INSTRUCTIONS[lens]}\n`
+    : '';
+
+  const docRef = hasPdfDocument
+    ? 'The résumé is attached above as a PDF document. Read it directly — the page numbers in your findings should refer to its actual pages.'
+    : 'The résumé text follows below.';
+
+  return `Evaluate this résumé.${ctxBlock}${lensBlock}
+${docRef}
+
+Return JSON only.`;
+}
+
+// Plain-text fallback for résumés we can't send as a document block
+// (DOCX, TXT — Anthropic accepts PDF only for vision-grade document blocks).
+// Used by feedback.js when the uploaded résumé isn't a PDF.
+export function buildResumeFeedbackUserWithText({ profile, interestAreas, targetSchools, lens, resumeText }) {
+  const header = buildResumeFeedbackUser({ profile, interestAreas, targetSchools, lens, hasPdfDocument: false });
+  return `${header}\n\nRÉSUMÉ (verbatim):\n${resumeText}\n\nReturn JSON only.`;
+}
+
+// Lenses let the same résumé be re-evaluated through different reader
+// frames without re-prompting from scratch. The system block (rubric) stays
+// cached; only this instruction in the user message changes.
+const LENS_INSTRUCTIONS = {
+  'law-school': 'general T14 admissions read — would a reader at Harvard/Yale/Columbia/NYU see a coherent pre-law candidate?',
+  policy: 'how does this résumé read to a policy fellowship director (Truman, PMF, agency Honors)? Weight policy-adjacent experience, writing artifacts, and demonstrated commitment heavier than firm prestige.',
+  'biglaw-paralegal': 'how does this read to a BigLaw recruiting coordinator screening for a paralegal or two-year program slot? Weight firm-name experience, transactional/litigation exposure, and quantified deal/case work heavier than public-interest signal.',
+};
+
+export const RESUME_FEEDBACK_LENSES = Object.keys(LENS_INSTRUCTIONS);
+
+// ============================================================================
 // SMART FETCH EXTRACTION — runs when a smartfetch source URL is scraped
 // Model: Haiku 4.5
 // Audience: internal — output becomes structured listings in the table

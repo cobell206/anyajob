@@ -6,16 +6,27 @@ import { renderDocumentsSection, wireDocumentActions } from './documents.js';
 let currentListing = null;
 let onUpdateCallback = null;
 
+// Lucide-style external-link icon. 18px stroked, no fill — matches the
+// rest of the app's icon vocabulary. Sits inline after the title.
+const SVG_OPEN_EXTERNAL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+
 const backdrop = document.createElement('div');
 backdrop.className = 'modal-backdrop';
 backdrop.innerHTML = `
   <div class="modal" role="dialog" aria-modal="true">
     <div class="modal-head">
-      <div>
-        <div class="modal-title" id="m-title"></div>
+      <div class="modal-head-titles">
+        <div class="modal-title-row">
+          <div class="modal-title" id="m-title"></div>
+          <a class="modal-open-link" id="m-open-link" href="#" target="_blank" rel="noopener" aria-label="Open original posting" title="Open original posting" hidden>${SVG_OPEN_EXTERNAL}</a>
+        </div>
         <div class="modal-company" id="m-company"></div>
       </div>
-      <button class="modal-close" aria-label="Close">×</button>
+      <div class="modal-head-actions">
+        <button class="modal-vote up" id="m-vote-up" data-rate="up" aria-label="Like this listing">${SVG_THUMB_UP}</button>
+        <button class="modal-vote down" id="m-vote-down" data-rate="down" aria-label="Dislike this listing">${SVG_THUMB_DOWN}</button>
+        <button class="modal-close" aria-label="Close">×</button>
+      </div>
     </div>
     <div class="modal-body" id="m-body"></div>
   </div>
@@ -34,6 +45,11 @@ document.addEventListener('keydown', (e) => {
 function close() {
   backdrop.classList.remove('open');
   document.body.style.overflow = '';
+  // Defensive: if the inline doc preview was open when the modal closed,
+  // clear its state so the next opened listing doesn't inherit the
+  // hide-non-preview mode. The class lives on .modal which is persistent
+  // across opens (built once at module load).
+  backdrop.querySelector('.modal')?.classList.remove('has-preview-open');
   currentListing = null;
 }
 
@@ -45,29 +61,101 @@ export function openModal(listing, onUpdate) {
   $('#m-title').textContent = listing.title;
   $('#m-company').textContent = `${listing.company}${listing.location ? ' · ' + listing.location : ''}`;
 
+  // Open-original link in the header — only shown when we have a URL.
+  const openLink = $('#m-open-link');
+  if (listing.url) {
+    openLink.href = listing.url;
+    openLink.hidden = false;
+  } else {
+    openLink.removeAttribute('href');
+    openLink.hidden = true;
+  }
+
+  // Thumbs up/down live in the modal head now — apply active class
+  // based on the listing's saved rating. The click handler below
+  // queries against `backdrop` so it picks these up regardless of
+  // where they sit in the DOM.
+  $('#m-vote-up').classList.toggle('active', listing.rating === 'up');
+  $('#m-vote-down').classList.toggle('active', listing.rating === 'down');
+
   const overall = s.overallScore ?? 0;
   const qual = s.qualificationFit ?? 0;
   const lsv = s.lawSchoolValue ?? 0;
+  // Qualitative summary tag under the overall score — gives the number
+  // semantic context and adds a little vertical anchor so the score
+  // block balances visually against the taller decision column.
+  const scoreLabel = overall >= 8 ? 'High fit'
+                   : overall >= 6 ? 'Solid fit'
+                   : overall >= 4 ? 'Some fit'
+                   : 'Low fit';
 
   $('#m-body').innerHTML = `
-    <div class="modal-section">
-      <div class="modal-grid">
-        <div class="modal-stat">
-          <div class="modal-stat-label">Score</div>
-          <div class="modal-stat-value ${scoreClass(overall)}">${overall}/10</div>
+    <!-- Top summary row: scores on the left (compact card),
+         status/dates/notes on the right (working area). The two
+         "above-the-fold" surfaces of the modal — read + write. -->
+    <div class="modal-summary-row">
+      <div class="modal-score-block ${scoreClass(overall)}">
+        <div class="modal-score-overall">
+          <span class="modal-score-num">${overall}</span>
+          <span class="modal-score-denom">/10</span>
         </div>
-        <div class="modal-stat">
-          <div class="modal-stat-label">Qualification fit</div>
-          <div class="modal-stat-value">${qual}/10</div>
+        <div class="modal-score-tag">${scoreLabel}</div>
+        <div class="modal-score-divider"></div>
+        <ul class="modal-score-stats">
+          <li>
+            <span class="modal-score-stat-label">Qualification fit</span>
+            <span class="modal-score-stat-value">${qual}/10</span>
+          </li>
+          <li>
+            <span class="modal-score-stat-label">Law school value</span>
+            <span class="modal-score-stat-value">${lsv}/10</span>
+          </li>
+          <li>
+            <span class="modal-score-stat-label">Salary</span>
+            <span class="modal-score-stat-value">${fmtSalary(s.salaryMin, s.salaryMax)}</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="modal-decision modal-section">
+        <!-- Status + both dates share one 3-col row — status is a short
+             dropdown and the dates are narrow inputs, so they all fit
+             comfortably side-by-side. Mobile collapses to single column. -->
+        <div class="field-grid cols-3">
+          <div>
+            <label for="m-status">Status</label>
+            <select id="m-status">
+              ${STATUSES.map((s) => `<option value="${s.value}" ${s.value === listing.status ? 'selected' : ''}>${s.pickerLabel || s.label}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label for="m-applied-date">Applied</label>
+            <input type="date" id="m-applied-date" value="${listing.appliedDate || ''}">
+          </div>
+          <div>
+            <label for="m-closes-date">Closes</label>
+            <input type="date" id="m-closes-date" value="${listing.closesDate || ''}">
+          </div>
         </div>
-        <div class="modal-stat">
-          <div class="modal-stat-label">Law school value</div>
-          <div class="modal-stat-value">${lsv}/10</div>
+
+        <div id="m-reject-reasons" class="reject-reasons" hidden>
+          <p class="reject-reasons-label">Why ignore? (optional)</p>
+          <div class="reject-reasons-chips">
+            <button type="button" class="reason-chip" data-reason="not-a-fit">Not a fit</button>
+            <button type="button" class="reason-chip" data-reason="salary">Salary too low</button>
+            <button type="button" class="reason-chip" data-reason="location">Location</button>
+            <button type="button" class="reason-chip" data-reason="too-senior">Too senior</button>
+            <button type="button" class="reason-chip" data-reason="too-junior">Too junior</button>
+            <button type="button" class="reason-chip" data-reason="already-applied">Already applied</button>
+            <button type="button" class="reason-chip" data-reason="other">Other…</button>
+          </div>
+          <input type="text" id="m-reject-note" class="reject-note-input" placeholder="Tell me more…" hidden>
         </div>
-        <div class="modal-stat">
-          <div class="modal-stat-label">Salary</div>
-          <div class="modal-stat-value">${fmtSalary(s.salaryMin, s.salaryMax)}</div>
-        </div>
+
+        <label for="m-note">Notes</label>
+        <textarea id="m-note" placeholder="Application status, follow-ups, contacts…">${escapeHtml(listing.note || '')}</textarea>
+
+        <div class="status-message" id="m-status-msg"></div>
       </div>
     </div>
 
@@ -78,6 +166,8 @@ export function openModal(listing, onUpdate) {
       </div>
     ` : ''}
 
+    <!-- Bottom analysis row: reading content on the left (strengths,
+         concerns, angle), application materials on the right. -->
     <div class="modal-cols">
       <div class="modal-col-left">
         ${s.strengths?.length ? `
@@ -103,50 +193,6 @@ export function openModal(listing, onUpdate) {
       </div>
 
       <div class="modal-col-right">
-        <div class="modal-section">
-          <h3>Your decision</h3>
-          <div class="btn-row" style="margin-bottom: 8px">
-            <button class="btn btn-vote up ${listing.rating === 'up' ? 'active' : ''}" data-rate="up" aria-label="Like this listing">${SVG_THUMB_UP}</button>
-            <button class="btn btn-vote down ${listing.rating === 'down' ? 'active' : ''}" data-rate="down" aria-label="Dislike this listing">${SVG_THUMB_DOWN}</button>
-            ${listing.url ? `<a class="btn primary" href="${escapeHtml(listing.url)}" target="_blank" rel="noopener">Open original ↗</a>` : ''}
-          </div>
-
-          <label>Status</label>
-          <select id="m-status">
-            ${STATUSES.map((s) => `<option value="${s.value}" ${s.value === listing.status ? 'selected' : ''}>${s.pickerLabel || s.label}</option>`).join('')}
-          </select>
-
-          <div id="m-reject-reasons" class="reject-reasons" hidden>
-            <p class="reject-reasons-label">Why ignore? (optional)</p>
-            <div class="reject-reasons-chips">
-              <button type="button" class="reason-chip" data-reason="not-a-fit">Not a fit</button>
-              <button type="button" class="reason-chip" data-reason="salary">Salary too low</button>
-              <button type="button" class="reason-chip" data-reason="location">Location</button>
-              <button type="button" class="reason-chip" data-reason="too-senior">Too senior</button>
-              <button type="button" class="reason-chip" data-reason="too-junior">Too junior</button>
-              <button type="button" class="reason-chip" data-reason="already-applied">Already applied</button>
-              <button type="button" class="reason-chip" data-reason="other">Other…</button>
-            </div>
-            <input type="text" id="m-reject-note" class="reject-note-input" placeholder="Tell me more…" hidden>
-          </div>
-
-          <div class="field-grid">
-            <div>
-              <label>Applied date</label>
-              <input type="date" id="m-applied-date" value="${listing.appliedDate || ''}">
-            </div>
-            <div>
-              <label>Closes date</label>
-              <input type="date" id="m-closes-date" value="${listing.closesDate || ''}">
-            </div>
-          </div>
-
-          <label>Notes</label>
-          <textarea id="m-note" placeholder="Application status, follow-ups, contacts…">${escapeHtml(listing.note || '')}</textarea>
-
-          <div class="status-message" id="m-status-msg"></div>
-        </div>
-
         <div id="m-docs-mount"></div>
       </div>
     </div>
@@ -178,13 +224,21 @@ export function openModal(listing, onUpdate) {
 
   // Rate / status / dates / note are toggle-like state indicators — they
   // should feel instantaneous. Apply the visual change immediately, fire the
-  // API in the background, and revert only if the request fails.
-  $$('[data-rate]', $('#m-body')).forEach((btn) => {
+  // API in the background, and revert only if the request fails. The thumbs
+  // live in modal-head now (not #m-body), so we scope queries to `backdrop`
+  // — that container holds both the head and the body.
+  $$('[data-rate]', backdrop).forEach((btn) => {
+    // openModal re-runs every time the modal opens; the static thumb buttons
+    // need fresh listeners only on the first open. Use a once-per-button flag
+    // via dataset so re-binding doesn't stack handlers.
+    if (btn.dataset.wired) return;
+    btn.dataset.wired = '1';
     btn.addEventListener('click', () => {
+      if (!currentListing) return;
       const action = btn.dataset.rate;
       const newRating = btn.classList.contains('active') ? null : action;
       const previousRating = currentListing.rating;
-      const rateBtns = $$('[data-rate]', $('#m-body'));
+      const rateBtns = $$('[data-rate]', backdrop);
 
       const apply = (rating) => {
         rateBtns.forEach((b) => b.classList.toggle('active', rating && b.dataset.rate === rating));
@@ -193,7 +247,8 @@ export function openModal(listing, onUpdate) {
       apply(newRating);
       onUpdateCallback?.(currentListing);
 
-      api(`/api/feedback/${fp}/rating`, { method: 'POST', body: { rating: newRating } })
+      const ratingFp = currentListing.dedupKey || currentListing.fingerprint;
+      api(`/api/feedback/${ratingFp}/rating`, { method: 'POST', body: { rating: newRating } })
         .catch((err) => {
           apply(previousRating);
           onUpdateCallback?.(currentListing);

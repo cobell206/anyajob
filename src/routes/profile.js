@@ -13,6 +13,8 @@ import {
   getProfileResumeMeta,
   PROFILE_FINGERPRINT,
 } from '../documents.js';
+import { generateResumeFeedback, getResumeFeedback } from '../feedback.js';
+import { RESUME_FEEDBACK_LENSES } from '../prompts.js';
 import { createLogger } from '../log.js';
 
 const log = createLogger('profile-route');
@@ -75,6 +77,40 @@ router.delete('/resume', async (req, res) => {
     await deleteDocument(PROFILE_FINGERPRINT, 'resume');
     res.json({ ok: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- Résumé feedback (standalone, profile-page) ----------
+// GET returns cached feedback (per-lens or all). POST runs a new evaluation.
+// Cached entries are scoped to the current résumé file — replacing the
+// résumé invalidates them automatically (see getResumeFeedback).
+
+router.get('/resume/feedback', async (req, res) => {
+  try {
+    const lens = req.query.lens || undefined;
+    if (lens && !RESUME_FEEDBACK_LENSES.includes(lens)) {
+      return res.status(400).json({ error: `unknown lens: ${lens}` });
+    }
+    const result = await getResumeFeedback({ lens });
+    res.json(result);
+  } catch (err) {
+    log.error({ err }, 'getResumeFeedback failed');
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/resume/feedback', async (req, res) => {
+  try {
+    const lens = req.body?.lens || 'law-school';
+    if (!RESUME_FEEDBACK_LENSES.includes(lens)) {
+      return res.status(400).json({ error: `unknown lens: ${lens}` });
+    }
+    const result = await generateResumeFeedback({ lens });
+    if (result.error) return res.status(422).json(result);
+    res.json(result);
+  } catch (err) {
+    log.error({ err }, 'generateResumeFeedback failed');
     res.status(500).json({ error: err.message });
   }
 });

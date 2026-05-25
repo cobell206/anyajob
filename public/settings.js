@@ -1,6 +1,6 @@
 import {
   $, $$, escapeHtml, api,
-  confirmDialog, alertDialog, setStatus,
+  confirmDialog, alertDialog, setStatus, scrollToEl,
 } from './app.js';
 import { renderCandidateCard } from './components/candidates.js';
 
@@ -776,7 +776,7 @@ async function loadPendingDiscoveries() {
   // If we landed here from the email link, scroll the section into view
   if (new URLSearchParams(location.search).get('from') === 'email') {
     document.getElementById('section-sources')?.classList.add('open');
-    wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollToEl(wrap, { block: 'start' });
   }
 }
 
@@ -912,7 +912,7 @@ function renderDiscoverResult(data) {
     loadPendingDiscoveries().then(() => {
       if (cands.length > 0) {
         document.getElementById('section-sources')?.classList.add('open');
-        $('#pending-discoveries')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        scrollToEl($('#pending-discoveries'), { block: 'start' });
       }
     });
   });

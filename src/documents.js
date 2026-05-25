@@ -308,19 +308,22 @@ function priorCoverBlock(prior) {
 // Resume alignment prompt lives in src/prompts.js (RESUME_ALIGNMENT_SYSTEM)
 
 async function readPdfText(pdfPath) {
-  // Lightweight text extraction. Uses pdftotext if available, falls back to nothing.
-  return new Promise((resolve) => {
-    const proc = spawn('pdftotext', ['-layout', pdfPath, '-'], { timeout: 15000 });
-    let out = '';
-    let err = '';
-    proc.stdout?.on('data', (d) => { out += d.toString(); });
-    proc.stderr?.on('data', (d) => { err += d.toString(); });
-    proc.on('error', () => resolve(''));
-    proc.on('close', (code) => {
-      if (code === 0) resolve(out);
-      else resolve('');
-    });
-  });
+  // Pure-JS extraction via pdf-parse v2 (pdfjs-dist under the hood). The
+  // prior shell-out to `pdftotext` silently swallowed ENOENT when poppler
+  // wasn't installed, leaving the daily scoring loop running with empty
+  // résumé text on machines without the brew formula. This removes that
+  // latent failure mode. Errors still resolve to '' so callers don't need
+  // to handle extraction failure separately from "no résumé".
+  try {
+    const { PDFParse } = await import('pdf-parse');
+    const buf = await readFile(pdfPath);
+    const parser = new PDFParse({ data: buf });
+    const result = await parser.getText();
+    return result?.text || '';
+  } catch (err) {
+    log.warn({ err: err.message, pdfPath }, 'pdf-parse extraction failed');
+    return '';
+  }
 }
 
 async function readDocxText(docxPath) {

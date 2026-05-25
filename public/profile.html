@@ -44,14 +44,16 @@
     <!-- Résumé feedback — standalone, profile-page evaluation through a
          law-school admissions reader's eye. Per-listing alignment scoring
          lives elsewhere (in the listing modal); this is "how does my résumé
-         read in general." Hidden until a résumé is uploaded. -->
+         read in general." Summary card here opens a full-screen modal with
+         the PDF + findings panel; this panel itself stays compact so the
+         profile page reads as a profile, not a workspace. -->
     <section class="panel" id="resume-feedback-panel" hidden>
       <div class="panel-head">
         <h2>Feedback</h2>
-        <p>An admissions reader's read on your résumé. Findings are anchored to specific text — hover a finding to spotlight where it lands.</p>
+        <p>An admissions reader's read on your résumé. Open the deep-dive view for the PDF + inline findings.</p>
       </div>
       <div id="resume-feedback-state">
-        <!-- empty / loading / loaded states injected by profile.js -->
+        <!-- summary card / empty state / error state injected by profile.js -->
       </div>
     </section>
 

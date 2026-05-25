@@ -1,6 +1,9 @@
 // public/components/documents.js — application materials section in the listing modal
 
-import { $, escapeHtml, api } from '../app.js';
+import {
+  $, escapeHtml, api,
+  SVG_FILE_TEXT, SVG_FILE, SVG_EYE, SVG_DOWNLOAD,
+} from '../app.js';
 
 const ALLOWED = '.pdf,.docx,.doc,.txt';
 
@@ -47,17 +50,18 @@ function renderDoc(fp, slot, entry, opts = {}) {
   const alignBadge = (score !== null)
     ? `<span class="doc-align align-${score >= 7 ? 'high' : score >= 5 ? 'mid' : 'low'}">${score}/10 fit</span>`
     : '';
+  const fileIcon = entry.file.endsWith('.pdf') ? SVG_FILE_TEXT : SVG_FILE;
   return `
     <div class="doc-row">
-      <div class="doc-icon">${entry.file.endsWith('.pdf') ? '📄' : '📝'}</div>
+      <div class="doc-icon">${fileIcon}</div>
       <div class="doc-meta">
         <div class="doc-name">${escapeHtml(entry.originalName || entry.file)}</div>
         <div class="doc-sub">${fmtBytes(entry.sizeBytes)} · ${fmtRelTime(entry.uploadedAt)} ${alignBadge}</div>
       </div>
       <div class="doc-actions">
-        ${previewable ? `<button class="icon-btn-sm" data-action="preview" data-file="${entry.previewFile}" title="Preview">👁</button>` : ''}
-        <a class="icon-btn-sm" href="/api/documents/${fp}/file/${entry.file}" download title="Download">⬇</a>
-        <button class="icon-btn-sm" data-action="replace" data-slot="${slot}" title="Replace">↻</button>
+        ${previewable ? `<button class="icon-btn-sm" data-action="preview" data-file="${entry.previewFile}" title="Preview" aria-label="Preview">${SVG_EYE}</button>` : ''}
+        <a class="icon-btn-sm" href="/api/documents/${fp}/file/${entry.file}" download title="Download" aria-label="Download">${SVG_DOWNLOAD}</a>
+        <button class="icon-btn-sm" data-action="replace" data-slot="${slot}" title="Replace" aria-label="Replace">↻</button>
       </div>
     </div>
   `;
@@ -65,45 +69,80 @@ function renderDoc(fp, slot, entry, opts = {}) {
 
 function renderOther(fp, list = []) {
   if (!list.length) return '';
-  return list.map((e) => `
+  return list.map((e) => {
+    const fileIcon = e.file.endsWith('.pdf') ? SVG_FILE_TEXT : SVG_FILE;
+    return `
     <div class="doc-row">
-      <div class="doc-icon">${e.file.endsWith('.pdf') ? '📄' : '📝'}</div>
+      <div class="doc-icon">${fileIcon}</div>
       <div class="doc-meta">
         <div class="doc-name">${escapeHtml(e.label || e.originalName)}</div>
         <div class="doc-sub">${fmtBytes(e.sizeBytes)} · ${fmtRelTime(e.uploadedAt)}</div>
       </div>
       <div class="doc-actions">
-        ${e.previewFile ? `<button class="icon-btn-sm" data-action="preview" data-file="${e.previewFile}" title="Preview">👁</button>` : ''}
-        <a class="icon-btn-sm" href="/api/documents/${fp}/file/${e.file}" download title="Download">⬇</a>
-        <button class="icon-btn-sm" data-action="delete-other" data-file="${e.file}" title="Delete">×</button>
+        ${e.previewFile ? `<button class="icon-btn-sm" data-action="preview" data-file="${e.previewFile}" title="Preview" aria-label="Preview">${SVG_EYE}</button>` : ''}
+        <a class="icon-btn-sm" href="/api/documents/${fp}/file/${e.file}" download title="Download" aria-label="Download">${SVG_DOWNLOAD}</a>
+        <button class="icon-btn-sm" data-action="delete-other" data-file="${e.file}" title="Delete" aria-label="Delete">×</button>
       </div>
     </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 export async function renderDocumentsSection(fingerprint) {
   const docs = await api(`/api/documents/${fingerprint}`).catch(() => ({}));
+  // True when the user has uploaded at least one of {resume, cover} for
+  // this listing. Drives whether we show the "upload to get started"
+  // subtitle and whether the feedback boxes render at all — when nothing
+  // is uploaded, the two empty-state placeholders are redundant noise.
+  const hasAnyDoc = !!(docs.resume?.current || docs.cover?.current);
   const resumeAlignBlock = docs.resume?.current?.alignmentScore
     ? renderAlignment(docs.resume.current.alignmentScore)
     : '';
   const coverAlignBlock = docs.cover?.current?.alignmentScore
     ? renderCoverAlignment(docs.cover.current.alignmentScore)
     : '';
-  const resumeFeedback = renderFeedbackBox('resume', docs.resume);
-  const coverFeedback = renderFeedbackBox('cover', docs.cover);
+  // Only render feedback boxes when at least one doc exists. With one
+  // uploaded and one missing, the missing one's empty-state placeholder is
+  // still useful as a prompt to upload the second doc.
+  const resumeFeedback = hasAnyDoc ? renderFeedbackBox('resume', docs.resume) : '';
+  const coverFeedback = hasAnyDoc ? renderFeedbackBox('cover', docs.cover) : '';
+  // The two empty-slot placeholders (.doc-empty) carry the upload affordance
+  // when resume/cover aren't uploaded yet — no separate action-button row.
+  // The "Other" slot is intentionally not surfaced in the UI; we only have
+  // resume + cover concepts going forward. renderOther() + triggerUpload()
+  // still handle any legacy "other" docs in saved data (show + delete).
   const html = `
     <div class="modal-section docs-section">
       <h3>Application materials</h3>
+      ${hasAnyDoc ? '' : '<p class="docs-section-sub">Upload a résumé or cover letter to get started.</p>'}
       <div class="docs-list">
         ${docs.resume ? renderDoc(fingerprint, 'resume', docs.resume.current) : renderDoc(fingerprint, 'resume', null)}
         ${docs.cover ? renderDoc(fingerprint, 'cover', docs.cover.current) : renderDoc(fingerprint, 'cover', null)}
         ${renderOther(fingerprint, docs.other || [])}
       </div>
-      <div class="docs-actions">
-        ${docs.resume?.current ? '' : `<button class="btn doc-upload-btn" data-slot="resume">+ Resume</button>`}
-        ${docs.cover?.current ? '' : `<button class="btn doc-upload-btn" data-slot="cover">+ Cover letter</button>`}
-        <button class="btn doc-upload-btn" data-slot="other">+ Other</button>
+
+      <!-- Inline document preview — opens within the docs section instead of
+           covering the modal with a fullscreen overlay. The viewport scrolls
+           when the scaled iframe exceeds its bounds, so the modal frame stays
+           intact while the PDF is zoomed and panned. -->
+      <div class="doc-preview-inline" id="m-doc-preview" hidden>
+        <div class="doc-preview-head">
+          <div class="doc-preview-title" id="m-doc-preview-title"></div>
+          <div class="doc-preview-tools">
+            <button type="button" class="icon-btn-sm" data-preview-action="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+            <span class="doc-preview-zoom" id="m-doc-preview-zoom">100%</span>
+            <button type="button" class="icon-btn-sm" data-preview-action="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+            <button type="button" class="icon-btn-sm" data-preview-action="reset" title="Reset zoom" aria-label="Reset zoom">↺</button>
+            <button type="button" class="icon-btn-sm" data-preview-action="close" title="Close preview" aria-label="Close preview">×</button>
+          </div>
+        </div>
+        <div class="doc-preview-viewport" id="m-doc-preview-viewport">
+          <div class="doc-preview-scale" id="m-doc-preview-scale">
+            <iframe class="doc-preview-iframe" id="m-doc-preview-iframe" src="about:blank" title="Document preview"></iframe>
+          </div>
+        </div>
       </div>
+
       ${resumeFeedback}
       ${resumeAlignBlock}
       ${coverFeedback}
@@ -304,7 +343,20 @@ export function wireDocumentActions(container, fingerprint, refresh) {
 
   container.querySelectorAll('[data-action="preview"]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      openPreview(fingerprint, btn.dataset.file);
+      openPreview(container, fingerprint, btn.dataset.file);
+    });
+  });
+
+  // Inline preview tools — zoom in / out / reset / close. The viewport
+  // scrolls natively when the scale wrapper exceeds it (when zoomed in),
+  // so panning works via mouse wheel, trackpad, scrollbar drag, or touch.
+  container.querySelectorAll('[data-preview-action]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.previewAction;
+      if (action === 'close') closePreview(container);
+      else if (action === 'zoom-in')  setZoom(container, getZoom(container) + ZOOM_STEP);
+      else if (action === 'zoom-out') setZoom(container, getZoom(container) - ZOOM_STEP);
+      else if (action === 'reset')    setZoom(container, 1);
     });
   });
 
@@ -394,36 +446,124 @@ export function wireDocumentActions(container, fingerprint, refresh) {
   });
 }
 
-// ---------- Preview overlay ----------
+// ---------- Inline document preview ----------
+//
+// The preview lives inside the docs section (a div, not a fullscreen
+// overlay) so it never extends past the modal. Zooming resizes the
+// scale wrapper around the iframe, which makes the browser's native
+// PDF viewer fit-to-width at the larger size. The viewport scrolls
+// when the scaled content exceeds its bounds — that handles panning.
+//
+// The viewport's height is computed from the modal's available space
+// each open + on resize, so the preview never pushes the modal past
+// its max-height (the symptom: modal-level scroll on preview open).
 
-let previewBackdrop = null;
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.25;
+// Track the active preview container so the resize handler knows what
+// to refit. Only one preview is open at a time across the app.
+let activePreviewContainer = null;
 
-function openPreview(fingerprint, filename) {
-  if (!previewBackdrop) {
-    previewBackdrop = document.createElement('div');
-    previewBackdrop.className = 'preview-backdrop';
-    previewBackdrop.innerHTML = `
-      <div class="preview-frame">
-        <div class="preview-head">
-          <div class="preview-title" id="preview-title"></div>
-          <button class="modal-close" id="preview-close">×</button>
-        </div>
-        <iframe class="preview-iframe" id="preview-iframe" src="about:blank"></iframe>
-      </div>
-    `;
-    document.body.appendChild(previewBackdrop);
-    previewBackdrop.addEventListener('click', (e) => {
-      if (e.target === previewBackdrop) closePreview();
-    });
-    previewBackdrop.querySelector('#preview-close').addEventListener('click', closePreview);
-  }
-  $('#preview-title').textContent = filename;
-  $('#preview-iframe').src = `/api/documents/${fingerprint}/file/${filename}?inline=1`;
-  previewBackdrop.classList.add('open');
+function previewEls(container) {
+  return {
+    root:     container.querySelector('#m-doc-preview'),
+    title:    container.querySelector('#m-doc-preview-title'),
+    iframe:   container.querySelector('#m-doc-preview-iframe'),
+    scale:    container.querySelector('#m-doc-preview-scale'),
+    viewport: container.querySelector('#m-doc-preview-viewport'),
+    label:    container.querySelector('#m-doc-preview-zoom'),
+  };
 }
 
-function closePreview() {
-  if (!previewBackdrop) return;
-  previewBackdrop.classList.remove('open');
-  $('#preview-iframe').src = 'about:blank';
+function getZoom(container) {
+  const { scale } = previewEls(container);
+  return parseFloat(scale?.dataset.zoom || '1');
+}
+
+function setZoom(container, z) {
+  const { scale, label, viewport } = previewEls(container);
+  if (!scale) return;
+  const clamped = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+  scale.dataset.zoom = String(clamped);
+  // Size the scale wrapper to (zoom × 100%) wide and (zoom × viewport
+  // height) tall. The iframe inside fills 100%×100%, and the browser's
+  // PDF viewer fit-to-widths the document — so a wider iframe = bigger
+  // rendered PDF. No CSS transform needed; the natural sizing creates
+  // a scrollable region inside .doc-preview-viewport.
+  const viewportH = viewport?.clientHeight || 360;
+  scale.style.width = `${clamped * 100}%`;
+  scale.style.height = `${clamped * viewportH}px`;
+  if (label) label.textContent = `${Math.round(clamped * 100)}%`;
+}
+
+// Size the preview viewport to fit the modal — head + preview-head +
+// some bottom buffer subtracted from modal client height. With the
+// .has-preview-open mode hiding the other modal content, the modal's
+// content area equals (modal-head + docs-section + padding), so this
+// arithmetic lands the viewport flush with the modal's bottom edge.
+function fitPreviewHeight(container) {
+  const { viewport, scale } = previewEls(container);
+  const modal = container.closest('.modal');
+  if (!viewport || !modal) return;
+  const modalHead = modal.querySelector('.modal-head');
+  const previewHead = container.querySelector('.doc-preview-head');
+  const modalH = modal.clientHeight;
+  const headH = modalHead?.offsetHeight || 70;
+  const previewHeadH = previewHead?.offsetHeight || 45;
+  // 52 = modal-body padding (20 top + 32 bottom). 16 = small bottom
+  // breathing space inside the preview card.
+  const target = modalH - headH - previewHeadH - 52 - 16;
+  const clamped = Math.max(240, target);
+  viewport.style.height = `${clamped}px`;
+  // Re-apply zoom so the scale wrapper height tracks the new viewport.
+  if (scale) setZoom(container, getZoom(container));
+}
+
+function openPreview(container, fingerprint, filename) {
+  const { root, title, iframe } = previewEls(container);
+  if (!root) return;
+  title.textContent = filename;
+  iframe.src = `/api/documents/${fingerprint}/file/${filename}?inline=1`;
+  root.hidden = false;
+  setZoom(container, 1);
+
+  // Mark the modal so CSS can hide non-preview content (summary row,
+  // rationale, strengths/concerns column, feedback boxes, footer meta).
+  // Without this, those sections push the modal past 92dvh and the
+  // whole modal scrolls — defeating the inline-preview goal.
+  const modal = container.closest('.modal');
+  modal?.classList.add('has-preview-open');
+  // Reset the modal scroll so the preview lands at the top of the visible
+  // area instead of wherever the user happened to be reading.
+  if (modal) modal.scrollTop = 0;
+
+  // Fit after layout settles — content is hidden, so available height
+  // is now (modal viewport - head - preview-head - buffer).
+  requestAnimationFrame(() => {
+    fitPreviewHeight(container);
+  });
+
+  // While the preview is open, keep the viewport sized to the modal on
+  // window resize / dvh changes (mobile address-bar collapse, etc.).
+  activePreviewContainer = container;
+  window.addEventListener('resize', handlePreviewResize);
+}
+
+function closePreview(container) {
+  const { root, iframe, viewport } = previewEls(container);
+  if (!root) return;
+  root.hidden = true;
+  iframe.src = 'about:blank';
+  // Drop the explicit height so the CSS fallback takes over on next open.
+  if (viewport) viewport.style.height = '';
+  // Restore the full modal view.
+  const modal = container.closest('.modal');
+  modal?.classList.remove('has-preview-open');
+  window.removeEventListener('resize', handlePreviewResize);
+  activePreviewContainer = null;
+}
+
+function handlePreviewResize() {
+  if (activePreviewContainer) fitPreviewHeight(activePreviewContainer);
 }
