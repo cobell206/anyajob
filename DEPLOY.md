@@ -373,13 +373,14 @@ All output passes through `src/redact.js` server-side. API keys, AWS keys, GitHu
    - Zero Trust → Access → Service Auth → Create token
    - Save the Client ID and Client Secret
 2. Edit your Access policy for `jobs.anyalawgirly.com` to include the service token (Include rule → Service Auth → your token)
-3. Copy `bin/anyajob-logs` to `/usr/local/bin/` (or anywhere on your PATH)
-4. Set environment variables in `~/.zshrc` or `~/.bashrc`:
-   ```bash
-   export ANYAJOB_HOST=https://jobs.anyalawgirly.com
-   export ANYAJOB_CF_CLIENT_ID=<service-token-id>
-   export ANYAJOB_CF_CLIENT_SECRET=<service-token-secret>
+3. Optionally copy `bin/anyajob-logs` to `/usr/local/bin/` (or anywhere on your PATH) — running it from the repo also works.
+4. Put the credentials in `.env.local` at the repo root (gitignored — never commit):
    ```
+   ANYAJOB_URL=https://jobs.anyalawgirly.com
+   CF_CLIENT_ID=<service-token-id>
+   CF_CLIENT_SECRET=<service-token-secret>
+   ```
+   The script auto-loads `.env.local` from the cwd or the repo root, so an AI agent invoking it from a Claude Code session picks up the same credentials without needing them in shell-rc. If you prefer shell-rc, exporting the same three names from `~/.zshrc` or `~/.bashrc` also works.
 
 **Usage:**
 

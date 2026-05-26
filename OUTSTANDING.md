@@ -131,32 +131,9 @@ the slowest path; serializing adds ~30s to a daily run, well within budget.
 
 ---
 
-### 6. CLI env var prefix is stale (`LAWBOUND_*`)
-
-**Symptom:** `bin/lawbound-logs` reads `LAWBOUND_HOST`,
-`LAWBOUND_CF_CLIENT_ID`, `LAWBOUND_CF_CLIENT_SECRET`. Local `.env.local` uses
-`ANYAJOB_URL`, `CF_CLIENT_ID`, `CF_CLIENT_SECRET`. Mismatch means the CLI
-won't find the creds without manual env-var renaming.
-
-**Where it surfaced:** Trying to use the CLI to fetch logs.
-
-**Root cause:** The lawbound→anyajob rename touched deploy paths but skipped
-the laptop-side CLI script.
-
-**Fix:**
-- Rename `bin/lawbound-logs` → `bin/anyajob-logs`.
-- Replace `LAWBOUND_HOST` → `ANYAJOB_URL` (or `ANYAJOB_HOST` for consistency
-  with cobell's `.env.local` choice).
-- Replace `LAWBOUND_CF_CLIENT_ID` / `_SECRET` → `CF_CLIENT_ID` / `CF_CLIENT_SECRET`.
-- Update DEPLOY.md references (Part 12-ish, near the end).
-
-**Effort:** ~10 min.
-
----
-
 ## P2 — known fragile spots, no immediate user impact
 
-### 7. Spend cap consumes seen.json without scoring
+### 6. Spend cap consumes seen.json without scoring
 
 **Symptom:** When `MAX_DAILY_SPEND` is reached mid-loop in `src/daily.js`, the
 listings that were dedupKey-added to `seen` but not yet scored stay in
@@ -183,7 +160,7 @@ listings still get marked seen (we don't want to re-fetch known noise).
 
 ---
 
-### 8. SSH security group is open to the world
+### 7. SSH security group is open to the world
 
 **Symptom:** Port 22 inbound is `0.0.0.0/0`. We did this so GitHub Actions
 could deploy. Brute-force attempts will hit the EC2's SSH; key-only auth
@@ -208,7 +185,7 @@ cleanest fit.
 
 ---
 
-### 9. Discovery cron may need rate-limit protection too
+### 8. Discovery cron may need rate-limit protection too
 
 **Symptom:** Not yet observed. But discovery uses `web_search_20250305` with
 `max_uses: 15`, and each search round can ship significant input tokens.
@@ -226,7 +203,7 @@ errors with 429 or truncation, add backoff retry to `src/discover.js`.
 
 ## P3 — feature debt, not bugs
 
-### 10. Cover letter drafter
+### 9. Cover letter drafter
 
 Modal button using stored resume + JD + notes to draft a cover letter via
 Claude. Infrastructure mostly exists (resume in profile, JD in listing,
@@ -234,7 +211,7 @@ notes in feedback). Just needs a route + UI button + prompt.
 
 **Effort:** ~90 min. High user value.
 
-### 11. Snooze button for closing-soon alerts
+### 10. Snooze button for closing-soon alerts
 
 Currently the morning email re-surfaces the same closing listings every day
 until they actually close. Add a "Snooze for 3 days" / "Hide from email"
@@ -243,7 +220,7 @@ action on the closing-soon row. Stored in `feedback.json` as
 
 **Effort:** ~30 min.
 
-### 12. SES sandbox approval
+### 11. SES sandbox approval
 
 Pending AWS request? Without production access, SES silently fails to send
 to non-verified addresses. Even after #1 above is fixed, emails to Anya
@@ -255,7 +232,7 @@ day (DEPLOY.md Part 10 Stage 2). If not, submit now — 24-48h wait.
 
 **Effort:** ~10 min to submit, then wait.
 
-### 13. Feedback loop (richer than 👍/👎)
+### 12. Feedback loop (richer than 👍/👎)
 
 See [PLAN-FEEDBACK-LOOP.md](PLAN-FEEDBACK-LOOP.md). 3 phases, ~2 hours total.
 

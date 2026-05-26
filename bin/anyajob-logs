@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# bin/lawbound-logs
-# Fetch redacted logs and diagnostic bundles from a deployed Lawbound
+# bin/anyajob-logs
+# Fetch redacted logs and diagnostic bundles from a deployed AnyaJob
 # instance, for debugging and pasting into chats.
 #
 # Setup (one-time, on your laptop):
@@ -9,31 +9,48 @@
 #      Save the Client ID and Client Secret.
 #   2. Add the service token to the Cloudflare Access policy that protects
 #      jobs.yourdomain.com (Include rule → Service Auth → your token).
-#   3. Set these env vars (e.g., in ~/.zshrc or ~/.bashrc):
-#        export LAWBOUND_HOST=https://jobs.yourdomain.com
-#        export LAWBOUND_CF_CLIENT_ID=<your-client-id>
-#        export LAWBOUND_CF_CLIENT_SECRET=<your-client-secret>
+#   3. Put these in .env.local at the repo root (gitignored, never commit):
+#        ANYAJOB_URL=https://jobs.yourdomain.com
+#        CF_CLIENT_ID=<your-client-id>
+#        CF_CLIENT_SECRET=<your-client-secret>
+#      OR export them from ~/.zshrc / ~/.bashrc with the same names. The
+#      script auto-loads .env.local if it exists in the cwd or repo root.
 #
 # Usage:
-#   lawbound-logs                          # diagnostic bundle (text)
-#   lawbound-logs --json                   # diagnostic bundle (json)
-#   lawbound-logs daily                    # last 500 lines of daily.log
-#   lawbound-logs daily 1h                 # last hour of daily.log
-#   lawbound-logs discover --error         # only errors from discover.log
-#   lawbound-logs sources                  # what log files exist
-#   lawbound-logs --copy daily 1h          # fetch + pipe to clipboard
+#   anyajob-logs                          # diagnostic bundle (text)
+#   anyajob-logs --json                   # diagnostic bundle (json)
+#   anyajob-logs daily                    # last 500 lines of daily.log
+#   anyajob-logs daily 1h                 # last hour of daily.log
+#   anyajob-logs discover --error         # only errors from discover.log
+#   anyajob-logs sources                  # what log files exist
+#   anyajob-logs --copy daily 1h          # fetch + pipe to clipboard
 #
 # Tip: pipe the output through `jq` for richer filtering:
-#   lawbound-logs daily --json | jq 'select(.level >= 40)'
+#   anyajob-logs daily --json | jq 'select(.level >= 40)'
 
 set -euo pipefail
 
-HOST="${LAWBOUND_HOST:-}"
-CF_ID="${LAWBOUND_CF_CLIENT_ID:-}"
-CF_SECRET="${LAWBOUND_CF_CLIENT_SECRET:-}"
+# Auto-source .env.local if it exists. Try the cwd first, then the repo
+# root relative to this script. Lets `anyajob-logs` "just work" from
+# either inside the repo or after copying to /usr/local/bin.
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd 2>/dev/null || echo "")"
+for envfile in ".env.local" "$repo_root/.env.local"; do
+  if [[ -f "$envfile" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$envfile"
+    set +a
+    break
+  fi
+done
+
+HOST="${ANYAJOB_URL:-}"
+CF_ID="${CF_CLIENT_ID:-}"
+CF_SECRET="${CF_CLIENT_SECRET:-}"
 
 if [[ -z "$HOST" ]]; then
-  echo "Error: LAWBOUND_HOST not set. See setup notes at the top of this script." >&2
+  echo "Error: ANYAJOB_URL not set. See setup notes at the top of this script." >&2
   exit 2
 fi
 
@@ -108,7 +125,7 @@ case "${positional[0]:-}" in
     ;;
   *)
     echo "Unknown command: ${positional[0]}" >&2
-    echo "Try: lawbound-logs --help" >&2
+    echo "Try: anyajob-logs --help" >&2
     exit 2
     ;;
 esac

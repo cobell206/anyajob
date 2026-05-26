@@ -37,7 +37,7 @@ To hit these from a laptop or from a Claude Code session, you need a **Cloudflar
         "$ANYAJOB_URL/api/logs/server?since=2h&level=warn"
    ```
 
-> **Heads up:** the shell CLI in `bin/lawbound-logs` wraps the same auth but reads from differently-named env vars (`LAWBOUND_HOST` / `LAWBOUND_CF_CLIENT_ID` / `LAWBOUND_CF_CLIENT_SECRET`). The mismatch with `.env.local`'s `ANYAJOB_*` / `CF_*` names is a known wart — tracked in `OUTSTANDING.md` along with a planned rename to `bin/anyajob-logs`.
+The shell CLI `bin/anyajob-logs` wraps the same auth and reads the same three vars from `.env.local` (auto-sourced from the cwd or repo root). So `./bin/anyajob-logs daily 1h` or `./bin/anyajob-logs --copy diag` works without any further setup once `.env.local` is in place. Run `./bin/anyajob-logs --help` for the full flag list.
 
 ### Deploy quirks worth knowing
 
