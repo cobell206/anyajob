@@ -18,18 +18,19 @@
 
   <main>
     <div class="page-head">
-      <div>
+      <div class="page-head-title">
         <h1 class="page-title">Roles</h1>
-        <div class="page-sub" id="sub">Loading…</div>
+        <button type="button" class="pending-review-pill" id="pending-review-pill" hidden aria-label="Review pending source candidates">
+          <span class="pending-review-count" id="pending-review-count">0</span> to review
+        </button>
       </div>
       <div class="page-head-actions">
-        <button type="button" class="pending-review-pill" id="pending-review-pill" hidden aria-label="Review pending source candidates">
-          Review <span class="pending-review-count" id="pending-review-count">0</span>
-        </button>
         <a href="/ignored.html" class="ignored-link" id="ignored-link" hidden>
-          Ignored <span class="ignored-link-count" id="ignored-link-count"></span> →
+          <span class="ignored-link-count" id="ignored-link-count"></span> Ignored →
         </a>
-        <button type="button" class="btn primary" id="add-role-btn">+ Add role</button>
+        <div class="page-head-primary">
+          <button type="button" class="btn primary" id="add-role-btn">+ Add role</button>
+        </div>
       </div>
     </div>
 

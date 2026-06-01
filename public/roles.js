@@ -354,8 +354,6 @@ function render() {
     empty.style.display = 'none';
     kanban.hidden = false;
     renderKanban();
-    const visible = allListings.filter((l) => (l.status || 'new') !== 'rejected').length;
-    $('#sub').textContent = `${visible} of ${allListings.length} listings`;
     return;
   }
 
@@ -371,7 +369,6 @@ function render() {
     renderTable(filtered);
     renderCards(filtered);
   }
-  $('#sub').textContent = `${filtered.length} of ${allListings.length} listings`;
 }
 
 function kanbanColumns() {
@@ -759,7 +756,7 @@ function renderStats(stats) {
   if (link && count) {
     if (ignored > 0) {
       link.hidden = false;
-      count.textContent = `(${ignored})`;
+      count.textContent = String(ignored);
     } else {
       link.hidden = true;
     }
@@ -783,6 +780,7 @@ function renderStats(stats) {
       <div class="stat-value">${stats.appliedThisWeek}</div>
     </div>
   `;
+
 }
 
 function fmtBriefDate(iso) {

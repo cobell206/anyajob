@@ -523,7 +523,7 @@ main.narrow { max-width: var(--page-narrow); }
   margin-bottom: 24px;
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
@@ -551,32 +551,62 @@ main.narrow { max-width: var(--page-narrow); }
   margin-bottom: 24px;
 }
 
+/* Stat tile — chrome-light dashboard tile with confident numerals.
+   Border dropped in favor of a soft warm-tinted shadow so the tile
+   reads as a floating card on the cream bg without the generic
+   "outlined card" look. The two semantic tiles (Saved / Applied) get
+   a left accent stripe in their status color so the row reads as
+   "two status + two summary" tiles at a glance — visual hierarchy
+   without changing the data layout. */
 .stat {
+  position: relative;
   background: var(--surface);
-  border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px 16px;
-  box-shadow: var(--shadow-xs);
+  padding: 18px 22px;
+  box-shadow: var(--shadow-sm);
 }
 
 .stat-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--muted);
-  font-weight: 600;
+  margin-bottom: 6px;
 }
 
 .stat-value {
-  font-size: 28px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  margin-top: 4px;
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
   color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-value.accent { color: var(--blue-ink); }
 .stat-value.good { color: var(--green-ink); }
+
+/* Left accent stripe — keyed off the .stat-value variant so we don't
+   need a second class on the tile itself. Inset from the tile's left
+   edge with rounded ends so it reads as a "tab" not a "border." */
+.stat:has(.stat-value.accent),
+.stat:has(.stat-value.good) {
+  padding-left: 26px;
+}
+.stat:has(.stat-value.accent)::before,
+.stat:has(.stat-value.good)::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 18px;
+  bottom: 18px;
+  width: 3px;
+  border-radius: 999px;
+}
+.stat:has(.stat-value.accent)::before { background: var(--blue); }
+.stat:has(.stat-value.good)::before { background: var(--green); }
+
 
 /* Stat tile entrance — quick 25ms cascade across the tiles at the top
    of the Roles page so the dashboard "composes" itself. Caps at 6
@@ -2175,74 +2205,93 @@ select {
    Ignored link next to the primary "+ Add role" CTA. .page-head itself is
    justify-content: space-between, so a single child hugs right; wrap two
    children in this container to keep them grouped. */
-.page-head-actions {
+/* Title cluster — h1 + pending-review badge sit on one line,
+   vertically centered against the title's text. */
+.page-head-title {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
+.page-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Primary action container — holds the "+ Add role" CTA. The gap on
+   .page-head-actions handles spacing from the Ignored link, so no
+   divider or extra padding is needed here. */
+.page-head-primary {
+  display: flex;
+  align-items: center;
+}
+
+/* Ignored link — quiet text-only nav hint. No chip chrome at rest;
+   hover surfaces an underline. Reads as a quiet metadata link, not as
+   a button competing with + Add role. */
 .ignored-link {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font-size: 13px;
+  font-weight: 500;
   color: var(--muted);
   text-decoration: none;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  padding: 6px 0;
+  background: transparent;
+  border: 0;
+  transition: color 0.12s;
 }
 .ignored-link[hidden] { display: none; }
 .ignored-link:hover {
   color: var(--ink-2);
-  background: var(--surface-2);
-  border-color: var(--border);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--border-strong);
 }
 .ignored-link-count {
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
-  color: var(--muted);
+  font-weight: 600;
+  color: var(--ink-2);
 }
 
-/* Pending-review pill — sits in .page-head-actions on the roles page when
-   the cron Discovery run has surfaced source candidates awaiting approval.
-   Shape mirrors .ignored-link (chip with rounded ends) but the color is the
-   pending-pink accent already in use on the settings section dot, so the
-   visual identity is consistent across surfaces. A leading dot pulses to
-   draw the eye; the count rides on the right in tabular-nums so the chip
-   doesn't reflow as cards are approved/dismissed. Hidden via [hidden]
-   when count is zero so it never sits empty. */
+/* Pending-review badge — small inline amber chip beside the title.
+   Lives in .page-head-title (not .page-head-actions) so the status
+   indicator sits where attention naturally lands first. Amber is the
+   --warn semantic token — replaces the prior one-off pink which was
+   out of palette. A pulsing dot draws the eye when present; hidden
+   via [hidden] when no candidates are pending. */
 .pending-review-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: 7px;
+  font-size: 12px;
   font-weight: 500;
-  color: #be185d;
-  background: rgba(236, 72, 153, 0.08);
-  border: 1px solid rgba(236, 72, 153, 0.28);
+  color: var(--warn-ink);
+  background: var(--warn-soft);
+  border: 1px solid rgba(217, 119, 6, 0.28);
   border-radius: 999px;
-  padding: 6px 12px;
+  padding: 3px 10px 3px 9px;
   cursor: pointer;
   font-family: var(--font-ui);
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background 0.12s, border-color 0.12s;
 }
 .pending-review-pill[hidden] { display: none; }
 .pending-review-pill:hover {
-  background: rgba(236, 72, 153, 0.14);
-  border-color: rgba(236, 72, 153, 0.45);
-  color: #9d174d;
+  background: rgba(217, 119, 6, 0.14);
+  border-color: rgba(217, 119, 6, 0.45);
 }
 .pending-review-pill::before {
   content: '';
   display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: #ec4899;
-  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.18);
+  background: var(--warn);
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.18);
   animation: pending-pulse 1.6s ease-in-out infinite;
 }
 .pending-review-count {
@@ -2255,16 +2304,6 @@ select {
 }
 @media (prefers-reduced-motion: reduce) {
   .pending-review-pill::before { animation: none; }
-}
-[data-theme="dark"] .pending-review-pill {
-  color: #f9a8d4;
-  background: rgba(236, 72, 153, 0.10);
-  border-color: rgba(236, 72, 153, 0.32);
-}
-[data-theme="dark"] .pending-review-pill:hover {
-  background: rgba(236, 72, 153, 0.18);
-  border-color: rgba(236, 72, 153, 0.52);
-  color: #fbcfe8;
 }
 
 /* Review-candidates modal body — scopes the loading/empty placeholders and
