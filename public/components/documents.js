@@ -4,6 +4,7 @@ import {
   $, escapeHtml, api,
   SVG_FILE_TEXT, SVG_FILE, SVG_EYE, SVG_DOWNLOAD,
 } from '../app.js';
+import { openFeedbackModal } from './feedback-modal.js';
 
 const ALLOWED = '.pdf,.docx,.doc,.txt';
 
@@ -203,6 +204,7 @@ function renderAlignment(a) {
       <div class="align-head">
         <div class="align-label">Resume vs JD</div>
         <div class="align-score align-${a.alignmentScore >= 7 ? 'high' : a.alignmentScore >= 5 ? 'mid' : 'low'}">${a.alignmentScore}/10</div>
+        <button type="button" class="btn-link align-view-btn" data-action="view-feedback" data-slot="resume">View detailed →</button>
       </div>
       <div class="align-summary">${escapeHtml(a.summary || '')}</div>
       ${a.topStrengths?.length ? `
@@ -238,6 +240,7 @@ function renderCoverAlignment(a) {
       <div class="align-head">
         <div class="align-label">Cover letter vs JD</div>
         <div class="align-score align-${cls}">${overall}/10</div>
+        <button type="button" class="btn-link align-view-btn" data-action="view-feedback" data-slot="cover">View detailed →</button>
       </div>
       ${(typeof a.relevanceScore === 'number' || typeof a.toneScore === 'number') ? `
         <div class="align-summary">
@@ -347,6 +350,29 @@ export function wireDocumentActions(container, fingerprint, refresh) {
     });
   });
 
+  // "View detailed" — opens the shared feedback modal (same one the
+  // profile page uses) with this listing's résumé + the current
+  // alignment results mapped to the modal's section format. Refetches
+  // the latest docs at click time so it picks up any score that just
+  // finished generating.
+  container.querySelectorAll('[data-action="view-feedback"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const slot = btn.dataset.slot;
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner sm"></span>';
+      try {
+        const docs = await api(`/api/documents/${fingerprint}`);
+        const entry = slot === 'resume' ? docs.resume?.current : docs.cover?.current;
+        if (!entry?.alignmentScore) return;
+        openListingFeedback(fingerprint, slot, entry);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
+    });
+  });
+
   // Inline preview tools — zoom in / out / reset / close. The viewport
   // scrolls natively when the scale wrapper exceeds it (when zoomed in),
   // so panning works via mouse wheel, trackpad, scrollbar drag, or touch.
@@ -443,6 +469,59 @@ export function wireDocumentActions(container, fingerprint, refresh) {
         btn.innerHTML = orig;
       }
     });
+  });
+}
+
+// Maps a per-listing alignment payload to the shared feedback-modal
+// sections shape and opens the modal. The listing's alignment data is
+// flat (topStrengths / areasToStrengthen / suggestedBullets) and has no
+// PDF text anchors — so findings render as comment-only blocks without
+// PDF highlights. (Adding text anchors is the Phase B follow-up.)
+function openListingFeedback(fingerprint, slot, entry) {
+  const a = entry.alignmentScore;
+  const sections = [];
+  if (slot === 'resume') {
+    if (a.topStrengths?.length) {
+      sections.push({ name: "What's working", strengths: a.topStrengths });
+    }
+    if (a.areasToStrengthen?.length) {
+      sections.push({
+        name: 'Worth highlighting more',
+        findings: a.areasToStrengthen.map((c) => ({ comment: c, severity: 'minor' })),
+      });
+    }
+    if (a.suggestedBullets?.length) {
+      sections.push({
+        name: 'Suggested bullets',
+        findings: a.suggestedBullets.map((c) => ({ comment: c, severity: 'minor' })),
+      });
+    }
+  } else {
+    // Cover letter alignment has a different shape — strengths +
+    // suggestions, plus optional relevance/tone sub-scores.
+    if (a.strengths?.length) {
+      sections.push({ name: "What's working", strengths: a.strengths });
+    }
+    if (a.suggestions?.length) {
+      sections.push({
+        name: 'Suggestions',
+        findings: a.suggestions.map((c) => ({ comment: c, severity: 'minor' })),
+      });
+    }
+  }
+  const score = slot === 'resume' ? a.alignmentScore : a.overallScore;
+  const scoreOnHundred = typeof score === 'number' ? Math.round(score * 10) : 0;
+  const title = slot === 'resume' ? 'Résumé alignment' : 'Cover letter alignment';
+  openFeedbackModal({
+    title,
+    resumeUrl: `/api/documents/${fingerprint}/file/${entry.file}`,
+    resumeFile: entry.file,
+    initial: {
+      state: 'loaded',
+      overall: { score: scoreOnHundred, text: a.summary || '' },
+      sections,
+      generatedAt: a.generatedAt,
+    },
   });
 }
 

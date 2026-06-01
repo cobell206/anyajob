@@ -361,6 +361,11 @@ nav {
   display: flex;
   gap: 4px;
   align-items: center;
+  /* Push nav (and the .header-actions after it) flush right against
+     the brand. Without this, .header-inner's space-between spreads the
+     three children — brand, nav, actions — apart and the nav looks
+     unintentionally centered. */
+  margin-left: auto;
 }
 
 nav a {
@@ -384,6 +389,123 @@ nav a.active {
   color: var(--blue-ink);
   background: var(--blue-soft);
 }
+
+/* ----- Theme toggle (header chrome) ----- */
+/* Sits in the right cluster alongside the nav links. Logic in
+   /theme-toggle.js. The Settings page used to host an Appearance
+   section for this — that's been removed in favor of the always-
+   visible header affordance.
+
+   The vertical hairline (::before) separates "navigation" from
+   "preferences" so the cluster reads as two groups rather than one
+   long row. The toggle itself is borderless at rest — same visual
+   weight as the nav links — and gets a surface-2 background on hover
+   so it doesn't compete with the nav. */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding-left: 12px;
+  position: relative;
+}
+.header-actions::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+}
+
+.theme-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.theme-toggle:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.theme-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+}
+.theme-toggle[aria-expanded="true"] {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.theme-toggle svg { width: 18px; height: 18px; }
+
+.theme-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  min-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: var(--shadow-popover);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.theme-popover[hidden] { display: none; }
+
+.theme-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.1s, color 0.1s;
+}
+.theme-option:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.theme-option:focus-visible {
+  outline: none;
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.theme-option.is-active {
+  background: var(--blue-soft);
+  color: var(--blue-ink);
+}
+.theme-option-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.theme-option.is-active .theme-option-icon { color: var(--blue-ink); }
+.theme-option svg { width: 14px; height: 14px; }
 
 /* ============ LAYOUT ============ */
 
@@ -914,8 +1036,12 @@ main.narrow { max-width: var(--page-narrow); }
   display: flex;
   gap: 12px;
   align-items: center;
-  justify-content: space-between;
+  /* Search + filters pack tightly on the left as one group; .view-toggle
+     gets pushed to the right via margin-left: auto below. Was
+     `justify-content: space-between`, which with three children floated
+     the middle `.filters` block in the gap between search and view-toggle. */
 }
+.table-toolbar > .view-toggle { margin-left: auto; }
 
 /* In kanban view the table is hidden, so the toolbar would otherwise show
    square bottom corners with no bottom border. Make it a self-contained pill. */
@@ -3769,5 +3895,609 @@ button[disabled] {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* =========================================================================
+   FEEDBACK MODAL (shared)
+   --------------------------------------------------------------------------
+   The résumé-feedback modal experience — PDF viewer + findings panel + zoom
+   toolbar + cross-pane sync. Lifted from profile.css when the modal moved to
+   /components/feedback-modal.js so the roles page (which doesn't load
+   profile.css) can use it too. Profile.css keeps only the summary card.
+   ========================================================================= */
+
+/* ---------- Résumé feedback ---------- */
+/* Two-column layout: rendered résumé on the left, findings panel on
+   the right. Collapses to a stacked layout on narrow widths. */
+.feedback-empty {
+  display: flex; flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 4px 4px;
+}
+.feedback-empty-pitch {
+  font-size: 13px; line-height: 1.55; color: var(--ink-2);
+  max-width: 60ch;
+}
+.feedback-empty-meta {
+  font-size: 12px; color: var(--muted);
+}
+.feedback-empty-meta strong { color: var(--ink-2); font-weight: 600; }
+
+/* Toolbar: lens pills on the left, refresh + last-generated on the right. */
+.feedback-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.feedback-lens-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.feedback-toolbar-right {
+  display: flex; align-items: center; gap: 12px;
+}
+.feedback-stamp {
+  font-size: 11.5px; color: var(--muted);
+}
+
+/* Overall header — score chip + 2-3 sentence read. */
+.feedback-overall {
+  display: flex; align-items: flex-start; gap: 14px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+.feedback-overall-score {
+  font-weight: 600; font-size: 28px; line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  min-width: 48px;
+}
+.feedback-overall-text {
+  flex: 1;
+  font-size: 14px; line-height: 1.55; color: var(--ink-2);
+}
+.feedback-overall-score.score-low { color: var(--bad-ink); }
+.feedback-overall-score.score-mid { color: var(--ink); }
+.feedback-overall-score.score-high { color: var(--green-ink); }
+
+/* Two-column grid. Sticky right panel so she can scroll the résumé
+   and the findings list stays in view. */
+.feedback-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 18px;
+  /* Default align-items: stretch — both columns size to the taller column,
+     so the PDF viewer and findings card share a visual bottom edge even
+     when one has less content. Each scrolls internally if needed. */
+}
+@media (max-width: 800px) {
+  .feedback-grid { grid-template-columns: 1fr; }
+  .feedback-findings { position: static; max-height: none; }
+}
+
+/* Rendered résumé text — semantic sections with detected headings. */
+.resume-render {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 26px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink);
+  max-height: 70vh;
+  overflow: auto;
+}
+.resume-render-section + .resume-render-section { margin-top: 16px; }
+.resume-render h3 {
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.resume-render p {
+  white-space: pre-wrap;
+  margin-bottom: 6px;
+}
+.resume-render mark.finding {
+  background: var(--warn-soft);
+  border-bottom: 1px solid var(--warn);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+.resume-render mark.finding[data-severity="major"] {
+  background: var(--bad-soft);
+  border-bottom-color: var(--bad);
+}
+.resume-render mark.finding.is-active,
+.resume-render mark.finding:hover {
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.25);
+}
+.resume-render mark.finding[data-severity="major"].is-active,
+.resume-render mark.finding[data-severity="major"]:hover {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.25);
+}
+
+/* Findings side panel. */
+/* The findings column is a contained rounded card. overflow: auto on the
+   card itself does the clipping AND the scrolling — children (including
+   the sticky section header) get clipped to the rounded corners by the
+   container, so nothing pokes past the rounded shape. Scrollbar is
+   hidden visually so the sticky header band fills the full card width
+   with no gutter peek-through on the right; scrolling still works via
+   wheel/touchpad/keys. */
+.feedback-findings {
+  position: sticky; top: 80px;
+  max-height: 70vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  scrollbar-width: none; /* Firefox */
+  /* No gap: section spacing is controlled by `.feedback-section + .feedback-section`
+     margin-top so it doesn't double up with the gap. */
+}
+.feedback-findings::-webkit-scrollbar { display: none; }
+/* Section is a transparent wrapper — its children handle their own
+   horizontal padding. The header fills the section width naturally; the
+   strengths, the "Findings" label, and the findings list all get a 16px
+   indent so they sit inside the visual band the header defines, without
+   touching the .feedback-findings card edges. */
+.feedback-section { padding: 0; }
+.feedback-section > *:not(.feedback-section-head) {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+/* Sections lose their card chrome — the sticky header is the new grouping
+   signal. Cleaner editorial-list feel, and sticky headers can't work
+   reliably inside an individually-padded card without weird stacking. */
+.feedback-section {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.feedback-section + .feedback-section { margin-top: 22px; }
+
+/* Sticky group header — pins to the top of the .feedback-findings scroll
+   container while its section's content is in view, then gets pushed out
+   when the next section's header takes over (iOS-style). Tinted bg +
+   border so the grouping signal reads from across the panel; previously
+   a thin underline alone was too subtle. */
+.feedback-section-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-2);
+  padding: 10px 16px;
+  /* No negative margin — header naturally fills 100% of the section,
+     which fills the .feedback-findings card. With a scrollbar present,
+     negative margins extended past the visible content area and the
+     scrollbar gutter peeked through on the right as a white strip. */
+  margin: 0 0 12px;
+  /* Fully square — both top AND bottom corners. Rounded corners on a
+     sticky header create transparent corner triangles where scrolling
+     content (notably the red/orange finding borders) peeks through. */
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 8px;
+}
+.feedback-section-name {
+  font-weight: 700; font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+.feedback-section-count {
+  font-weight: 500;
+  color: var(--muted);
+  margin-left: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.feedback-section-score {
+  font-weight: 600; font-size: 13px;
+  letter-spacing: -0.01em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.feedback-strengths {
+  font-size: 12.5px; color: var(--ink-2);
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--border);
+}
+.feedback-strengths-label,
+.feedback-findings-label {
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.feedback-strengths ul,
+.feedback-finding-list { margin: 0; padding: 0; list-style: none; }
+.feedback-strengths li {
+  padding: 2px 0; line-height: 1.5;
+}
+/* Findings carry their severity in a 3px left border (primary signal,
+   visible from across the panel) + a soft 1px tinted border on the other
+   three sides so the whole row reads as a contained, severity-colored
+   card without screaming. Two channels (color + position) at two
+   intensities (strong left + soft frame). */
+.feedback-finding {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  /* color-mix keeps the soft frame in sync with whichever --warn/--bad
+     the theme is using (light + dark have different shades). */
+  border: 1px solid color-mix(in srgb, var(--warn) 22%, transparent);
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.feedback-finding:last-child { margin-bottom: 0; }
+.feedback-finding[data-severity="major"] {
+  border-color: color-mix(in srgb, var(--bad) 22%, transparent);
+  border-left-color: var(--bad);
+}
+.feedback-finding:hover { background: var(--surface-2); }
+.feedback-finding.is-active { background: var(--surface-2); }
+
+/* Head: just the verbatim quote, multi-line wrap. The severity dot is
+   gone — the left border carries that signal now. */
+.feedback-finding-head { margin-bottom: 6px; }
+.feedback-finding-severity { display: none; }
+.feedback-finding-quote {
+  font-size: 12.5px; color: var(--muted);
+  font-style: italic;
+  line-height: 1.5;
+}
+.feedback-finding-comment {
+  font-size: 13px; color: var(--ink-2);
+  line-height: 1.55;
+}
+.feedback-finding-rewrite {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--ink);
+  line-height: 1.5;
+}
+.feedback-finding-rewrite-label {
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+.feedback-error {
+  padding: 14px 16px;
+  background: var(--bad-soft);
+  border: 1px solid var(--bad);
+  border-radius: var(--radius);
+  color: var(--bad-ink);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.feedback-loading {
+  padding: 24px 4px;
+  font-size: 13px; color: var(--muted);
+  display: flex; align-items: center; gap: 10px;
+}
+
+/* ---------- PDF viewer (Phase B) ----------
+   Renders her actual résumé PDF inline via pdfjs-dist. Each .pdf-page is a
+   stacked canvas (the visual) + .textLayer (pdfjs's selectable invisible
+   text layer, required for highlight rect computation) + .pdf-highlight-
+   layer (our overlay div, positioned over both). */
+.pdf-loading {
+  padding: 28px 4px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--muted);
+}
+.pdf-page {
+  position: relative;
+  margin: 0 auto 14px;
+  background: white;
+  box-shadow: var(--shadow-sm);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.pdf-page canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* pdfjs's TextLayer requires this exact class + these custom properties.
+   It positions transparent absolutely-positioned spans over the canvas
+   so we can compute bounding rects for our highlight overlays. The opacity
+   stays at 0 — invisible to the user, selectable for ctrl-F. */
+.textLayer {
+  position: absolute;
+  text-align: initial;
+  inset: 0;
+  overflow: clip;
+  opacity: 0;
+  line-height: 1;
+  -webkit-text-size-adjust: none;
+  -moz-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  --total-scale-factor: 1;
+  --scale-factor: 1;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+.textLayer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+.textLayer .markedContent { display: contents; }
+.textLayer ::selection { background: rgba(0, 0, 255, 0.25); }
+
+/* Highlight overlay layer — sits above the canvas + text layer. The
+   layer itself is pointer-transparent so text selection still works on
+   the page; only the individual .pdf-highlight rects accept hover/click. */
+.pdf-highlight-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.pdf-highlight {
+  position: absolute;
+  background: rgba(245, 158, 11, 0.22);
+  border-bottom: 2px solid var(--warn);
+  border-radius: 2px;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.pdf-highlight[data-severity="major"] {
+  background: rgba(220, 38, 38, 0.22);
+  border-bottom-color: var(--bad);
+}
+.pdf-highlight:hover,
+.pdf-highlight.is-active {
+  background: rgba(245, 158, 11, 0.42);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.45);
+}
+.pdf-highlight[data-severity="major"]:hover,
+.pdf-highlight[data-severity="major"].is-active {
+  background: rgba(220, 38, 38, 0.40);
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.45);
+}
+
+/* The PDF viewer wrapper inside the feedback grid — scrollable column.
+   Cursor signals draggability: `grab` at rest, `grabbing` while panning
+   (mouse drag past a 5px movement threshold — see wireDragPan in
+   pdf-viewer.js). Touch devices skip drag-pan and use native scroll.
+   overscroll-behavior: contain stops wheel scrolling from chaining into
+   the parent modal when the user reaches the top/bottom of the PDF —
+   scroll stays where the cursor is. */
+.resume-render.is-pdf {
+  background: var(--surface-2);
+  padding: 14px;
+  max-height: 75vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  cursor: grab;
+}
+.resume-render.is-pdf.is-panning {
+  cursor: grabbing;
+  /* Suppress text selection while panning so the cursor stays clean and
+     accidental selections don't appear when the user releases. */
+  user-select: none;
+}
+
+/* Positioning pane that wraps .resume-render. Lives as a grid child of
+   .feedback-grid so it owns the column's height, and provides a stable
+   positioning context for .pdf-zoom-bar — which sits as a sibling of
+   the scrollable .resume-render rather than inside it. Without this
+   wrapper, the zoom bar would be wiped every time pdf-viewer's paint()
+   clears the container on a zoom action. */
+.resume-pane {
+  position: relative;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.resume-pane .resume-render {
+  height: 100%;
+}
+
+/* Floating zoom toolbar pinned at the bottom-center of the PDF column.
+   Absolute-positioned inside .resume-pane so it stays put regardless of
+   PDF scroll, and survives pdf-viewer re-renders (which wipe only the
+   inner .resume-render contents, not the pane). Charcoal pill with
+   translucent bg + backdrop blur so the PDF content reads through. */
+.pdf-zoom-bar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: rgba(34, 34, 34, 0.88);
+  color: #fff;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(28, 22, 18, 0.22);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  user-select: none;
+}
+.pdf-zoom-btn {
+  width: 26px; height: 26px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, opacity 0.12s;
+  font-family: inherit;
+}
+.pdf-zoom-btn:hover { background: rgba(255, 255, 255, 0.14); }
+.pdf-zoom-btn:active { background: rgba(255, 255, 255, 0.22); }
+.pdf-zoom-btn:disabled { opacity: 0.5; cursor: wait; }
+.pdf-zoom-level {
+  font-size: 12px;
+  min-width: 42px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+}
+
+/* ---------- Feedback modal (the actual experience) ----------
+   Wide modal (~90vw) so the PDF + findings panel have real room. Mirrors
+   the discover/repair modal pattern (lazy backdrop, Esc dismiss, etc).
+   The head is sticky so lens pills + refresh stay visible while she
+   scrolls through the body. */
+.feedback-backdrop .modal.feedback-modal {
+  max-width: 1400px;
+  width: 90vw;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  /* overflow: hidden clips the head/body to the modal's rounded corners.
+     Without it, the head's solid background paints over the rounded
+     corner area and the modal reads as square. Body's own overflow:auto
+     keeps internal scrolling working as a flex child. */
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+}
+.feedback-modal-head {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  /* Sticky isn't needed — as the first child of a flex-column modal with
+     a scrolling sibling below, the head naturally pins at the top. The
+     prior sticky was a no-op because there's no scrolling ancestor here. */
+  flex-shrink: 0;
+}
+.feedback-modal-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.feedback-modal-head .modal-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0;
+}
+/* The body is a flex column that fills whatever space the modal head
+   leaves. The overall-score block sits at fixed natural height; the
+   grid takes the remaining space. Each grid column scrolls internally
+   when its content exceeds the row height — so the PDF wrapper never
+   pushes the modal past 92vh, and the modal-body itself doesn't scroll.
+   `min-height: 0` is the load-bearing trick that lets flex children
+   shrink below their content's natural size. */
+.feedback-modal-body {
+  padding: 18px 22px 24px;
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.feedback-modal-body > .feedback-overall {
+  flex-shrink: 0;
+}
+
+/* Grid fills remaining body space. min-height: 0 + overflow: hidden so
+   it can shrink to fit and child columns own their scrolling. */
+.feedback-modal-body .feedback-grid {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 24px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Both grid columns (.resume-pane on the left, .feedback-findings on
+   the right) take the full row height. Inside .resume-pane, the
+   .resume-render scrolls internally — and the absolute-positioned zoom
+   toolbar floats over it. No more magic-number calc(92vh - 200px); the
+   flex sizing above does the right thing regardless of head height,
+   overall block height, or viewport size. */
+.feedback-modal-body .resume-pane,
+.feedback-modal-body .feedback-findings {
+  max-height: none;
+  height: 100%;
+  min-height: 0;
+}
+.feedback-modal-body .feedback-findings {
+  position: static;
+  overflow: auto;
+}
+.feedback-modal-body .resume-pane > .resume-render {
+  max-height: none;
+  height: 100%;
+  overflow: auto;
+}
+
+/* On narrow viewports the grid collapses to a single column; the PDF
+   sits above the findings panel. Drop the flex/grid clamping so each
+   stack can grow naturally — body scroll handles overflow there since
+   side-by-side internal-scroll doesn't apply. */
+@media (max-width: 900px) {
+  .feedback-backdrop .modal.feedback-modal { width: 96vw; }
+  .feedback-modal-body { overflow: auto; }
+  .feedback-modal-body .feedback-grid {
+    grid-template-columns: 1fr;
+    overflow: visible;
+    min-height: 0;
+  }
+  .feedback-modal-body .resume-pane,
+  .feedback-modal-body .feedback-findings {
+    height: auto;
+    max-height: 70vh;
+  }
+  .feedback-modal-body .resume-pane > .resume-render {
+    height: auto;
+    max-height: 70vh;
   }
 }

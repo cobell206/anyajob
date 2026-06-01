@@ -4,7 +4,7 @@ import {
   $, $$, escapeHtml, api, fmtDateLong,
   alertDialog, confirmDialog, scrollToEl,
 } from './app.js';
-import { renderPdfWithHighlights } from './pdf-viewer.js';
+import { openFeedbackModal } from './components/feedback-modal.js';
 
 let prefs = null;
 let dirty = false;
@@ -173,13 +173,10 @@ function setActiveLens(lens) {
   localStorage.setItem(FEEDBACK_LENS_KEY, lens);
 }
 
-// Module-level cache so the modal's toolbar (which persists across body
-// states) can know which lenses already have cached feedback without
-// re-fetching. Refreshed on every load + every successful generate.
+// Cross-lens cache so the modal can switch lenses without re-fetching.
+// Refreshed on every load + every successful generate. The shared
+// feedback-modal owns the PDF viewer controller — no equivalent here.
 let feedbackCache = { text: '', feedback: {}, resume: null };
-// Active PDF viewer controller (for cross-pane sync). Reset whenever the
-// modal closes or the body re-renders so prior listeners don't leak.
-let pdfViewerCtrl = null;
 
 // Refreshes the summary card after every load / generate / modal close.
 async function loadFeedback() {
@@ -238,415 +235,66 @@ function renderFeedbackSummary({ error } = {}) {
       </div>
     `;
   }
-  $('#feedback-open-btn')?.addEventListener('click', openFeedbackModal);
+  $('#feedback-open-btn')?.addEventListener('click', openProfileFeedbackModal);
 }
 
 // ---------- Feedback modal ----------
-// Mirrors the discover-modal pattern (lazy-built backdrop, Esc/backdrop
-// dismiss, dismiss disabled during a regenerate). The modal hosts the
-// full two-column experience: PDF viewer left, findings panel right.
+// The modal DOM + open/close/render/PDF-viewer lifecycle is in
+// components/feedback-modal.js — shared with the listing-modal flow.
+// This page is one consumer: provides resume URL, lens config + cache,
+// and routes the modal's regenerate/refresh actions to runFeedback().
 
-let _feedbackBackdrop = null;
-let _feedbackOpen = false;
-let _feedbackGenerating = false;
+let _modalCtrl = null;
 
-function getFeedbackBackdrop() {
-  if (_feedbackBackdrop) return _feedbackBackdrop;
-  _feedbackBackdrop = document.createElement('div');
-  _feedbackBackdrop.className = 'modal-backdrop feedback-backdrop';
-  _feedbackBackdrop.innerHTML = `
-    <div class="modal feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-modal-title">
-      <div class="modal-head feedback-modal-head" id="feedback-modal-head"></div>
-      <div class="modal-body feedback-modal-body" id="feedback-modal-body"></div>
-    </div>
-  `;
-  document.body.appendChild(_feedbackBackdrop);
-  _feedbackBackdrop.addEventListener('click', (e) => {
-    if (e.target === _feedbackBackdrop && !_feedbackGenerating) closeFeedbackModal();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && _feedbackOpen && !_feedbackGenerating) closeFeedbackModal();
-  });
-  return _feedbackBackdrop;
-}
-
-function openFeedbackModal() {
-  getFeedbackBackdrop().classList.add('open');
-  document.body.style.overflow = 'hidden';
-  _feedbackOpen = true;
+function openProfileFeedbackModal() {
   const lens = getActiveLens();
-  renderFeedbackShell(lens);
   const entry = feedbackCache.feedback[lens];
-  if (entry) renderFeedbackBody('loaded', { lens, entry });
-  else renderFeedbackBody('empty', { lens });
-}
-
-function closeFeedbackModal() {
-  if (_feedbackBackdrop) _feedbackBackdrop.classList.remove('open');
-  document.body.style.overflow = '';
-  _feedbackOpen = false;
-  pdfViewerCtrl = null;
-  // Re-render summary in case feedback was generated/refreshed in-modal.
-  renderFeedbackSummary();
-}
-
-// Shell = modal header (title + lens pills + refresh + close) + empty
-// body slot. Re-rendered when lens changes so the active pill stays in
-// sync without remounting the body.
-function renderFeedbackShell(lens) {
-  const head = $('#feedback-modal-head');
-  const entry = feedbackCache.feedback[lens];
-  const stamp = entry?.generatedAt ? `Generated ${fmtDateLong(entry.generatedAt)}` : '';
-  head.innerHTML = `
-    <div class="feedback-modal-head-row">
-      <div class="modal-title" id="feedback-modal-title">Résumé feedback</div>
-      <button class="modal-close" aria-label="Close" id="feedback-modal-close">×</button>
-    </div>
-    <div class="feedback-toolbar">
-      <div class="feedback-lens-pills" role="radiogroup" aria-label="Feedback lens">
-        ${FEEDBACK_LENSES.map((o) => `
-          <button type="button"
-                  role="radio"
-                  aria-checked="${o.v === lens}"
-                  class="filter-mini-pill ${o.v === lens ? 'active' : ''}"
-                  data-lens="${o.v}">${o.l}</button>
-        `).join('')}
-      </div>
-      <div class="feedback-toolbar-right">
-        <span class="feedback-stamp">${stamp}</span>
-        <button type="button" class="btn" id="feedback-refresh-btn" ${entry ? '' : 'hidden'}>Refresh</button>
-      </div>
-    </div>
-  `;
-  $('#feedback-modal-close').addEventListener('click', () => {
-    if (!_feedbackGenerating) closeFeedbackModal();
-  });
-  $$('#feedback-modal-head [data-lens]').forEach((b) => {
-    b.addEventListener('click', () => {
-      const newLens = b.dataset.lens;
-      if (newLens === lens) return;
+  _modalCtrl = openFeedbackModal({
+    title: 'Résumé feedback',
+    resumeUrl: '/api/profile/resume?download=1',
+    resumeFile: feedbackCache.resume?.file,
+    resumeText: feedbackCache.text,
+    initial: entry ? entryToPayload(entry, lens) : { state: 'empty', activeLens: lens },
+    lenses: FEEDBACK_LENSES,
+    activeLens: lens,
+    onLensChange: (newLens) => {
       setActiveLens(newLens);
-      renderFeedbackShell(newLens);
       const next = feedbackCache.feedback[newLens];
-      if (next) renderFeedbackBody('loaded', { lens: newLens, entry: next });
-      else renderFeedbackBody('empty', { lens: newLens });
-    });
-  });
-  $('#feedback-refresh-btn')?.addEventListener('click', () => runFeedback(lens));
-}
-
-function renderFeedbackBody(state, opts = {}) {
-  const body = $('#feedback-modal-body');
-  if (!body) return;
-  if (state === 'loading') {
-    body.innerHTML = `
-      <div class="feedback-loading">
-        <span class="spinner sm"></span>
-        Reading your résumé through an admissions reader's eye…
-      </div>
-    `;
-    return;
-  }
-  if (state === 'empty') {
-    body.innerHTML = `
-      <div class="feedback-empty">
-        <p class="feedback-empty-pitch">
-          Read your résumé through an admissions reader's eye. Findings will be anchored
-          to specific text on the page so you can see exactly what to revise — and what's
-          already landing.
-        </p>
-        <div class="feedback-empty-meta"><strong>~$0.02</strong> · 10–20 sec</div>
-        <button class="btn primary" id="feedback-generate-btn" type="button">Get feedback</button>
-      </div>
-    `;
-    $('#feedback-generate-btn').addEventListener('click', () => runFeedback(opts.lens || getActiveLens()));
-    return;
-  }
-  if (state === 'error') {
-    body.innerHTML = `
-      <div class="feedback-error">${escapeHtml(opts.message || 'Something went wrong.')}</div>
-      <button class="btn" id="feedback-retry-btn" style="margin-top:10px" type="button">Try again</button>
-    `;
-    $('#feedback-retry-btn').addEventListener('click', loadFeedback);
-    return;
-  }
-  if (state === 'loaded') {
-    renderFeedbackLoaded(opts.lens, opts.entry);
-  }
-}
-
-function renderFeedbackLoaded(lens, entry) {
-  const body = $('#feedback-modal-body');
-  const overallScore = typeof entry.score === 'number' ? entry.score : 0;
-  const scoreClassName = overallScore >= 85 ? 'score-high' : overallScore >= 70 ? 'score-mid' : 'score-low';
-  const isPdf = isPdfResume(feedbackCache.resume);
-  body.innerHTML = `
-    <div class="feedback-overall">
-      <div class="feedback-overall-score ${scoreClassName}">${overallScore}</div>
-      <div class="feedback-overall-text">${escapeHtml(entry.overall || '')}</div>
-    </div>
-    <div class="feedback-grid">
-      <!-- .resume-pane wraps the scrollable .resume-render so the zoom
-           toolbar can be absolute-positioned over it without being
-           wiped when pdf-viewer re-renders the inner container on zoom. -->
-      <div class="resume-pane">
-        <div class="resume-render ${isPdf ? 'is-pdf' : ''}" id="resume-render"></div>
-      </div>
-      <div class="feedback-findings" id="feedback-findings"></div>
-    </div>
-  `;
-  const findings = collectAllFindings(entry);
-  $('#feedback-findings').innerHTML = (entry.sections || []).map(renderFeedbackSection).join('');
-
-  if (isPdf) {
-    mountPdfViewer(findings);
-  } else {
-    // Fallback for DOCX/TXT résumés — Anthropic accepts PDF only for
-    // document blocks, so non-PDFs are scored against extracted text and
-    // rendered the same way (string-match highlighting).
-    $('#resume-render').innerHTML = renderResumeWithHighlights(feedbackCache.text, findings);
-    pdfViewerCtrl = null;
-    wireFeedbackInteractions();
-  }
-}
-
-function isPdfResume(resume) {
-  if (!resume?.file) return false;
-  return resume.file.toLowerCase().endsWith('.pdf');
-}
-
-async function mountPdfViewer(findings) {
-  const container = $('#resume-render');
-  pdfViewerCtrl = null;
-  try {
-    pdfViewerCtrl = await renderPdfWithHighlights({
-      container,
-      pdfUrl: '/api/profile/resume?download=1',
-      findings,
-      onFindingFocus: (id, source) => {
-        // Mirror the active state into the side panel; on click, scroll
-        // the side-panel finding into view so she can read the comment.
-        setPanelActive(id);
-        if (source === 'click' && id) {
-          const f = document.querySelector(`.feedback-finding[data-finding-id="${cssEscape(id)}"]`);
-          scrollToEl(f);
-        }
-      },
-    });
-    mountPdfZoomBar(container, pdfViewerCtrl);
-    wirePanelToPdfSync();
-  } catch (err) {
-    console.error('PDF render failed', err);
-    container.innerHTML = `<div class="feedback-error">Could not render PDF: ${escapeHtml(err.message)}. Falling back to text view.</div>`;
-    container.classList.remove('is-pdf');
-    container.insertAdjacentHTML('beforeend', renderResumeWithHighlights(feedbackCache.text, findings));
-    pdfViewerCtrl = null;
-    wireFeedbackInteractions();
-  }
-}
-
-// Floating zoom toolbar pinned at the bottom-center of the PDF column.
-// Lives in .resume-pane (sibling of .resume-render) — not inside the
-// scrolling .resume-render container — so pdf-viewer's paint() can wipe
-// the inner container on zoom without destroying the toolbar.
-function mountPdfZoomBar(container, ctrl) {
-  // .resume-pane is the parent of .resume-render in the new markup.
-  // Fall back to container if structure is unexpected (defensive).
-  const pane = container.parentElement?.classList.contains('resume-pane')
-    ? container.parentElement
-    : container;
-  // Remove any prior bar from a previous render so we don't stack them.
-  pane.querySelector('.pdf-zoom-bar')?.remove();
-
-  const bar = document.createElement('div');
-  bar.className = 'pdf-zoom-bar';
-  bar.innerHTML = `
-    <button type="button" class="pdf-zoom-btn" data-zoom="out" aria-label="Zoom out" title="Zoom out">−</button>
-    <span class="pdf-zoom-level" aria-live="polite">${Math.round(ctrl.getScale() * 100)}%</span>
-    <button type="button" class="pdf-zoom-btn" data-zoom="in" aria-label="Zoom in" title="Zoom in">+</button>
-    <button type="button" class="pdf-zoom-btn" data-zoom="fit" aria-label="Fit to width" title="Fit to width">↺</button>
-  `;
-  pane.appendChild(bar);
-
-  const label = bar.querySelector('.pdf-zoom-level');
-  const updateLabel = () => { label.textContent = `${Math.round(ctrl.getScale() * 100)}%`; };
-
-  // Keep the % readout in sync regardless of where the zoom came from —
-  // button click, Ctrl/Cmd + wheel, or any future gesture. pdf-viewer
-  // dispatches 'pdf-zoom' on the container after every setScale settles.
-  container.addEventListener('pdf-zoom', updateLabel);
-
-  bar.addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-zoom]');
-    if (!btn) return;
-    const action = btn.dataset.zoom;
-    let target = ctrl.getScale();
-    if (action === 'in') target += 0.25;
-    else if (action === 'out') target -= 0.25;
-    else if (action === 'fit') target = ctrl.getFitScale();
-
-    // Disable while re-rendering so a rapid double-click doesn't fire
-    // overlapping paints.
-    bar.querySelectorAll('.pdf-zoom-btn').forEach((b) => (b.disabled = true));
-    try {
-      await ctrl.setScale(target);
-    } finally {
-      bar.querySelectorAll('.pdf-zoom-btn').forEach((b) => (b.disabled = false));
-      updateLabel();
-    }
+      _modalCtrl?.render(next ? entryToPayload(next, newLens) : { state: 'empty', activeLens: newLens });
+    },
+    onGenerate: () => runFeedback(getActiveLens()),
+    onRefresh: () => runFeedback(getActiveLens()),
+    emptyPitch: "Read your résumé through an admissions reader's eye. Findings will be anchored to specific text on the page so you can see exactly what to revise — and what's already landing.",
+    emptyMeta: '<strong>~$0.02</strong> · 10–20 sec',
+    onClose: () => {
+      _modalCtrl = null;
+      // Re-render the summary card in case feedback was generated/refreshed.
+      renderFeedbackSummary();
+    },
   });
 }
 
-// Cross-pane sync: hovering or clicking a side-panel finding pulses its
-// PDF overlay (and scrolls the PDF column to it on click).
-function wirePanelToPdfSync() {
-  const findings = $$('#feedback-findings .feedback-finding');
-  findings.forEach((el) => {
-    el.addEventListener('mouseenter', () => {
-      el.classList.add('is-active');
-      pdfViewerCtrl?.setActive(el.dataset.findingId);
-    });
-    el.addEventListener('mouseleave', () => {
-      el.classList.remove('is-active');
-      pdfViewerCtrl?.setActive(null);
-    });
-    el.addEventListener('click', () => {
-      pdfViewerCtrl?.scrollToFinding(el.dataset.findingId);
-      pdfViewerCtrl?.setActive(el.dataset.findingId);
-    });
-  });
-}
-
-function setPanelActive(id) {
-  $$('#feedback-findings .feedback-finding').forEach((el) => {
-    el.classList.toggle('is-active', el.dataset.findingId === id);
-  });
-}
-
-// CSS.escape isn't quite right for attribute-selector values (it escapes
-// for selector parsing, not attribute matching), but it covers our case
-// since finding ids are "{sectionName}-{index}" — no exotic characters.
-function cssEscape(s) {
-  return window.CSS?.escape ? window.CSS.escape(s) : s.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
-}
-
-function renderFeedbackSection(section) {
-  const findings = section.findings || [];
-  const strengths = section.strengths || [];
-  const score = typeof section.score === 'number' ? section.score : '';
-  const countLabel = findings.length
-    ? `<span class="feedback-section-count">· ${findings.length} finding${findings.length === 1 ? '' : 's'}</span>`
-    : '';
-  return `
-    <div class="feedback-section">
-      <div class="feedback-section-head">
-        <div class="feedback-section-name">${escapeHtml(section.name || 'Section')}${countLabel}</div>
-        <div class="feedback-section-score">${score}</div>
-      </div>
-      ${strengths.length ? `
-        <div class="feedback-strengths">
-          <div class="feedback-strengths-label">Strengths</div>
-          <ul>${strengths.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ul>
-        </div>
-      ` : ''}
-      ${findings.length ? `
-        <div class="feedback-findings-label">Findings</div>
-        <ul class="feedback-finding-list">
-          ${findings.map((f, i) => `
-            <li class="feedback-finding" data-finding-id="${section.name}-${i}" data-severity="${escapeHtml(f.severity || 'minor')}">
-              <div class="feedback-finding-head">
-                <span class="feedback-finding-severity"></span>
-                <span class="feedback-finding-quote">"${escapeHtml(f.quote || '')}"</span>
-              </div>
-              <div class="feedback-finding-comment">${escapeHtml(f.comment || '')}</div>
-              ${f.suggested_rewrite ? `
-                <div class="feedback-finding-rewrite">
-                  <div class="feedback-finding-rewrite-label">Suggested rewrite</div>
-                  ${escapeHtml(f.suggested_rewrite)}
-                </div>
-              ` : ''}
-            </li>
-          `).join('')}
-        </ul>
-      ` : '<div class="feedback-strengths" style="border:0;padding:0;margin:0;color:var(--muted)">No findings in this section.</div>'}
-    </div>
-  `;
-}
-
-// Flatten findings across sections, attach the same id used in the side
-// panel so hovering / clicking can cross-reference. Includes the page
-// number Claude assigned (PDF-mode); text-mode falls back to first-match.
-function collectAllFindings(entry) {
-  const out = [];
-  for (const section of entry.sections || []) {
-    (section.findings || []).forEach((f, i) => {
-      if (!f.quote) return;
-      out.push({
-        id: `${section.name}-${i}`,
-        page: f.page || null,
-        quote: f.quote,
-        severity: f.severity || 'minor',
-      });
-    });
-  }
-  return out;
-}
-
-// Render the résumé text with <mark> tags wrapping the first occurrence of
-// each finding's quote. We escape everything first, then do string-level
-// replacement on the escaped HTML — the quotes themselves come from Claude
-// and are escaped before splicing so the original text stays safe.
-function renderResumeWithHighlights(rawText, findings) {
-  if (!rawText) return '<div class="feedback-loading" style="padding:8px">Résumé text unavailable.</div>';
-  let html = escapeHtml(rawText);
-  for (const f of findings) {
-    const needle = escapeHtml(f.quote);
-    const idx = html.indexOf(needle);
-    if (idx < 0) continue; // Claude quote didn't match verbatim — skip silently
-    const before = html.slice(0, idx);
-    const after = html.slice(idx + needle.length);
-    const mark = `<mark class="finding" data-finding-id="${escapeHtml(f.id)}" data-severity="${escapeHtml(f.severity)}">${needle}</mark>`;
-    html = before + mark + after;
-  }
-  // Wrap in a pre-style container so line breaks survive.
-  return `<p style="white-space:pre-wrap;margin:0">${html}</p>`;
-}
-
-function wireFeedbackInteractions() {
-  const findings = $$('#feedback-findings .feedback-finding');
-  const marks = $$('#resume-render mark.finding');
-  const setActive = (id, source) => {
-    findings.forEach((el) => el.classList.toggle('is-active', el.dataset.findingId === id));
-    marks.forEach((el) => el.classList.toggle('is-active', el.dataset.findingId === id));
-    if (source === 'panel') {
-      scrollToEl(marks.find((el) => el.dataset.findingId === id));
-    } else if (source === 'mark') {
-      scrollToEl(findings.find((el) => el.dataset.findingId === id));
-    }
+// Map a cached feedback entry → modal render payload.
+function entryToPayload(entry, lens) {
+  return {
+    state: 'loaded',
+    overall: { score: entry.score, text: entry.overall },
+    sections: entry.sections || [],
+    generatedAt: entry.generatedAt,
+    activeLens: lens,
   };
-  findings.forEach((el) => {
-    el.addEventListener('mouseenter', () => setActive(el.dataset.findingId, null));
-    el.addEventListener('mouseleave', () => setActive(null, null));
-    el.addEventListener('click', () => setActive(el.dataset.findingId, 'panel'));
-  });
-  marks.forEach((el) => {
-    el.addEventListener('mouseenter', () => setActive(el.dataset.findingId, null));
-    el.addEventListener('mouseleave', () => setActive(null, null));
-    el.addEventListener('click', () => setActive(el.dataset.findingId, 'mark'));
-  });
 }
 
 async function runFeedback(lens) {
-  // Gate modal dismissal while the API call is in flight — same pattern
-  // as the discover modal. She chose this in the prior round; mid-flight
-  // close would lose the result for an action she explicitly started.
-  _feedbackGenerating = true;
-  renderFeedbackShell(lens);
-  renderFeedbackBody('loading');
+  if (!_modalCtrl) return;
+  // Gate modal dismissal while in-flight — same pattern as the discover
+  // modal. Mid-flight close would lose a result she explicitly started.
+  _modalCtrl.setGenerating(true);
+  _modalCtrl.render({ state: 'loading', activeLens: lens });
   try {
-    // Direct fetch rather than api() so we can surface the server's actual
-    // error body on 4xx/5xx — api() throws a generic "HTTP NNN" that hides
-    // the real reason (parse failure, no résumé, etc).
+    // Direct fetch so we can surface the server's actual error body on
+    // 4xx/5xx — api() throws a generic "HTTP NNN" that hides the real
+    // reason (parse failure, no résumé, etc).
     const res = await fetch('/api/profile/resume/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -655,23 +303,22 @@ async function runFeedback(lens) {
     const entry = await res.json().catch(() => ({}));
     if (!res.ok || entry.error) {
       const msg = entry.error || entry.raw || `HTTP ${res.status}`;
-      renderFeedbackBody('error', { message: msg });
+      _modalCtrl.render({ state: 'error', message: msg, activeLens: lens });
       return;
     }
-    // Refetch GET to repopulate the cache (text + cross-lens feedback map +
-    // current resume meta). Preserve resume so isPdfResume keeps working.
+    // Refetch GET to repopulate the cache (text + cross-lens feedback map
+    // + current resume meta). Preserve resume so isPdf detection works.
     const data = await api('/api/profile/resume/feedback');
     feedbackCache = {
       text: data.text || '',
       feedback: data.feedback || {},
       resume: data.resume || feedbackCache.resume,
     };
-    renderFeedbackShell(lens);
-    renderFeedbackBody('loaded', { lens, entry: feedbackCache.feedback[lens] || entry });
+    _modalCtrl.render(entryToPayload(feedbackCache.feedback[lens] || entry, lens));
   } catch (err) {
-    renderFeedbackBody('error', { message: err.message });
+    _modalCtrl.render({ state: 'error', message: err.message, activeLens: lens });
   } finally {
-    _feedbackGenerating = false;
+    _modalCtrl.setGenerating(false);
   }
 }
 

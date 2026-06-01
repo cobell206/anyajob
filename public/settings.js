@@ -101,10 +101,6 @@ function renderSource(s) {
 
   const safeName = escapeHtml(s.name);
 
-  // Bookmarks don't fetch — runOne short-circuits — so no "Run now" button.
-  const runBtn = s.kind === 'bookmark' ? '' :
-    `<button class="icon-btn-sm run-btn" data-run="${s.id}" title="Run now" aria-label="Run ${safeName} now">${SVG_PLAY}<span>Run</span></button>`;
-
   // The wrapping <label> already provides the accessible name to the
   // checkbox via the visible "On"/"Off" text, so no explicit aria-label
   // on the input — that would shadow the visible label.
@@ -116,9 +112,15 @@ function renderSource(s) {
     </label>
   `;
 
-  // Overflow menu — destructive + rare actions live here so they're one
-  // tap further from Run. Keeps data-delete / data-repair so the existing
-  // delegated handlers still fire; the menu wrapper handles open/close.
+  // Overflow menu hosts everything except the toggle — Run, Find new URL
+  // (when repairable), and Delete. Run used to sit in the visible row
+  // but real usage showed it gets clicked rarely; demoting it to the menu
+  // declutters the row and keeps the toggle (the actually-frequent action)
+  // as the only inline control. Bookmarks don't fetch, so they skip Run.
+  // Keeps data-run / data-repair / data-delete attrs so the existing
+  // event-delegated handlers fire from the menu items unchanged.
+  const runItem = s.kind === 'bookmark' ? '' :
+    `<button role="menuitem" class="source-menuitem" data-run="${s.id}">${SVG_PLAY}<span>Run now</span></button>`;
   const repairItem = isRepairable(s)
     ? `<button role="menuitem" class="source-menuitem" data-repair="${s.id}">${SVG_SEARCH}<span>Find new URL</span></button>`
     : '';
@@ -129,6 +131,7 @@ function renderSource(s) {
               title="More actions" aria-label="More actions for ${safeName}">${SVG_DOTS}</button>
       <div class="source-menu" data-menu="${s.id}" role="menu"
            aria-label="Actions for ${safeName}" hidden>
+        ${runItem}
         ${repairItem}
         <button role="menuitem" class="source-menuitem danger" data-delete="${s.id}">${SVG_TRASH}<span>Delete source</span></button>
       </div>
@@ -145,7 +148,6 @@ function renderSource(s) {
       </div>
       <div class="source-actions">
         ${toggle}
-        ${runBtn}
         ${menu}
       </div>
     </div>
@@ -1177,42 +1179,11 @@ document.querySelector('#section-notify .section-head').addEventListener('click'
   }
 });
 
-// ===== Appearance / theme =====
-// The inline <head> script in each HTML page applies the resolved theme on
-// load (no FOUC). This block just keeps the Settings UI in sync and lets
-// her flip between auto / light / dark.
-function applyTheme(stored) {
-  const resolved = stored === 'auto'
-    ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-    : stored;
-  document.documentElement.dataset.theme = resolved;
-  const tc = document.querySelector('meta[name="theme-color"]');
-  if (tc) tc.content = resolved === 'dark' ? '#0b1220' : '#f7faf9';
-}
-
-function syncThemeUI() {
-  const stored = localStorage.getItem('theme') || 'auto';
-  $$('[data-theme-choice]').forEach((b) => {
-    b.classList.toggle('active', b.dataset.themeChoice === stored);
-  });
-  const sub = $('#appearance-sub');
-  if (sub) {
-    sub.textContent = stored === 'auto'
-      ? `Theme: auto (currently ${document.documentElement.dataset.theme})`
-      : `Theme: ${stored}`;
-  }
-}
-
-$$('[data-theme-choice]').forEach((b) => {
-  b.addEventListener('click', () => {
-    const choice = b.dataset.themeChoice;
-    localStorage.setItem('theme', choice);
-    applyTheme(choice);
-    syncThemeUI();
-  });
-});
-
-syncThemeUI();
+// Theme picker moved out of Settings — the sun/moon button in the header
+// (rendered by nav.js, wired by /theme-toggle.js) is now the single
+// place to flip between auto / light / dark. The no-FOUC inline script
+// in each HTML <head> still applies the stored theme before paint, so
+// nothing here is needed for theme.
 
 // ===== Spend =====
 api('/api/spend').then((s) => {

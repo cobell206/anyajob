@@ -217,27 +217,9 @@
       </div>
     </div>
 
-    <!-- ===== Appearance ===== -->
-    <div class="panel section" id="section-appearance">
-      <div class="section-head" data-section="appearance">
-        <div>
-          <div class="section-title">Appearance</div>
-          <div class="section-sub" id="appearance-sub">Theme: auto</div>
-        </div>
-        <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
-      </div>
-      <div class="section-body">
-        <div class="section-body-inner">
-        <label>Theme</label>
-        <div role="radiogroup" id="theme-choice" style="display:flex;gap:8px;flex-wrap:wrap">
-          <button type="button" class="filter-pill" data-theme-choice="auto">Auto (follow system)</button>
-          <button type="button" class="filter-pill" data-theme-choice="light">Light</button>
-          <button type="button" class="filter-pill" data-theme-choice="dark">Dark</button>
-        </div>
-        <p class="help-text" style="margin-top:8px">Auto follows your operating-system setting and switches when it changes. Light and Dark are sticky overrides.</p>
-        </div>
-      </div>
-    </div>
+    <!-- Appearance section removed — the theme picker now lives in the
+         header (sun/moon icon → Auto / Light / Dark popover). See
+         /theme-toggle.js + nav.js. -->
 
     <!-- ===== Profile & preferences (JSON) ===== -->
     <div class="panel section" id="section-prefs">
