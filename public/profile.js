@@ -275,10 +275,19 @@ function openProfileFeedbackModal() {
 }
 
 // Map a cached feedback entry → modal render payload.
+// Profile feedback scores on 0-100; 85+ reads as a real candidate (matches the
+// RESUME_FEEDBACK_SYSTEM threshold in src/prompts.js). At/above it, the modal
+// shows "Ready to submit" and reframes findings as optional polish.
+const READY_TO_SUBMIT_SCORE = 85;
+
 function entryToPayload(entry, lens) {
   return {
     state: 'loaded',
-    overall: { score: entry.score, text: entry.overall },
+    overall: {
+      score: entry.score,
+      text: entry.overall,
+      ready: typeof entry.score === 'number' && entry.score >= READY_TO_SUBMIT_SCORE,
+    },
     sections: entry.sections || [],
     generatedAt: entry.generatedAt,
     activeLens: lens,

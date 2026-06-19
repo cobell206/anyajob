@@ -211,11 +211,17 @@ function renderLoaded(overall, sections) {
   const { resumeFile, resumeText } = _currentOpts;
   const overallScore = typeof overall.score === 'number' ? overall.score : 0;
   const scoreClassName = overallScore >= 85 ? 'score-high' : overallScore >= 70 ? 'score-mid' : 'score-low';
+  // `ready` is decided by the caller (it knows its own score scale) and means
+  // the document is strong enough to submit — findings become optional polish.
+  const ready = !!overall.ready;
   const isPdf = !!resumeFile && resumeFile.toLowerCase().endsWith('.pdf');
   body.innerHTML = `
-    <div class="feedback-overall">
+    <div class="feedback-overall${ready ? ' is-ready' : ''}">
       <div class="feedback-overall-score ${scoreClassName}">${overallScore}</div>
-      <div class="feedback-overall-text">${escapeHtml(overall.text || '')}</div>
+      <div class="feedback-overall-text">
+        ${ready ? '<span class="feedback-ready-badge">✓ Ready to submit</span>' : ''}
+        ${escapeHtml(overall.text || '')}
+      </div>
     </div>
     <div class="feedback-grid">
       <div class="resume-pane">
@@ -225,7 +231,7 @@ function renderLoaded(overall, sections) {
     </div>
   `;
   const findings = collectAllFindings(sections);
-  $('#feedback-findings').innerHTML = sections.map(renderFeedbackSection).join('');
+  $('#feedback-findings').innerHTML = sections.map((s) => renderFeedbackSection(s, ready)).join('');
 
   if (isPdf) {
     mountPdfViewer(findings);
@@ -367,15 +373,19 @@ function cssEscape(s) {
   return window.CSS?.escape ? window.CSS.escape(s) : String(s).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
 }
 
-function renderFeedbackSection(section) {
+function renderFeedbackSection(section, ready = false) {
   const findings = section.findings || [];
   const strengths = section.strengths || [];
   const score = typeof section.score === 'number' ? section.score : '';
+  // When the document is ready to submit, findings are optional polish — relabel
+  // and restyle them so they don't read as a required to-do list.
+  const optional = ready && findings.length > 0;
+  const noun = optional ? 'optional note' : 'finding';
   const countLabel = findings.length
-    ? `<span class="feedback-section-count">· ${findings.length} finding${findings.length === 1 ? '' : 's'}</span>`
+    ? `<span class="feedback-section-count">· ${findings.length} ${noun}${findings.length === 1 ? '' : 's'}</span>`
     : '';
   return `
-    <div class="feedback-section">
+    <div class="feedback-section${optional ? ' is-optional' : ''}">
       <div class="feedback-section-head">
         <div class="feedback-section-name">${escapeHtml(section.name || 'Section')}${countLabel}</div>
         <div class="feedback-section-score">${score}</div>
@@ -387,7 +397,7 @@ function renderFeedbackSection(section) {
         </div>
       ` : ''}
       ${findings.length ? `
-        <div class="feedback-findings-label">Findings</div>
+        <div class="feedback-findings-label">${optional ? 'Optional polish' : 'Findings'}</div>
         <ul class="feedback-finding-list">
           ${findings.map((f, i) => `
             <li class="feedback-finding" data-finding-id="${escapeHtml(section.name)}-${i}" data-severity="${escapeHtml(f.severity || 'minor')}">

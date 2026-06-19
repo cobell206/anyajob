@@ -3414,6 +3414,43 @@ button[disabled] {
   font-weight: 700;
 }
 
+/* Ready-to-submit state (score >= 8): the document is strong, so suggestions
+   are reframed as optional polish rather than required feedback. */
+.align-box-ready {
+  border-color: var(--green-ink);
+}
+.align-ready-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--green-ink);
+  background: var(--green-soft);
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.align-optional-note {
+  font-size: 12px;
+  color: var(--green-ink);
+  background: var(--green-soft);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  margin-top: 10px;
+  line-height: 1.45;
+}
+/* Optional sections read as take-it-or-leave-it: green marker, not the
+   directive blue arrow used for required feedback. */
+.align-section-optional .align-h {
+  color: var(--green-ink);
+}
+.align-section-optional li::before {
+  content: '○';
+  color: var(--green-ink);
+  font-weight: 700;
+}
+
 /* Scoring notes box (sits above the alignment box) */
 .align-notes {
   margin-top: 14px;
@@ -4192,6 +4229,26 @@ button[disabled] {
 }
 .feedback-finding:hover { background: var(--surface-2); }
 .feedback-finding.is-active { background: var(--surface-2); }
+
+/* Ready-to-submit treatment in the feedback modal: green header band + badge,
+   and findings reframed as optional polish (green framing instead of the
+   amber/red warning borders) so a strong document doesn't read as a to-do list. */
+.feedback-overall.is-ready { background: var(--green-soft); }
+.feedback-ready-badge {
+  display: inline-block;
+  font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--green-ink);
+  background: var(--surface);
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-bottom: 6px;
+}
+.feedback-section.is-optional .feedback-findings-label { color: var(--green-ink); }
+.feedback-section.is-optional .feedback-finding {
+  border-color: color-mix(in srgb, var(--green-ink) 22%, transparent);
+  border-left-color: var(--green-ink);
+}
 
 /* Head: just the verbatim quote, multi-line wrap. The severity dot is
    gone — the left border carries that signal now. */

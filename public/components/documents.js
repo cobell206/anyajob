@@ -195,36 +195,52 @@ function renderAlignSkeleton(label) {
   `;
 }
 
+// Score at/above which a document reads as ready to submit. At/above this we
+// flip the suggestion sections to "optional polish" framing rather than
+// presenting them as required feedback — so she isn't nudged into an endless
+// edit loop on a document that's already strong. Mirrors the prompt threshold
+// in src/prompts.js.
+const READY_TO_SUBMIT_SCORE = 8;
+
+function alignSection(header, items, { optional = false } = {}) {
+  if (!items?.length) return '';
+  return `
+    <div class="align-section${optional ? ' align-section-optional' : ''}">
+      <div class="align-h">${escapeHtml(header)}</div>
+      <ul>${items.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+    </div>
+  `;
+}
+
+function readyBadge(ready) {
+  return ready ? '<span class="align-ready-badge">✓ Ready to submit</span>' : '';
+}
+
+function optionalNote(ready, hasItems) {
+  return ready && hasItems
+    ? `<div class="align-optional-note">Already a strong submission — the notes below are optional polish, not required.</div>`
+    : '';
+}
+
 function renderAlignment(a) {
   if (a.error) {
     return `<div class="align-box err">Resume scoring error: ${escapeHtml(a.error)}</div>`;
   }
+  const ready = a.alignmentScore >= READY_TO_SUBMIT_SCORE;
+  const hasSuggestions = !!(a.areasToStrengthen?.length || a.suggestedBullets?.length);
   return `
-    <div class="align-box">
+    <div class="align-box${ready ? ' align-box-ready' : ''}">
       <div class="align-head">
         <div class="align-label">Resume vs JD</div>
         <div class="align-score align-${a.alignmentScore >= 7 ? 'high' : a.alignmentScore >= 5 ? 'mid' : 'low'}">${a.alignmentScore}/10</div>
+        ${readyBadge(ready)}
         <button type="button" class="btn-link align-view-btn" data-action="view-feedback" data-slot="resume">View detailed →</button>
       </div>
       <div class="align-summary">${escapeHtml(a.summary || '')}</div>
-      ${a.topStrengths?.length ? `
-        <div class="align-section">
-          <div class="align-h">What's working</div>
-          <ul>${a.topStrengths.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
-        </div>
-      ` : ''}
-      ${a.areasToStrengthen?.length ? `
-        <div class="align-section">
-          <div class="align-h">Worth highlighting more</div>
-          <ul>${a.areasToStrengthen.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
-        </div>
-      ` : ''}
-      ${a.suggestedBullets?.length ? `
-        <div class="align-section">
-          <div class="align-h">Suggested bullets</div>
-          <ul>${a.suggestedBullets.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
-        </div>
-      ` : ''}
+      ${alignSection("What's working", a.topStrengths)}
+      ${optionalNote(ready, hasSuggestions)}
+      ${alignSection('Worth highlighting more', a.areasToStrengthen, { optional: ready })}
+      ${alignSection('Suggested bullets', a.suggestedBullets, { optional: ready })}
     </div>
   `;
 }
@@ -235,11 +251,13 @@ function renderCoverAlignment(a) {
   }
   const overall = typeof a.overallScore === 'number' ? a.overallScore : 0;
   const cls = overall >= 7 ? 'high' : overall >= 5 ? 'mid' : 'low';
+  const ready = overall >= READY_TO_SUBMIT_SCORE;
   return `
-    <div class="align-box">
+    <div class="align-box${ready ? ' align-box-ready' : ''}">
       <div class="align-head">
         <div class="align-label">Cover letter vs JD</div>
         <div class="align-score align-${cls}">${overall}/10</div>
+        ${readyBadge(ready)}
         <button type="button" class="btn-link align-view-btn" data-action="view-feedback" data-slot="cover">View detailed →</button>
       </div>
       ${(typeof a.relevanceScore === 'number' || typeof a.toneScore === 'number') ? `
@@ -247,18 +265,9 @@ function renderCoverAlignment(a) {
           ${typeof a.relevanceScore === 'number' ? `Relevance: <strong>${a.relevanceScore}/10</strong>` : ''}${(typeof a.relevanceScore === 'number' && typeof a.toneScore === 'number') ? ' · ' : ''}${typeof a.toneScore === 'number' ? `Tone: <strong>${a.toneScore}/10</strong>` : ''}
         </div>
       ` : ''}
-      ${a.strengths?.length ? `
-        <div class="align-section">
-          <div class="align-h">What's working</div>
-          <ul>${a.strengths.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
-        </div>
-      ` : ''}
-      ${a.suggestions?.length ? `
-        <div class="align-section">
-          <div class="align-h">Suggestions</div>
-          <ul>${a.suggestions.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
-        </div>
-      ` : ''}
+      ${alignSection("What's working", a.strengths)}
+      ${optionalNote(ready, !!a.suggestions?.length)}
+      ${alignSection('Suggestions', a.suggestions, { optional: ready })}
     </div>
   `;
 }
@@ -510,6 +519,7 @@ function openListingFeedback(fingerprint, slot, entry) {
     }
   }
   const score = slot === 'resume' ? a.alignmentScore : a.overallScore;
+  const ready = typeof score === 'number' && score >= READY_TO_SUBMIT_SCORE;
   const scoreOnHundred = typeof score === 'number' ? Math.round(score * 10) : 0;
   const title = slot === 'resume' ? 'Résumé alignment' : 'Cover letter alignment';
   openFeedbackModal({
@@ -518,7 +528,7 @@ function openListingFeedback(fingerprint, slot, entry) {
     resumeFile: entry.file,
     initial: {
       state: 'loaded',
-      overall: { score: scoreOnHundred, text: a.summary || '' },
+      overall: { score: scoreOnHundred, text: a.summary || '', ready },
       sections,
       generatedAt: a.generatedAt,
     },
