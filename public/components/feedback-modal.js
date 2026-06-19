@@ -217,11 +217,11 @@ function renderLoaded(overall, sections) {
   const isPdf = !!resumeFile && resumeFile.toLowerCase().endsWith('.pdf');
   body.innerHTML = `
     <div class="feedback-overall${ready ? ' is-ready' : ''}">
-      <div class="feedback-overall-score ${scoreClassName}">${overallScore}</div>
-      <div class="feedback-overall-text">
+      <div class="feedback-overall-scoreblock">
+        <div class="feedback-overall-score ${scoreClassName}">${overallScore}</div>
         ${ready ? '<span class="feedback-ready-badge">✓ Ready to submit</span>' : ''}
-        ${escapeHtml(overall.text || '')}
       </div>
+      <div class="feedback-overall-text">${escapeHtml(overall.text || '')}</div>
     </div>
     <div class="feedback-grid">
       <div class="resume-pane">
