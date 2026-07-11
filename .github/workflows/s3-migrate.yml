@@ -1,0 +1,55 @@
+name: Migrate data to S3 (one-shot)
+
+# Manually-triggered. Copies live data/ (JSON) + data/documents/ from the EC2
+# host into the S3 buckets. Runs scripts/migrate-to-s3.sh. See
+# SERVERLESS-TRANSITION.md. Default mode is inspect (read-only); choose execute
+# to actually copy. Never runs automatically.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect (read-only) or execute (copy to S3)"
+        type: choice
+        options: [inspect, execute]
+        default: inspect
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Run migration script on EC2
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
+          REPO_PATH: ${{ secrets.REPO_PATH }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" bash -se <<EOF
+            set -euo pipefail
+            cd "$REPO_PATH"
+            # Ensure the migration script is present/current regardless of deploy timing
+            git fetch --quiet origin main
+            git checkout origin/main -- scripts/migrate-to-s3.sh
+            bash scripts/migrate-to-s3.sh "$MODE"
+          EOF
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
