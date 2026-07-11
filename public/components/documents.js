@@ -615,9 +615,11 @@ function fitPreviewHeight(container) {
   const modalH = Number.isFinite(maxH) ? maxH : (window.innerHeight * 0.9);
   const headH = modalHead?.offsetHeight || 70;
   const previewHeadH = previewHead?.offsetHeight || 45;
-  // 52 = modal-body padding (20 top + 32 bottom). 16 = small bottom
-  // breathing space inside the preview card.
-  const target = modalH - headH - previewHeadH - 52 - 16;
+  // With the preview open, .modal-body padding drops to 10px top/bottom
+  // (20 total) and the card margin to 0 (see .has-preview-open CSS). The
+  // extra 8 covers the card border + a hair of breathing room so the modal
+  // itself never grows a scrollbar.
+  const target = modalH - headH - previewHeadH - 20 - 8;
   const clamped = Math.max(240, target);
   viewport.style.height = `${clamped}px`;
   // Re-apply zoom so the scale wrapper height tracks the new viewport.

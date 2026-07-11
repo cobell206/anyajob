@@ -3650,6 +3650,16 @@ button[disabled] {
 .modal.has-preview-open .modal-section.docs-section {
   margin-bottom: 0;
 }
+/* With the preview open, give it nearly the whole window: lift the modal's
+   height cap and strip the body padding + card margin so the PDF viewport
+   claims the reclaimed space. The JS height math (fitPreviewHeight) mirrors
+   these reduced paddings. */
+.modal.has-preview-open { max-height: 96dvh; }
+.modal.has-preview-open .modal-body { padding: 10px 16px; }
+.modal.has-preview-open .doc-preview-inline { margin: 0; }
+@media (min-width: 720px) {
+  .modal-backdrop:has(.modal.has-preview-open) { padding: 10px; }
+}
 
 /* ============ MOBILE BOTTOM TAB BAR ============
    Hidden by default. Shown on screens ≤720px via media query below.
