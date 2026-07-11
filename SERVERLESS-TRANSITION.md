@@ -6,13 +6,12 @@ Sibling project `coffeeScale` (nyespresso) is the reference for the AWS/CDK
 shape — but note it was *born* serverless as a static SPA; anyaJob is a
 stateful Express monolith, so the pattern is adapted, not copied.
 
-**Status:** M0–M4.5 complete. Production (EC2) runs on the S3 backend, and a
-**dark Lambda + API Gateway now serves the same live S3, fully capable** —
-reads parity-identical to the reference (incl. binary PDF), and résumé scoring
-works via async worker + client polling (API Gateway's 30 s cap can't hold the
-~54 s Claude call synchronously). Next: **M5** — flip the Cloudflare origin from
-EC2 to the API Gateway (revisiting auth: the dark route uses AWS_IAM, but
-Cloudflare can't SigV4-sign).
+**Status:** M0–M5 complete. **Production traffic is now served by the Lambda +
+API Gateway** — `jobs.anyalawgirly.com` (Cloudflare, Full-strict) → Access →
+JWT authorizer → `anyajob-web` Lambda → S3. EC2 is idle (still on S3) as the
+rollback path. CI deploys both EC2 and the Lambda/infra on push. Remaining:
+**M6** (cron → EventBridge) and **M7** (decommission EC2 — the actual $10/mo
+saving). Post-flip UX (esp. the async scoring modal) to confirm in-browser.
 
 **Serverless env (set on EC2 to run on S3; becomes Lambda env at M4):**
 `STORAGE=s3  S3_BUCKET=anyajob-data  DOCS_BUCKET=anyajob-docs  AWS_REGION=us-east-1`
@@ -520,6 +519,16 @@ S3). Optionally revert the route auth JWT → IAM. No data moves.
   gateway accepts Cloudflare's raw token as-is (no `Bearer`) and the C-3 flip is
   safe. Remaining C-3 = the Cloudflare DNS change (`jobs.anyalawgirly.com` →
   `d-qpq1b1ahih…`, proxied, Access on, SSL Full-strict) + browser validation.
+- 2026-07-11 — **C-3 DONE — production flipped to the Lambda. M5 COMPLETE.**
+  Removed the `jobs.anyalawgirly.com` tunnel public hostname and pointed the
+  proxied CNAME at the API Gateway custom-domain target
+  `d-qpq1b1ahih.execute-api.us-east-1.amazonaws.com`. Validated end-to-end:
+  no-auth = **302** (Access still guards it), authed (real `CF_Authorization`
+  cookie) = **200 with 55 listings from S3** — the full Cloudflare / Access /
+  JWT authorizer / Lambda / S3 chain, and Full-strict trusts the ACM cert (no
+  526). **EC2 no longer serves traffic** (idle, still on S3 = instant rollback:
+  re-add the tunnel public hostname). Next: browser-confirm the async scoring
+  modal, then M6 (cron to EventBridge) and M7 (stop/terminate EC2).
 
 ## Testing strategy
 
