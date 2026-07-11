@@ -530,6 +530,64 @@ S3). Optionally revert the route auth JWT → IAM. No data moves.
   re-add the tunnel public hostname). Next: browser-confirm the async scoring
   modal, then M6 (cron to EventBridge) and M7 (stop/terminate EC2).
 
+## M6 runbook — cron → EventBridge (get EC2 to zero work)
+
+Move the three EC2 cron jobs to scheduled Lambdas so nothing runs on EC2 (M7 can
+then stop it). EC2 stays as rollback until validated.
+
+**The jobs (all currently `node <file>` on EC2's crontab, writing to S3):**
+- `src/daily.js` — 6am ET: scrape + score + morning email
+- `scripts/discover.js` — Mon/Thu 7am ET: find new sources
+- `scripts/weekly.js` — Sun 9am ET: digest email
+
+### C-0 (do FIRST — the make-or-break unknown)
+**Measure `daily.js` runtime.** Lambda's hard ceiling is **15 min**; the daily
+scrape hits many sources + Claude. Check recent durations in EC2's `daily.log`.
+- Comfortably < ~12 min → a plain scheduled Lambda works (the plan below).
+- Near/over 15 min → this is M6's "30 s-cap moment": the scrape must be split
+  (per-source fan-out via Step Functions / an SQS queue) or run on Fargate.
+  Decide before building. (discover/weekly are short — not at risk.)
+
+### Design (assuming C-0 is fine)
+- **One `anyajob-cron` Lambda**, same code asset, handler `src/cron.js` that
+  dispatches on the event: `{ job: 'daily' | 'discover' | 'weekly' }` →
+  `import` + `main()` of the right file. Timeout 900 s (15 min), memory ~1024 MB.
+  Env = common set **plus** the scraping vars; S3 rw + SES.
+- **Three EventBridge Scheduler schedules** invoking it with the right `job`
+  input, using **timezone `America/New_York`** (fixes the current UTC crons'
+  DST drift): daily `cron(0 6 * * ? *)`, discover `cron(0 7 ? * MON,THU *)`,
+  weekly `cron(0 9 ? * SUN *)`. A scheduler role grants `lambda:InvokeFunction`.
+
+### Refactor / bundle work
+- Each of the 3 files: `export async function main()` and guard the top-level
+  `main().catch(process.exit)` behind a run-if-main check (so EC2/local
+  `node <file>` still works during the transition, but importing doesn't
+  auto-run or `process.exit` inside Lambda). Let `main` throw; the handler
+  logs/rethrows.
+- `build-lambda-bundle.sh`: also copy `scripts/` into the asset (currently only
+  `src/` + `public/`) so `discover.js`/`weekly.js` ship.
+- Env values from EC2 `.env`: `GREENHOUSE_BOARDS`, `LEVER_COMPANIES`,
+  `USAJOBS_EMAIL` (non-secret → CDK env), `USAJOBS_API_KEY` (if set → SSM param
+  like the Anthropic key; if empty, skip).
+
+### Chunking
+- **M6-1:** refactor the 3 jobs (export/guard) + `src/cron.js` dispatcher +
+  bundle includes `scripts/`. Test each `main()` locally against S3. Push (CI).
+- **M6-2:** CDK — `anyajob-cron` Lambda + 3 EventBridge schedules + scheduler
+  role. Deploy (CI). **Manually invoke** each job (`aws lambda invoke` with the
+  payload) → verify S3 writes + a morning/digest email actually arrives.
+- **M6-3:** cutover — once manual invokes pass, disable the EC2 crontab (one-shot
+  workflow like `disable-backup-cron.yml`) so jobs don't double-run. Confirm the
+  next scheduled fire lands. EC2 now does nothing.
+
+### Risks / rollback
+- **Concurrency:** the daily Lambda + web Lambda can both read-modify-write
+  `listings.json` (single user, low risk; add S3 `If-Match` later if wanted).
+- **Double-run** during cutover: disable EC2 crons in the same step as enabling
+  schedules (M6-3) — don't leave both live.
+- **Rollback:** re-enable the EC2 crontab (setup.sh block) + disable the
+  schedules. EC2 still fully capable on S3.
+
 ## Testing strategy
 
 Every migration is gated by **(a) the unit suite green** (`npm test`) **plus
