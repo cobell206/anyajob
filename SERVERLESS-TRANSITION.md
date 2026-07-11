@@ -133,7 +133,7 @@ Each row is an independently mergeable/deployable PR with its own gate.
 | **M3** | **Documents → S3** (uploads + index; endpoint streams from S3). | EC2, `STORAGE=s3` | Smoke: upload via API → fetch back byte-equal; preview loads; index object in S3 | Flip flag to `fs` |
 | **M3.5** | **Migrate prod data + cut EC2 over to `STORAGE=s3` and soak** (added per review — validate the data layer on real data + real traffic before Lambda). Migrate: `s3-migrate.yml` execute. Then set `STORAGE=s3`+bucket envs on EC2, restart. | EC2 (now on S3) | Final `s3-migrate execute` right before flip; app healthy on S3; daily cron writes land in S3; doc upload lands in `anyajob-docs`; soak a few days | Set `STORAGE=fs`, `sync` S3→disk if writes occurred |
 | **M4** | **Lambda + API Gateway in parallel** (`serverless-http` + CDK stack), reads the same S3. **No prod traffic.** | New infra, dark | **`smoke.mjs --compare <EC2-on-s3> <API-GW>`** identical, both on the same live S3 data | Delete stack; nothing user-facing touched |
-| **M5** | **Traffic cutover** — Cloudflare origin → API Gateway; add shared-secret header + Access verify. | Cloudflare | Smoke green vs production hostname; flip-back rehearsed once; error logs clean over a soak window | Point Cloudflare back to EC2 |
+| **M5** | **CI-managed CDK deploys + traffic cutover** — (A) move `cdk deploy` into GitHub Actions via the OIDC role so Lambda deploys from a push (not local); (B) resolve prod auth (Cloudflare can't SigV4-sign the IAM route); (C) flip Cloudflare origin EC2 → API Gateway. See the M5 runbook. | Cloudflare + CI | A: no-op push redeploys green + parity identical. C: smoke green vs prod hostname; browser scoring pass; flip-back rehearsed; logs clean over soak | Point Cloudflare back to EC2 |
 | **M6** | **Cron → EventBridge** (daily/weekly Lambdas; disable EC2 crontab). | New infra | Manually invoke each scheduled Lambda → new listings/summary in S3 + notification fired; confirm no double-run (EC2 crons off) | Re-enable EC2 crons |
 | **M7** | **Decommission EC2** — *stop* first, soak ~1 week, then terminate. | — | Site + crons healthy for a week with EC2 stopped | Start EC2 back up (until terminated) |
 
@@ -336,6 +336,52 @@ gateway anyway).
   is now feature-complete on the same live S3. **M5 remains** (Cloudflare origin
   flip + auth-at-cutover); a full browser UX pass can be done then behind
   Cloudflare, or locally against the real worker beforehand if desired.
+
+## M5 runbook — CI-managed deploys + traffic cutover
+
+Three parts, in this order. Part A lands **before** the flip so the soon-to-be-
+production Lambda is deployed by CI from a git push, never hand-built locally.
+
+### Part A — move CDK deploys into GitHub Actions (per lockstep review)
+Today: push→main deploys **EC2 only** (`deploy.yml`); the **Lambda is deployed
+by local `cdk deploy`** — decoupled from git, so it can silently drift. Fix:
+- New workflow (e.g. `deploy-infra.yml`), `on: push: [main]`, `permissions:
+  id-token: write`. Assume **`anyajob-github-deploy`** (the OIDC role already
+  exists), then `npm ci` → `npm run bundle:lambda` → `cd infra && npm ci &&
+  npx cdk deploy --require-approval never --parameters AnthropicApiKey=$(aws ssm
+  get-parameter --name /anyajob/anthropic-api-key --with-decryption --query
+  Parameter.Value --output text)`.
+- **Expand the OIDC role** (currently S3-rw only): add `sts:AssumeRole` on the
+  CDK bootstrap roles (`cdk-hnb659fds-{deploy,file-publishing,lookup}-role-
+  <acct>-<region>`) — cdk assumes those, so the OIDC role needs nothing broad —
+  plus `ssm:GetParameter` + `kms:Decrypt` (via `ssm.<region>.amazonaws.com`) for
+  the Anthropic param. Codify this in `AnyaJobStack` (it defines the role).
+- **Bundle build in CI is simpler:** the runner is linux-x64, so `npm ci`
+  installs `@napi-rs/canvas-linux-x64-gnu` natively; the build script's tarball
+  fetch becomes a redundant no-op (harmless) and the darwin binary is absent
+  (smaller asset). No Docker.
+- **Sequencing:** run after `npm test`; keep the EC2 `deploy.yml` for now (both
+  fire on push — EC2 + Lambda stay in lockstep). Remove the EC2 deploy at M7.
+- Gate: a no-op push redeploys the stack green; `parity-m4.sh` still identical.
+
+### Part B — resolve the production auth model (Cloudflare can't SigV4-sign)
+The dark route uses `AWS_IAM` (great for the soak — only signed callers). But at
+cutover Cloudflare proxies user requests to the origin and **cannot SigV4-sign**,
+so IAM auth can't stay as-is. Options (decision needed):
+- **Route auth → `NONE`, rely on Cloudflare Access at the edge** (+ optionally a
+  shared-secret header the app checks, so the raw `execute-api` URL isn't openly
+  hittable). Simplest; matches "keep Cloudflare Access" (Key decisions table).
+- **Cloudflare Worker signs** each request with SigV4 — keeps IAM on the route
+  but adds a Worker + credential management. Heavier.
+Recommendation: route `NONE` + Cloudflare Access, plus a shared-secret origin
+header. Update the CDK route auth + the app's header check accordingly.
+
+### Part C — the Cloudflare origin flip
+- Point the Cloudflare hostname/tunnel from EC2 to the API Gateway URL.
+- Gate: `smoke.mjs` green against the **production hostname**; a browser pass of
+  the real scoring modal (now truly end-to-end behind Cloudflare); flip-back
+  rehearsed once; error logs clean over a soak window.
+- Rollback: point Cloudflare back to EC2 (still running, same S3).
 
 ## Testing strategy
 
