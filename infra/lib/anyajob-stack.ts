@@ -21,6 +21,12 @@ export class AnyaJobStack extends cdk.Stack {
     // This bucket is the source of truth, so it must never be auto-deleted:
     // RETAIN keeps it even if the stack is destroyed. Versioning is our backup
     // (replacing the old `aws s3 sync` in scripts/backup.js).
+    // Noncurrent versions are our rollback history; expire them after 30 days
+    // so old/dev versions don't accumulate forever (current versions kept).
+    const noncurrentExpiry: s3.LifecycleRule[] = [
+      { noncurrentVersionExpiration: cdk.Duration.days(30) },
+    ];
+
     const dataBucket = new s3.Bucket(this, "DataBucket", {
       bucketName: "anyajob-data",
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -28,6 +34,7 @@ export class AnyaJobStack extends cdk.Stack {
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
+      lifecycleRules: noncurrentExpiry,
     });
 
     // Uploaded application materials (résumés / cover letters). Binaries keyed
@@ -40,6 +47,7 @@ export class AnyaJobStack extends cdk.Stack {
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
+      lifecycleRules: noncurrentExpiry,
     });
 
     // GitHub Actions OIDC role — lets CI assume a role with no stored keys.

@@ -198,8 +198,8 @@ $cron_marker
 0 11 * * 1,4 cd $REPO_DIR && /usr/bin/flock -n $lock_file $node_bin scripts/discover.js >> $REPO_DIR/discover.log 2>&1
 # Weekly digest Sunday 9am ET (1pm UTC). Skipped if a deploy is active.
 0 13 * * 0 cd $REPO_DIR && /usr/bin/flock -n $lock_file $node_bin scripts/weekly.js >> $REPO_DIR/weekly.log 2>&1
-# Nightly S3 backup at 2am ET (6am UTC). Waits up to 60s for active jobs to finish.
-0 6 * * * cd $REPO_DIR && /usr/bin/flock -w 60 $lock_file $node_bin scripts/backup.js >> $REPO_DIR/backup.log 2>&1
+# (No S3 backup cron: state now lives in S3 with bucket versioning, which is
+# the backup. The old scripts/backup.js synced local data/ to a backup bucket.)
 $cron_end
 EOF
 )
