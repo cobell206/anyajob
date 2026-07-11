@@ -465,10 +465,25 @@ Cloudflare Access stays on `jobs.anyalawgirly.com` throughout (it injects the
 Point Cloudflare `jobs.anyalawgirly.com` back to the EC2 tunnel (still live on
 S3). Optionally revert the route auth JWT → IAM. No data moves.
 
+### C1 = A (API Gateway custom domain + ACM), chosen. Chunking:
+- **C-1:** CDK adds an **ACM cert** for `jobs.anyalawgirly.com` (DNS-validated).
+  Deploy → CDK/ACM emits a validation CNAME → **add it to Cloudflare DNS by
+  hand** → wait for `ISSUED`. (DNS is on Cloudflare, not Route53, so validation
+  is manual. Do cert-first so the blocking wait isn't tangled with the domain.)
+- **C-2:** CDK adds the **custom domain + API mapping** (needs the ISSUED cert) +
+  the **JWT authorizer** (swap from IAM) + the **asset cache-stamp fix** in the
+  bundle build. Deploy via CI. Lambda now requires an Access JWT (still dark).
+- **C-3:** **The flip** — in Cloudflare DNS, point `jobs.anyalawgirly.com` at the
+  custom domain's regional target (proxied, Access stays on). Validate in a
+  browser end-to-end (Access → app → listings → scoring), soak, watch logs.
+  Rollback = repoint the CNAME back to the EC2 tunnel.
+- Ideally rehearse C-3 on `jobs-test.anyalawgirly.com` first (own cert/mapping)
+  before flipping the real hostname.
+
 ### Open items to confirm at execution
-- C1 choice (needs the account's Cloudflare plan for option C).
-- JWT authorizer accepts the raw `Cf-Access-Jwt-Assertion` value.
+- JWT authorizer accepts the raw `Cf-Access-Jwt-Assertion` value (no `Bearer`).
 - A Cloudflare Access **service token** for automated `smoke.mjs` post-flip.
+- Cloudflare SSL mode = **Full (strict)** so it trusts the ACM cert on origin.
 
 ## Testing strategy
 
