@@ -71,6 +71,31 @@ export class AnyaJobStack extends cdk.Stack {
     dataBucket.grantReadWrite(deployRole);
     docsBucket.grantReadWrite(deployRole);
 
+    // EC2 app role: the instance currently has NO credentials, so it can't run
+    // on the S3 backend. Attach this (S3 on both buckets + SES for the existing
+    // email) so EC2 can be flipped to STORAGE=s3 — running production on S3
+    // before Lambda (M3.5). Associate with the instance:
+    //   aws ec2 associate-iam-instance-profile \
+    //     --instance-id i-0fb0c9e04b10c9993 \
+    //     --iam-instance-profile Name=anyajob-ec2-app
+    const ec2Role = new iam.Role(this, "Ec2AppRole", {
+      roleName: "anyajob-ec2-app",
+      assumedBy: new iam.ServicePrincipal("ec2.amazonaws.com"),
+    });
+    dataBucket.grantReadWrite(ec2Role);
+    docsBucket.grantReadWrite(ec2Role);
+    ec2Role.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["ses:SendEmail", "ses:SendRawEmail"],
+        resources: ["*"],
+      }),
+    );
+    const ec2Profile = new iam.CfnInstanceProfile(this, "Ec2AppProfile", {
+      instanceProfileName: "anyajob-ec2-app",
+      roles: [ec2Role.roleName],
+    });
+
+    new cdk.CfnOutput(this, "Ec2InstanceProfile", { value: ec2Profile.ref });
     new cdk.CfnOutput(this, "DataBucketName", { value: dataBucket.bucketName });
     new cdk.CfnOutput(this, "DocsBucketName", { value: docsBucket.bucketName });
     new cdk.CfnOutput(this, "DeployRoleArn", { value: deployRole.roleArn });

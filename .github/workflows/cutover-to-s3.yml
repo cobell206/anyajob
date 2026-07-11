@@ -1,0 +1,78 @@
+name: Cut EC2 over to S3 (or back) — M3.5
+
+# Runs production on the S3 backend (or rolls back to fs). Requires the
+# anyajob-ec2-app instance profile to be attached first, so EC2 has creds.
+#   s3: final data sync -> set STORAGE=s3 -> restart -> verify healthy on S3
+#   fs: set STORAGE=fs -> restart (rollback; sync S3->disk manually if needed)
+# Uses the instance-role creds now on EC2 (no OIDC needed). See
+# SERVERLESS-TRANSITION.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: "s3 (cut over) or fs (roll back)"
+        type: choice
+        options: [s3, fs]
+        default: s3
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  cutover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Cut over on EC2
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
+          REPO_PATH: ${{ secrets.REPO_PATH }}
+          BACKEND: ${{ inputs.backend }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" bash -se <<EOF
+            set -euo pipefail
+            cd "$REPO_PATH"
+            git fetch --quiet origin main
+            git checkout origin/main -- scripts/migrate-to-s3.mjs scripts/set-storage.sh
+
+            echo "=== confirm EC2 now has creds (instance role) ==="
+            node -e "import('@aws-sdk/client-sts').then(()=>{}).catch(()=>{}); import('@aws-sdk/client-s3').then(async ({S3Client,ListObjectsV2Command})=>{const c=new S3Client({region:'us-east-1'});await c.send(new ListObjectsV2Command({Bucket:'anyajob-data',MaxKeys:1}));console.log('EC2 can reach S3: OK');}).catch(e=>{console.log('EC2 S3 access FAILED:',e.name);process.exit(1);})"
+
+            if [ "$BACKEND" = "s3" ]; then
+              echo "=== final data sync (catch drift since migration) ==="
+              node scripts/migrate-to-s3.mjs execute
+            fi
+
+            echo "=== set storage backend: $BACKEND ==="
+            bash scripts/set-storage.sh "$BACKEND"
+
+            echo "=== restart service ==="
+            sudo systemctl restart anyajob
+            sleep 3
+            if systemctl is-active --quiet anyajob; then
+              echo "service active"
+            else
+              echo "SERVICE DOWN"; journalctl -u anyajob -n 40 --no-pager; exit 1
+            fi
+
+            echo "=== verify: which backend did the app select? (log line) ==="
+            journalctl -u anyajob -n 40 --no-pager | grep -iE "store|storage|listening" | tail -5 || true
+          EOF
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
