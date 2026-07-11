@@ -28,7 +28,7 @@ const log = createLogger('discover-cron');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DISCOVERIES_PATH = join(__dirname, '..', 'data', 'discoveries.json');
 
-async function main() {
+export async function main() {
   log.info('discovery run starting');
 
   let result;
@@ -48,7 +48,7 @@ async function main() {
         { at: new Date().toISOString(), error: err.message },
       ],
     });
-    process.exit(1);
+    throw err; // rethrow (was process.exit(1)) so the Lambda invocation fails cleanly
   }
 
   const persisted = await persistDiscoveryResult(result);
@@ -66,7 +66,11 @@ async function main() {
   );
 }
 
-main().catch((err) => {
-  log.fatal({ err }, 'discovery cron failed');
-  process.exit(1);
-});
+// Run only when invoked directly; imported by the cron Lambda otherwise.
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+if (isMain) {
+  main().catch((err) => {
+    log.fatal({ err }, 'discovery cron failed');
+    process.exit(1);
+  });
+}

@@ -591,6 +591,19 @@ chronically bumping the cap (workload grows as discovery adds sources).
 - **Rollback:** re-enable the EC2 crontab (setup.sh block) + disable the
   schedules. EC2 still fully capable on S3.
 
+### M6 progress
+- 2026-07-11 — **M6-1 done (refactor + dispatcher).** `daily.js`,
+  `discover.js`, `weekly.js`: `export async function main()` + a run-if-main
+  guard (`process.argv[1] === fileURLToPath(import.meta.url)`) so `node <file>`
+  still runs on EC2/local but importing doesn't auto-run; `discover.js`'s in-
+  `main` `process.exit(1)` → `throw` (would've hard-killed the Lambda). New
+  `src/cron.js` handler dispatches `{job}` → the right `main()` (lazy import;
+  errors propagate for the alarm). `build-lambda-bundle.sh` now ships `scripts/`.
+  Verified: all three export `main`, importing triggers **no auto-run** (guard
+  holds), unknown job throws, bundle contains all job files, suite green. Deploys
+  via CI (web/worker unaffected; EC2 crons still run directly). Next: M6-2 (cron
+  Lambda + schedules + alarm).
+
 ## Testing strategy
 
 Every migration is gated by **(a) the unit suite green** (`npm test`) **plus

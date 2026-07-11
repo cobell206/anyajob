@@ -75,7 +75,7 @@ function applyPreFilters(listings, prefs) {
   });
 }
 
-async function main() {
+export async function main() {
   const startedAt = new Date().toISOString();
   log.info({ startedAt }, 'daily run starting');
 
@@ -277,7 +277,13 @@ async function main() {
   log.info({ finishedAt: new Date().toISOString() }, 'daily run done');
 }
 
-main().catch((err) => {
-  log.fatal({ err }, 'daily run failed');
-  process.exit(1);
-});
+// Only run when invoked directly (`node src/daily.js` on EC2/local). When the
+// cron Lambda (src/cron.js) imports main(), it drives it and handles errors —
+// so this must NOT auto-run or process.exit inside Lambda.
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+if (isMain) {
+  main().catch((err) => {
+    log.fatal({ err }, 'daily run failed');
+    process.exit(1);
+  });
+}

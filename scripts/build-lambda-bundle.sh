@@ -25,7 +25,9 @@ log() { printf '\033[1;34m▸\033[0m %s\n' "$*"; }
 log "Staging runtime files → $OUT"
 rm -rf "$OUT"
 mkdir -p "$OUT"
-cp -R "$ROOT/src" "$ROOT/public" "$OUT/"
+# src + public for the web/worker Lambdas; scripts/ too so the cron Lambda's
+# discover.js / weekly.js ship (M6). daily.js is under src/.
+cp -R "$ROOT/src" "$ROOT/public" "$ROOT/scripts" "$OUT/"
 cp "$ROOT/package.json" "$ROOT/package-lock.json" "$OUT/"
 
 log "Installing production dependencies (npm ci --omit=dev)"

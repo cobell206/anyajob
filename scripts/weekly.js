@@ -32,7 +32,7 @@ function weekRange() {
   return `${fmt(start)} – ${fmt(end)}`;
 }
 
-async function main() {
+export async function main() {
   const prefs = await readJson('preferences.json');
   if (prefs.notifications?.weeklyEmail === false) {
     log.info('weekly emails disabled, exiting');
@@ -105,7 +105,11 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  log.fatal({ err }, 'weekly send failed');
-  process.exit(1);
-});
+// Run only when invoked directly; imported by the cron Lambda otherwise.
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+if (isMain) {
+  main().catch((err) => {
+    log.fatal({ err }, 'weekly send failed');
+    process.exit(1);
+  });
+}
