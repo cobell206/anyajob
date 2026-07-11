@@ -176,3 +176,6 @@ CI deploy).
   files cleaned. Left a NOTE in registry.js: first-run seed uses `existsSync` →
   M1 swaps to `store.exists`. `STORAGE` env selects backend; unset ⇒ fs, so
   dev is unchanged.
+- 2026-07-11 — M0 merged to main (7137d73) and **deployed to EC2** via CI
+  (tests green, SSH deploy 9s). Running in production on the fs backend, still
+  reading the same data/ files. M1 (S3 backend behind STORAGE=s3) is next.
