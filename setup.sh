@@ -192,14 +192,10 @@ install_cron() {
   local new_block
   new_block=$(cat <<EOF
 $cron_marker
-# Daily scrape + morning email at 6am ET (10am UTC). Skipped if a deploy is active.
-0 10 * * * cd $REPO_DIR && /usr/bin/flock -n $lock_file $node_bin src/daily.js >> $REPO_DIR/daily.log 2>&1
-# Discovery: find new sources Mon + Thu at 7am ET (11am UTC). Skipped if a deploy is active.
-0 11 * * 1,4 cd $REPO_DIR && /usr/bin/flock -n $lock_file $node_bin scripts/discover.js >> $REPO_DIR/discover.log 2>&1
-# Weekly digest Sunday 9am ET (1pm UTC). Skipped if a deploy is active.
-0 13 * * 0 cd $REPO_DIR && /usr/bin/flock -n $lock_file $node_bin scripts/weekly.js >> $REPO_DIR/weekly.log 2>&1
-# (No S3 backup cron: state now lives in S3 with bucket versioning, which is
-# the backup. The old scripts/backup.js synced local data/ to a backup bucket.)
+# Scheduling moved to AWS EventBridge Scheduler -> the anyajob-cron Lambda
+# (M6, see SERVERLESS-TRANSITION.md): daily 6am ET, discovery Mon/Thu 7am ET.
+# No scheduled jobs run on this host anymore (and no S3 backup cron: state lives
+# in S3 with bucket versioning). This block is intentionally empty.
 $cron_end
 EOF
 )

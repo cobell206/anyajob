@@ -1,0 +1,53 @@
+name: Disable EC2 cron block (one-shot)
+
+# M6-3 — remove the anyajob managed crontab block (daily/discover/weekly) from
+# EC2 now that those run on EventBridge → the cron Lambda. Run in the same step
+# the schedules go ENABLED so nothing double-runs. After this, EC2 does no
+# scheduled work (→ M7 stops it). See SERVERLESS-TRANSITION.md.
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  disable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Remove anyajob cron block
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" bash -se <<'EOF'
+            set -uo pipefail
+            echo "=== crontab before ==="
+            crontab -l 2>/dev/null | grep -nE "daily.js|discover.js|weekly.js" || echo "(no managed jobs)"
+            # Delete the whole managed block between the markers.
+            crontab -l 2>/dev/null \
+              | sed '/>>> anyajob managed entries >>>/,/<<< anyajob managed entries <<</d' \
+              | crontab -
+            echo "=== crontab after (daily/discover/weekly should be gone) ==="
+            crontab -l 2>/dev/null | grep -nE "daily.js|discover.js|weekly.js" || echo "(none — removed)"
+            if crontab -l 2>/dev/null | grep -qE "daily.js|discover.js|weekly.js"; then
+              echo "FAIL: managed cron entries still present"; exit 1
+            fi
+            echo "OK: EC2 cron block removed — scheduled work now runs on EventBridge"
+          EOF
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

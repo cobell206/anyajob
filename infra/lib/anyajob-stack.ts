@@ -328,12 +328,11 @@ export class AnyaJobStack extends cdk.Stack {
       assumedBy: new iam.ServicePrincipal("scheduler.amazonaws.com"),
     });
     cronFn.grantInvoke(schedulerRole);
-    // Deploy DISABLED — the EC2 crontab is still live until M6-3, so enabling
-    // now would double-run. M6-3 flips these to ENABLED as it removes the EC2
-    // crons (change this to "ENABLED" then).
+    // ENABLED as of M6-3 (the EC2 crontab was removed in the same step, so no
+    // double-run). See disable-ec2-crons.yml.
     const schedule = (id: string, expr: string, job: string) =>
       new scheduler.CfnSchedule(this, id, {
-        state: "DISABLED",
+        state: "ENABLED",
         flexibleTimeWindow: { mode: "OFF" },
         scheduleExpression: expr,
         scheduleExpressionTimezone: "America/New_York",

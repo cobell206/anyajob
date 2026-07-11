@@ -628,6 +628,19 @@ chronically bumping the cap (workload grows as discovery adds sources).
   `[]` in S3 so daily skips email cleanly (no SES error / alarm noise). The
   `weekly` dispatch stays in `cron.js` for easy re-enable.
 
+- 2026-07-11 — **daily validated in the Lambda; M6-2 complete.** Async-invoked
+  `daily`: scraped **192** raw → 42 deduped → 30 scored via Claude ($0.21),
+  **morning email skipped cleanly** ("no recipients" — the prefs fix; no SES
+  error), `daily run done` in ~7 min (< 15-min cap). Full cron pipeline proven
+  on the Lambda.
+- 2026-07-11 — **M6-3 — schedules ENABLED + EC2 crontab removed. M6 COMPLETE.**
+  Flipped the daily/discover CfnSchedules to `ENABLED` (CI deploy) and ran
+  `disable-ec2-crons.yml` to delete the anyajob managed crontab block on EC2;
+  `setup.sh`'s cron block emptied (notes EventBridge). No double-run window
+  (flipped mid-afternoon; crons fire 6/7am ET). **EC2 now runs no scheduled work
+  and serves no traffic — it does nothing.** Rollback: re-add the crontab block +
+  set schedules DISABLED. Remaining: **M7** (stop EC2, soak ~1 week, terminate).
+
 ## Testing strategy
 
 Every migration is gated by **(a) the unit suite green** (`npm test`) **plus
