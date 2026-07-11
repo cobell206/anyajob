@@ -494,6 +494,18 @@ S3). Optionally revert the route auth JWT → IAM. No data moves.
   (no hang). Cert ARN
   `arn:aws:acm:us-east-1:378962034618:certificate/180feb7f-a742-4c80-ba95-4fa972974238`.
   Next: C-2 (custom domain + mapping + JWT authorizer swap + asset cache-stamp).
+- 2026-07-11 — **C-2 built.** CDK: swapped the route authorizer IAM →
+  `HttpJwtAuthorizer` (issuer = Access team domain, audience = the AUD,
+  identitySource = `$request.header.Cf-Access-Jwt-Assertion`); added
+  `ApiDomain` (custom domain `jobs.anyalawgirly.com` on the C-1 cert) +
+  `ApiMapping` to the $default stage; output `WebApiRegionalDomain` (the
+  `d-xxx.execute-api…` target Cloudflare will CNAME to at C-3).
+  `build-lambda-bundle.sh` now stamps the commit SHA into `__CACHE_VERSION__`
+  (perl, mac/linux-portable) so the Lambda serves production/immutable assets
+  instead of dev-mode `no-cache`. Synth confirms JWT route auth + custom domain +
+  mapping; rebuilt bundle has no `__CACHE_VERSION__` left. Deploying via CI; the
+  dark Lambda now requires an Access JWT (SigV4 parity no longer applies — that's
+  expected), validated by config + a negative (401) check, positive test at C-3.
 
 ## Testing strategy
 

@@ -5,7 +5,7 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
-import { HttpIamAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
+import { HttpJwtAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
 import { fileURLToPath } from "node:url";
 import * as path from "node:path";
 import type { Construct } from "constructs";
@@ -228,15 +228,30 @@ export class AnyaJobStack extends cdk.Stack {
     // Let the web Lambda async-invoke the scoring worker.
     scoringWorkerFn.grantInvoke(webFn);
 
-    // HTTP API with AWS_IAM auth on every route (decision D1): only SigV4-signed
-    // callers with execute-api:Invoke reach the Lambda during the dark soak, so
-    // the raw endpoint never serves the résumé to an anonymous URL.
-    // scripts/smoke.mjs signs automatically. Cloudflare fronts this at M5 — that
-    // flip revisits the auth model (Cloudflare can't SigV4-sign).
+    // M5 Part C — auth is now Cloudflare Access (replacing the dark-soak AWS_IAM
+    // authorizer). Cloudflare Access injects a signed Cf-Access-Jwt-Assertion
+    // header; the gateway validates it against the Access team domain (issuer)
+    // and this app's AUD. A request straight to the execute-api URL (no Access
+    // JWT) gets 401 at the gateway — zero app code, and it locks the origin to
+    // "came through Access". (Cloudflare can't SigV4-sign, which is why IAM auth
+    // couldn't stay once Cloudflare fronts the origin.)
+    const accessAuthorizer = new HttpJwtAuthorizer(
+      "AccessJwtAuthorizer",
+      "https://anyalawgirly.cloudflareaccess.com",
+      {
+        authorizerName: "cloudflare-access",
+        jwtAudience: [
+          "462fb46b785402e6f15358091d1087cee76b8c319132ccc85c2a58823e12f189",
+        ],
+        // Cloudflare puts the JWT here (not Authorization), raw (no "Bearer ").
+        identitySource: ["$request.header.Cf-Access-Jwt-Assertion"],
+      },
+    );
+
     const httpApi = new apigwv2.HttpApi(this, "WebApi", {
       apiName: "anyajob-web",
       defaultIntegration: new HttpLambdaIntegration("WebFnIntegration", webFn),
-      defaultAuthorizer: new HttpIamAuthorizer(),
+      defaultAuthorizer: accessAuthorizer,
     });
 
     // Cap runaway Anthropic/S3 spend from a stuck client or abuse (the reason we
@@ -258,6 +273,22 @@ export class AnyaJobStack extends cdk.Stack {
       validation: acm.CertificateValidation.fromDns(),
     });
     new cdk.CfnOutput(this, "SiteCertArn", { value: siteCert.certificateArn });
+
+    // C-2 — API Gateway custom domain that Cloudflare proxies to. At the C-3
+    // flip, Cloudflare CNAMEs jobs.anyalawgirly.com -> this regional target
+    // (WebApiRegionalDomain output), proxied, with Access still in front.
+    const apiDomain = new apigwv2.DomainName(this, "ApiDomain", {
+      domainName: "jobs.anyalawgirly.com",
+      certificate: siteCert,
+    });
+    new apigwv2.ApiMapping(this, "ApiMapping", {
+      api: httpApi,
+      domainName: apiDomain,
+      stage: httpApi.defaultStage!,
+    });
+    new cdk.CfnOutput(this, "WebApiRegionalDomain", {
+      value: apiDomain.regionalDomainName,
+    });
 
     new cdk.CfnOutput(this, "Ec2InstanceProfile", { value: ec2Profile.ref });
     new cdk.CfnOutput(this, "DataBucketName", { value: dataBucket.bucketName });

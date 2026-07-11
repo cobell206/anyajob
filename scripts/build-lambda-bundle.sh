@@ -50,5 +50,15 @@ fi
 # pdfjs copy). ~60 MB saved, keeps the asset well under Lambda's 250 MB.
 rm -rf "$OUT/node_modules/pdfjs-dist"
 
+# Stamp the commit SHA into __CACHE_VERSION__ so the Lambda serves production
+# (immutable, Cloudflare-cacheable) assets instead of falling into server.js's
+# dev-mode request-time substitution (which serves everything no-cache — a
+# Lambda hit per asset). Mirrors the EC2 deploy (deploy.yml). perl (not sed) for
+# mac/linux portability.
+COMMIT_SHA="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo lambda)"
+log "Stamping cache version '$COMMIT_SHA' into public assets"
+find "$OUT/public" -name '*.html' -print0 | xargs -0 perl -i -pe "s/__CACHE_VERSION__/${COMMIT_SHA}/g"
+find "$OUT/public" -name '*.js' -print0 | xargs -0 perl -i -pe "s|from '(\.+/[^'?]*\.js)[^']*'|from '\${1}?v=${COMMIT_SHA}'|g"
+
 SIZE="$(du -sh "$OUT" | cut -f1)"
 log "Bundle ready: $OUT ($SIZE unpacked)"
