@@ -1,0 +1,77 @@
+name: Deploy infra (CDK)
+
+# M5 Part A — deploy the AWS stack (Lambda + API Gateway + buckets/roles) from a
+# push, so the Lambda stays in lockstep with git instead of being hand-deployed
+# from a laptop. Runs alongside "Deploy to EC2" (deploy.yml); both fire on push
+# to main. The EC2 workflow goes away at M7, this one stays.
+#
+# Auth: OIDC into the anyajob-github-deploy role (no stored keys). That role can
+# assume the CDK bootstrap roles and read the Anthropic key SSM param — see
+# AnyaJobStack. cdk does the real work through the bootstrap roles.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'DEPLOY.md'
+      - 'GITHUB.md'
+      - '*.md'
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # OIDC
+  contents: read
+
+concurrency:
+  group: deploy-infra
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20' # matches the Lambda/EC2 runtime
+          cache: 'npm'
+      - run: npm ci
+      - run: npm test
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      # Node 24: infra/bin/infra.ts runs via node type-stripping, which needs
+      # node >=22 (the runtime Lambdas are still nodejs20 — build node != run node
+      # is fine; @napi-rs/canvas is napi/ABI-stable).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::378962034618:role/anyajob-github-deploy
+          aws-region: us-east-1
+
+      - name: Build Lambda asset
+        # Self-contained: the script does its own `npm ci --omit=dev` in a
+        # staging dir and fetches the linux @napi-rs/canvas prebuilt. On a linux
+        # runner npm installs it natively too, so the fetch is a harmless no-op.
+        run: npm run bundle:lambda
+
+      - name: cdk deploy
+        run: |
+          KEY=$(aws ssm get-parameter --name /anyajob/anthropic-api-key \
+            --with-decryption --region us-east-1 --query Parameter.Value --output text)
+          echo "::add-mask::$KEY"
+          cd infra
+          npm ci
+          npx cdk deploy --require-approval never --parameters AnthropicApiKey="$KEY"

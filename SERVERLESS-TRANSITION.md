@@ -392,6 +392,16 @@ header. Update the CDK route auth + the app's header check accordingly.
   `ssm.us-east-1.amazonaws.com`) to read the key at deploy. Synth confirms.
   Applied by a **local `cdk deploy`** first (the role is defined in the stack it
   will later deploy — chicken-and-egg), then A2 adds the CI workflow.
+- 2026-07-11 — **A1 applied** via local `cdk deploy` (26 s, deploy-role policy
+  only). Role now carries the assume-role + SSM perms.
+- 2026-07-11 — **A2 (`deploy-infra.yml`) written.** On push to main (non-doc):
+  `test` job (node 20, `npm ci` + `npm test`) → `deploy` job (node **24** for
+  `bin/infra.ts` type-stripping) that OIDC-assumes `anyajob-github-deploy`,
+  `npm run bundle:lambda`, reads the SSM key (masked), `cd infra && npm ci &&
+  npx cdk deploy --parameters AnthropicApiKey=…`. `aws-cdk` CLI is already an
+  infra devDep; the linux runner installs canvas natively. Separate concurrency
+  group from the EC2 deploy so both run in parallel; EC2 workflow retires at M7.
+  Pushed together with A1 — this push is the first CI-driven `cdk deploy`.
 
 ## Testing strategy
 
