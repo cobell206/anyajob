@@ -410,6 +410,66 @@ header. Update the CDK route auth + the app's header check accordingly.
   Part B (prod auth model — Cloudflare can't SigV4-sign the IAM route) then
   Part C (Cloudflare origin flip EC2 → API Gateway).
 
+## M5 Part C runbook — coordinated auth-swap + origin flip
+
+The production cutover. Put Cloudflare in front of the API Gateway and swap the
+route auth IAM → JWT (Cloudflare Access) in one coordinated move. EC2 stays up on
+S3 the whole time, so rollback is a Cloudflare route change.
+
+**Locked config (Part B):** issuer `https://anyalawgirly.cloudflareaccess.com`,
+audience `462fb46b785402e6f15358091d1087cee76b8c319132ccc85c2a58823e12f189`,
+identity source `$request.header.Cf-Access-Jwt-Assertion`.
+
+### Decision C1 — how Cloudflare reaches the API Gateway
+The `execute-api` URL is public and API Gateway's default endpoint only answers to
+its own host, so Cloudflare needs a way to forward `jobs.anyalawgirly.com` to it.
+- **A. API Gateway custom domain + ACM cert + proxied CNAME.** Most standard,
+  AWS side stays in CDK (`apigwv2.DomainName` + mapping). One-time manual bits:
+  ACM cert DNS-validated via a Cloudflare CNAME, and the routing CNAME. Works on
+  any Cloudflare plan.
+- **B. Cloudflare Worker proxies to the `execute-api` URL.** ~10 lines
+  (`fetch` with hostname rewritten, headers forwarded incl. the Access JWT). No
+  ACM/custom-domain/Host-SNI fuss — lowest flop risk on the connection — but the
+  Worker is Cloudflare-side code (version it in the repo).
+- **C. Proxied CNAME + Cloudflare Origin Rule** overriding Host+SNI to the
+  `execute-api` host. Simplest if available, but Host/SNI override may be
+  plan-gated — confirm the account's Cloudflare plan first.
+Cloudflare Access stays on `jobs.anyalawgirly.com` throughout (it injects the
+`Cf-Access-Jwt-Assertion` header the JWT authorizer validates).
+
+### Steps
+1. **CDK — JWT authorizer** (`HttpJwtAuthorizer`): issuer/audience/identitySource
+   above, replacing `HttpIamAuthorizer` as the route's default authorizer. Plus
+   the custom domain if C1=A. (Verify the authorizer accepts the *raw* token from
+   `Cf-Access-Jwt-Assertion` — Cloudflare sends no `Bearer` prefix.)
+2. **Fix asset cache-stamping** (prereq): `deploy.yml` seds the commit SHA into
+   `__CACHE_VERSION__` on EC2, but the Lambda bundle ships the placeholder
+   unstamped → `server.js` falls into its dev-mode request-time substitution, so
+   the Lambda serves assets `no-cache` (every asset = a Lambda hit). Stamp the
+   SHA in `build-lambda-bundle.sh` so the Lambda serves immutable, Cloudflare-
+   cacheable assets. Do this before real traffic.
+3. **Validate on a staging hostname first** (e.g. `jobs-test.anyalawgirly.com`
+   under the same Access app): full chain browser → Access login → JWT authorizer
+   → Lambda → real listings + a scoring run. Proves the auth path before touching
+   prod DNS.
+4. **Flip:** deploy JWT auth (CI `cdk deploy`), then point Cloudflare
+   `jobs.anyalawgirly.com` at the API Gateway. Order: JWT auth first (Lambda then
+   requires the Access JWT — still dark/unreachable, fine), then the Cloudflare
+   route (starts supplying JWTs → live).
+5. **Validate prod:** browser through `jobs.anyalawgirly.com` (Access → app loads,
+   listings, scoring end-to-end). `smoke.mjs` now needs an Access **service
+   token** (or run via browser) since SigV4 no longer applies. Soak; watch
+   Lambda + API Gateway logs.
+
+### Rollback
+Point Cloudflare `jobs.anyalawgirly.com` back to the EC2 tunnel (still live on
+S3). Optionally revert the route auth JWT → IAM. No data moves.
+
+### Open items to confirm at execution
+- C1 choice (needs the account's Cloudflare plan for option C).
+- JWT authorizer accepts the raw `Cf-Access-Jwt-Assertion` value.
+- A Cloudflare Access **service token** for automated `smoke.mjs` post-flip.
+
 ## Testing strategy
 
 Every migration is gated by **(a) the unit suite green** (`npm test`) **plus
