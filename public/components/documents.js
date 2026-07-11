@@ -593,13 +593,15 @@ function setZoom(container, z) {
     scale.style.height = `${clamped * viewportH}px`;
   } else {
     // Zoom out (<100%): keep the wrapper filling the viewport and scale it
-    // down in place, so the PDF shrinks (centered, top-anchored) instead of
-    // the iframe collapsing into a small box in the corner. Transform is
-    // visual-only, so no scrollbars appear below 100%.
+    // down about the viewport's center, so the smaller PDF sits centered in
+    // the middle (both axes) instead of collapsing into a corner or pinning
+    // to the top. Transform is visual-only, so no scrollbars appear below 100%.
     scale.style.width = '100%';
     scale.style.height = `${viewportH}px`;
-    scale.style.transformOrigin = 'top center';
+    scale.style.transformOrigin = 'center center';
     scale.style.transform = `scale(${clamped})`;
+    // A prior zoom-in may have left the viewport scrolled; recenter it.
+    if (viewport) { viewport.scrollTop = 0; viewport.scrollLeft = 0; }
   }
   if (label) label.textContent = `${Math.round(clamped * 100)}%`;
 }
