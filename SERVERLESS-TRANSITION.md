@@ -540,13 +540,15 @@ then stop it). EC2 stays as rollback until validated.
 - `scripts/discover.js` — Mon/Thu 7am ET: find new sources
 - `scripts/weekly.js` — Sun 9am ET: digest email
 
-### C-0 (do FIRST — the make-or-break unknown)
-**Measure `daily.js` runtime.** Lambda's hard ceiling is **15 min**; the daily
-scrape hits many sources + Claude. Check recent durations in EC2's `daily.log`.
-- Comfortably < ~12 min → a plain scheduled Lambda works (the plan below).
-- Near/over 15 min → this is M6's "30 s-cap moment": the scrape must be split
-  (per-source fan-out via Step Functions / an SQS queue) or run on Fargate.
-  Decide before building. (discover/weekly are short — not at risk.)
+### C-0 — DONE (measured; decision made)
+Pulled 60 runs from EC2's `daily.log` (`check-daily-runtime.yml`): **avg ~2.8 min,
+last 10 all 2.3–4.4 min, but MAX 12.8 min (766s)** — one heavy day came within
+~2 min of the 15-min cap. **Decision (user): plain scheduled Lambda (900 s) for
+all three jobs + a CloudWatch alarm** on daily duration/errors — the app already
+treats a missed daily as recoverable (atomic S3 writes, next run reconciles; the
+cron comment says so), so a rare timeout is a self-healing missed daily, not
+corruption. **Fargate is the escape hatch** only if the alarm shows daily
+chronically bumping the cap (workload grows as discovery adds sources).
 
 ### Design (assuming C-0 is fine)
 - **One `anyajob-cron` Lambda**, same code asset, handler `src/cron.js` that
@@ -573,8 +575,9 @@ scrape hits many sources + Claude. Check recent durations in EC2's `daily.log`.
 ### Chunking
 - **M6-1:** refactor the 3 jobs (export/guard) + `src/cron.js` dispatcher +
   bundle includes `scripts/`. Test each `main()` locally against S3. Push (CI).
-- **M6-2:** CDK — `anyajob-cron` Lambda + 3 EventBridge schedules + scheduler
-  role. Deploy (CI). **Manually invoke** each job (`aws lambda invoke` with the
+- **M6-2:** CDK — `anyajob-cron` Lambda (900 s) + 3 EventBridge schedules +
+  scheduler role + a **CloudWatch alarm** (daily duration approaching the cap /
+  errors). Deploy (CI). **Manually invoke** each job (`aws lambda invoke` with the
   payload) → verify S3 writes + a morning/digest email actually arrives.
 - **M6-3:** cutover — once manual invokes pass, disable the EC2 crontab (one-shot
   workflow like `disable-backup-cron.yml`) so jobs don't double-run. Confirm the
