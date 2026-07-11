@@ -4,6 +4,11 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
+import * as scheduler from "aws-cdk-lib/aws-scheduler";
+import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
+import * as cwactions from "aws-cdk-lib/aws-cloudwatch-actions";
+import * as sns from "aws-cdk-lib/aws-sns";
+import * as snsSubs from "aws-cdk-lib/aws-sns-subscriptions";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { HttpJwtAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
 import { fileURLToPath } from "node:url";
@@ -289,6 +294,90 @@ export class AnyaJobStack extends cdk.Stack {
     new cdk.CfnOutput(this, "WebApiRegionalDomain", {
       value: apiDomain.regionalDomainName,
     });
+
+    // ---- M6: scheduled cron Lambda (daily / discover / weekly) ----
+    // Replaces the EC2 crontab. One function off the same asset; three
+    // EventBridge schedules pass { job } (see src/cron.js). 900 s timeout (daily's
+    // worst run was ~12.8 min), 1024 MB for the scrape+score. Same env as the web
+    // path plus the Greenhouse source list (USAJobs/Lever aren't configured).
+    const cronFn = new lambda.Function(this, "CronFn", {
+      functionName: "anyajob-cron",
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.X86_64,
+      handler: "src/cron.handler",
+      code: appAsset,
+      timeout: cdk.Duration.seconds(900),
+      memorySize: 1024,
+      environment: {
+        ...commonEnv,
+        GREENHOUSE_BOARDS: "cravath,davispolk,sullcrom",
+      },
+    });
+    dataBucket.grantReadWrite(cronFn);
+    docsBucket.grantReadWrite(cronFn);
+    cronFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ses:SendEmail", "ses:SendRawEmail"],
+        resources: ["*"],
+      }),
+    );
+
+    // EventBridge Scheduler → cron Lambda. Timezone America/New_York fixes the
+    // old UTC crons' DST drift (they'd shift an hour twice a year).
+    const schedulerRole = new iam.Role(this, "CronSchedulerRole", {
+      assumedBy: new iam.ServicePrincipal("scheduler.amazonaws.com"),
+    });
+    cronFn.grantInvoke(schedulerRole);
+    // Deploy DISABLED — the EC2 crontab is still live until M6-3, so enabling
+    // now would double-run. M6-3 flips these to ENABLED as it removes the EC2
+    // crons (change this to "ENABLED" then).
+    const schedule = (id: string, expr: string, job: string) =>
+      new scheduler.CfnSchedule(this, id, {
+        state: "DISABLED",
+        flexibleTimeWindow: { mode: "OFF" },
+        scheduleExpression: expr,
+        scheduleExpressionTimezone: "America/New_York",
+        target: {
+          arn: cronFn.functionArn,
+          roleArn: schedulerRole.roleArn,
+          input: JSON.stringify({ job }),
+        },
+      });
+    schedule("CronDaily", "cron(0 6 * * ? *)", "daily"); // 6am ET daily
+    schedule("CronDiscover", "cron(0 7 ? * MON,THU *)", "discover"); // 7am ET Mon/Thu
+    schedule("CronWeekly", "cron(0 9 ? * SUN *)", "weekly"); // 9am ET Sunday
+
+    // Alarm (→ email) if the cron errors or a run nears the 15-min cap — that's
+    // the signal daily has outgrown Lambda and should move to Fargate.
+    const cronAlarms = new sns.Topic(this, "CronAlarmTopic", {
+      topicName: "anyajob-cron-alarms",
+    });
+    cronAlarms.addSubscription(new snsSubs.EmailSubscription("cobell206@gmail.com"));
+    const alarmAction = new cwactions.SnsAction(cronAlarms);
+    const cronErrors = new cloudwatch.Alarm(this, "CronErrorsAlarm", {
+      alarmName: "anyajob-cron-errors",
+      metric: cronFn.metricErrors({ period: cdk.Duration.days(1) }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator:
+        cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    cronErrors.addAlarmAction(alarmAction);
+    const cronDuration = new cloudwatch.Alarm(this, "CronDurationAlarm", {
+      alarmName: "anyajob-cron-duration-near-cap",
+      metric: cronFn.metricDuration({
+        period: cdk.Duration.days(1),
+        statistic: "Maximum",
+      }),
+      threshold: cdk.Duration.minutes(13).toMilliseconds(),
+      evaluationPeriods: 1,
+      comparisonOperator:
+        cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    cronDuration.addAlarmAction(alarmAction);
+    new cdk.CfnOutput(this, "CronFnName", { value: cronFn.functionName });
 
     new cdk.CfnOutput(this, "Ec2InstanceProfile", { value: ec2Profile.ref });
     new cdk.CfnOutput(this, "DataBucketName", { value: dataBucket.bucketName });
