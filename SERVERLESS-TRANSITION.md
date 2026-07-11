@@ -6,9 +6,9 @@ Sibling project `coffeeScale` (nyespresso) is the reference for the AWS/CDK
 shape — but note it was *born* serverless as a static SPA; anyaJob is a
 stateful Express monolith, so the pattern is adapted, not copied.
 
-**Status:** M0–M3 complete (storage seam, S3 backend, CDK infra, PDF-only,
-documents → S3). The app runs fully on S3 (data + docs); no local-disk
-dependency remains. M4 (Lambda + API Gateway) next.
+**Status:** M0–M3.5 complete. **Production (EC2) is now running on the S3
+backend** — off local disk, serving real data from S3. Soaking before M4
+(Lambda + API Gateway).
 
 **Serverless env (set on EC2 to run on S3; becomes Lambda env at M4):**
 `STORAGE=s3  S3_BUCKET=anyajob-data  DOCS_BUCKET=anyajob-docs  AWS_REGION=us-east-1`
@@ -257,3 +257,16 @@ CI deploy).
   and soak** BEFORE M4, so the data layer is proven on production data + real
   traffic on trusted infra before Lambda. M4 then becomes a pure compute-host
   swap (parity: EC2-on-s3 vs Lambda-on-s3, same live S3 data).
+- 2026-07-11 — **M3.5 done: production cut over to S3.** The instance had no
+  credentials, so added an EC2 app role in CDK (`anyajob-ec2-app`: S3 on both
+  buckets + SES) and attached it to `i-0fb0c9e04b10c9993`
+  (`associate-iam-instance-profile`). Then `cutover-to-s3.yml`: final data sync
+  (10 JSON + 97 docs), `set-storage.sh s3` (STORAGE=s3 + bucket envs in .env),
+  `systemctl restart anyajob`. Proof (`verify-live.yml`): the **running server
+  process** env is `STORAGE=s3` and `GET /api/listings` returned 55 real
+  listings — served from S3. EC2 now writes to S3 (source of truth is S3);
+  local `data/` is frozen. **Soak:** watch daily cron writes land in S3 and a
+  doc upload land in `anyajob-docs`. Rollback: `cutover-to-s3.yml` backend=fs
+  (sync S3→disk first if writes occurred). Note: the S3-backup cron
+  (`npm run backup`) now lacks perms for the old backup bucket and is redundant
+  (bucket versioning) — disable it. Then M4 (Lambda) is a pure host swap.
