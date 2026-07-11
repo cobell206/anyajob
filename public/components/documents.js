@@ -40,8 +40,7 @@ function renderDoc(fp, slot, entry, opts = {}) {
   if (!entry) {
     return `
       <div class="doc-empty">
-        <div class="doc-empty-label">${slot === 'resume' ? 'Resume' : 'Cover letter'}</div>
-        <button class="btn-link doc-upload-btn" data-slot="${slot}">+ Upload</button>
+        <button class="btn-link doc-upload-btn" data-slot="${slot}">+ Upload ${slot === 'resume' ? 'résumé' : 'cover letter'}</button>
       </div>
     `;
   }
@@ -112,15 +111,28 @@ export async function renderDocumentsSection(fingerprint) {
   // The "Other" slot is intentionally not surfaced in the UI; we only have
   // resume + cover concepts going forward. renderOther() + triggerUpload()
   // still handle any legacy "other" docs in saved data (show + delete).
+  const otherBlock = renderOther(fingerprint, docs.other || []);
   const html = `
     <div class="modal-section docs-section">
       <h3>Application materials</h3>
       ${hasAnyDoc ? '' : '<p class="docs-section-sub">Upload a résumé or cover letter to get started.</p>'}
-      <div class="docs-list">
-        ${docs.resume ? renderDoc(fingerprint, 'resume', docs.resume.current) : renderDoc(fingerprint, 'resume', null)}
-        ${docs.cover ? renderDoc(fingerprint, 'cover', docs.cover.current) : renderDoc(fingerprint, 'cover', null)}
-        ${renderOther(fingerprint, docs.other || [])}
+      <!-- Résumé and cover letter sit side by side; each column carries
+           its own doc row, feedback box, and alignment result. -->
+      <div class="docs-materials-grid">
+        <div class="docs-col" data-col="resume">
+          <div class="docs-col-head">Résumé</div>
+          ${renderDoc(fingerprint, 'resume', docs.resume?.current ?? null)}
+          ${resumeFeedback}
+          ${resumeAlignBlock}
+        </div>
+        <div class="docs-col" data-col="cover">
+          <div class="docs-col-head">Cover letter</div>
+          ${renderDoc(fingerprint, 'cover', docs.cover?.current ?? null)}
+          ${coverFeedback}
+          ${coverAlignBlock}
+        </div>
       </div>
+      ${otherBlock ? `<div class="docs-list docs-other-list">${otherBlock}</div>` : ''}
 
       <!-- Inline document preview — opens within the docs section instead of
            covering the modal with a fullscreen overlay. The viewport scrolls
@@ -144,10 +156,6 @@ export async function renderDocumentsSection(fingerprint) {
         </div>
       </div>
 
-      ${resumeFeedback}
-      ${resumeAlignBlock}
-      ${coverFeedback}
-      ${coverAlignBlock}
       <input type="file" id="doc-file-input" accept="${ALLOWED}" style="display:none">
     </div>
   `;

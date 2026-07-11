@@ -1490,18 +1490,17 @@ td {
   transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Two-column body layout on desktop. Left = read content (score, rationale,
-   strengths, concerns, angle, listing details). Right = interactive controls
-   (decision, status/dates/notes, application materials). Mobile stacks. */
-.modal-cols {
+/* Analysis row: strengths, concerns, and personal-statement angle share
+   one three-up row below the summary. Mobile stacks to a single column. */
+.modal-analysis {
   display: grid;
   grid-template-columns: 1fr;
   gap: 20px;
 }
 @media (min-width: 720px) {
-  .modal-cols {
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-    gap: 32px;
+  .modal-analysis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 28px;
     align-items: start;
   }
 }
@@ -2902,11 +2901,8 @@ select {
 /* ============ DOCUMENTS SECTION ============ */
 
 .docs-section {
-  /* margin-top:24px was vestigial from when docs-section appeared inline
-     below other sections. It now lives in modal-col-right and sits at
-     the top of that column — the column gap handles separation. With
-     the margin, the "Application materials" heading sat 24px lower than
-     the "Strengths" heading in the parallel left column. */
+  /* No margin-top: the docs section is its own full-width block below the
+     analysis row, and the modal-body's section rhythm handles separation. */
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -2932,6 +2928,41 @@ select {
   max-width: 100%;
   min-width: 0;
 }
+
+/* Résumé / cover letter split. Two columns on desktop; each column stacks
+   its column head, the doc row, the feedback box, and the alignment result.
+   Spacing between those pieces comes from their own margin-top, so the
+   column itself needs no gap. Mobile stacks the two columns. */
+.docs-materials-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  margin-bottom: 12px;
+}
+@media (min-width: 720px) {
+  .docs-materials-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px;
+    align-items: start;
+  }
+}
+.docs-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.docs-col-head {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+  margin-bottom: 8px;
+}
+/* First feedback/alignment block in a column sits right under the doc row —
+   drop the leading margin so the column reads as one tight unit. */
+.docs-col .doc-row + .align-notes,
+.docs-col .doc-empty + .align-notes { margin-top: 10px; }
 
 .doc-row {
   display: flex;
@@ -3042,11 +3073,6 @@ select {
   background: var(--surface);
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius);
-}
-.doc-empty-label {
-  font-size: 13px;
-  color: var(--muted);
-  font-weight: 500;
 }
 
 .btn-link {
@@ -3607,7 +3633,8 @@ button[disabled] {
    whole modal scrolls — defeating the contained-preview goal. Close
    the preview to restore the full modal view. */
 .modal.has-preview-open .modal-summary-row,
-.modal.has-preview-open .modal-col-left,
+.modal.has-preview-open .modal-analysis,
+.modal.has-preview-open .docs-materials-grid,
 .modal.has-preview-open .docs-list,
 .modal.has-preview-open .docs-section > h3,
 .modal.has-preview-open .docs-section-sub,
@@ -3619,10 +3646,6 @@ button[disabled] {
 .modal.has-preview-open .modal-meta,
 .modal.has-preview-open .modal-section:not(.docs-section) {
   display: none;
-}
-.modal.has-preview-open .modal-cols {
-  grid-template-columns: 1fr;
-  gap: 0;
 }
 .modal.has-preview-open .modal-section.docs-section {
   margin-bottom: 0;

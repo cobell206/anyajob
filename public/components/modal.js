@@ -166,36 +166,34 @@ export function openModal(listing, onUpdate) {
       </div>
     ` : ''}
 
-    <!-- Bottom analysis row: reading content on the left (strengths,
-         concerns, angle), application materials on the right. -->
-    <div class="modal-cols">
-      <div class="modal-col-left">
-        ${s.strengths?.length ? `
-          <div class="modal-section">
-            <h3>Strengths</h3>
-            <ul class="bullet-list">${s.strengths.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
-          </div>
-        ` : ''}
+    <!-- Analysis row: strengths, concerns, and personal-statement angle
+         each get a column in one three-up row. -->
+    <div class="modal-analysis">
+      ${s.strengths?.length ? `
+        <div class="modal-section">
+          <h3>Strengths</h3>
+          <ul class="bullet-list">${s.strengths.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+        </div>
+      ` : ''}
 
-        ${s.concerns?.length ? `
-          <div class="modal-section">
-            <h3>Concerns</h3>
-            <ul class="bullet-list concerns">${s.concerns.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
-          </div>
-        ` : ''}
+      ${s.concerns?.length ? `
+        <div class="modal-section">
+          <h3>Concerns</h3>
+          <ul class="bullet-list concerns">${s.concerns.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+        </div>
+      ` : ''}
 
-        ${s.applicationAngle ? `
-          <div class="modal-section">
-            <h3>Personal statement angle</h3>
-            <p style="font-size:14px; color: var(--ink-2); line-height: 1.55">${escapeHtml(s.applicationAngle)}</p>
-          </div>
-        ` : ''}
-      </div>
-
-      <div class="modal-col-right">
-        <div id="m-docs-mount"></div>
-      </div>
+      ${s.applicationAngle ? `
+        <div class="modal-section">
+          <h3>Personal statement angle</h3>
+          <p style="font-size:14px; color: var(--ink-2); line-height: 1.55">${escapeHtml(s.applicationAngle)}</p>
+        </div>
+      ` : ''}
     </div>
+
+    <!-- Application materials — full-width block that splits internally
+         into a résumé column and a cover-letter column. -->
+    <div id="m-docs-mount"></div>
 
     <hr class="modal-footer-divider">
 
