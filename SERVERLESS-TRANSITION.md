@@ -604,6 +604,18 @@ chronically bumping the cap (workload grows as discovery adds sources).
   via CI (web/worker unaffected; EC2 crons still run directly). Next: M6-2 (cron
   Lambda + schedules + alarm).
 
+- 2026-07-11 — **M6-2 deployed + a real bug caught by the manual invoke.**
+  `anyajob-cron` Lambda (900 s/1024 MB) + 3 EventBridge schedules (America/
+  New_York, **deployed DISABLED** so they don't double-run with the live EC2
+  crontab) + duration/error CloudWatch alarms → SNS email. `discover` invoke:
+  **fully worked** (7 candidates, S3 write, Claude call). `weekly` invoke:
+  **crashed** — `weekly.js` had its own **local `readJson`** reading `data/` off
+  disk (the M0 refactor missed this `scripts/` file), so it returned null in the
+  Lambda (and had been silently reading EC2's *frozen* local snapshot, not S3).
+  Fix: route it through `readJsonSafe` (store seam). Swept the rest of the job
+  graph — no other direct local-data reads (only one-off `migrate-*` scripts).
+  Suite green. Re-invoke `weekly` after redeploy to confirm the email.
+
 ## Testing strategy
 
 Every migration is gated by **(a) the unit suite green** (`npm test`) **plus

@@ -4,25 +4,20 @@
 // summaries.json (regenerates if stale).
 
 import 'dotenv/config';
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 import { sendWeeklyEmail } from '../src/notify.js';
 import { generateWeeklyReflection } from '../src/summaries.js';
-import { fbKey } from '../src/io.js';
+import { fbKey, readJsonSafe } from '../src/io.js';
 import { createLogger } from '../src/log.js';
 
 const log = createLogger('weekly-cron');
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA = join(__dirname, '..', 'data');
-
+// Read through the storage seam (S3 in prod), null on missing — matches this
+// file's old local helper. It previously read local data/ directly: the M0
+// refactor missed this script, so it broke once data moved to S3 / the Lambda
+// (and on EC2 it had been silently reading the frozen local snapshot).
 async function readJson(name) {
-  try {
-    return JSON.parse(await readFile(join(DATA, name), 'utf-8'));
-  } catch {
-    return null;
-  }
+  return readJsonSafe(name, { fallback: null });
 }
 
 function weekRange() {
