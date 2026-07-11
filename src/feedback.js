@@ -9,7 +9,6 @@
 // any lens on demand.
 
 import 'dotenv/config';
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, extname } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
@@ -22,8 +21,8 @@ import {
 import {
   PROFILE_FINGERPRINT,
   getProfileResumeMeta,
-  getDocumentPath,
-  extractResumeText,
+  getDocBuffer,
+  extractText,
 } from './documents.js';
 import { readJson, readJsonSafe } from './io.js';
 import { writeJsonAtomic } from './atomic.js';
@@ -42,8 +41,8 @@ const MODEL = 'claude-sonnet-4-6';
 // scoring loop — feedback needs the full document so Claude's verbatim
 // quotes can match anywhere in the résumé.
 async function readFullResumeText(meta) {
-  const path = await getDocumentPath(PROFILE_FINGERPRINT, meta.file);
-  return await extractResumeText(path);
+  const buf = await getDocBuffer(PROFILE_FINGERPRINT, meta.file);
+  return await extractText(meta.file, buf);
 }
 
 function parseFeedbackJson(text, stopReason) {
@@ -85,8 +84,7 @@ export async function generateResumeFeedback({ lens = 'law-school' } = {}) {
   let userContent;
   let extractedChars = 0;
   if (isPdf) {
-    const pdfPath = await getDocumentPath(PROFILE_FINGERPRINT, meta.file);
-    const pdfBuf = await readFile(pdfPath);
+    const pdfBuf = await getDocBuffer(PROFILE_FINGERPRINT, meta.file);
     userContent = [
       {
         type: 'document',

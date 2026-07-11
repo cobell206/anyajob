@@ -6,8 +6,6 @@
 // server-side conversion step. Backed up to S3 nightly via separate cron.
 
 import 'dotenv/config';
-import { readFile, writeFile, mkdir, readdir, copyFile, stat } from 'node:fs/promises';
-import { existsSync, createReadStream } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, extname } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -15,12 +13,16 @@ import Anthropic from '@anthropic-ai/sdk';
 import { RESUME_ALIGNMENT_SYSTEM, COVER_LETTER_ALIGNMENT_SYSTEM } from './prompts.js';
 import { writeJsonAtomic } from './atomic.js';
 import { readJson, readJsonSafe, fbKey } from './io.js';
+import { putDoc, getDocBuffer, getDocStream } from './docstore.js';
 import { createLogger } from './log.js';
+
+// Document files (binaries) live in docstore.js (fs or S3); this module owns
+// the documents.json index (via the JSON store) and the scoring logic.
+export { getDocStream, getDocBuffer } from './docstore.js';
 
 const log = createLogger('documents');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DOCS_ROOT = join(__dirname, '..', 'data', 'documents');
 const DOCS_INDEX = join(__dirname, '..', 'data', 'documents.json');
 
 // PDF/TXT only. Word docs were previously accepted and converted to PDF via
@@ -45,12 +47,6 @@ async function readIndex() {
 
 async function writeIndex(idx) {
   await writeJsonAtomic(DOCS_INDEX, idx);
-}
-
-async function ensureDir(dir) {
-  if (!existsSync(dir)) {
-    await mkdir(dir, { recursive: true });
-  }
 }
 
 function timestamp() {
@@ -91,15 +87,11 @@ export async function saveDocument({
     throw new Error(`Unsupported extension: ${ext}`);
   }
 
-  const dir = join(DOCS_ROOT, safeFilename(fingerprint));
-  await ensureDir(dir);
-
   const ts = timestamp();
   const fname = slot === 'other'
     ? `other-${safeFilename(otherName || 'doc')}-${ts}${ext}`
     : `${slot}-${ts}${ext}`;
-  const destPath = join(dir, fname);
-  await writeFile(destPath, buffer);
+  await putDoc(fingerprint, fname, buffer);
 
   // PDF is its own preview (rendered client-side). .txt has no preview and is
   // rendered as text. No other types reach here (validated above).
@@ -137,19 +129,6 @@ export async function listDocuments(fingerprint) {
   return idx[fingerprint] || {};
 }
 
-export async function getDocumentPath(fingerprint, filename) {
-  // Sanitize: only allow files in the listing's own folder
-  const safe = safeFilename(filename);
-  if (safe !== filename || filename.includes('..') || filename.includes('/')) {
-    throw new Error('Invalid filename');
-  }
-  const path = join(DOCS_ROOT, safeFilename(fingerprint), filename);
-  if (!existsSync(path)) {
-    throw new Error('File not found');
-  }
-  return path;
-}
-
 export async function deleteDocument(fingerprint, slot, fileToDelete = null) {
   // For 'other', fileToDelete identifies which one
   // For 'resume'/'cover' without fileToDelete, removes the current
@@ -184,8 +163,7 @@ export async function deleteDocument(fingerprint, slot, fileToDelete = null) {
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = 'claude-sonnet-4-6';
 
-async function hashFileContents(path) {
-  const buf = await readFile(path);
+function hashBuffer(buf) {
   return createHash('sha256').update(buf).digest('hex');
 }
 
@@ -264,29 +242,26 @@ function priorCoverBlock(prior) {
 
 // Resume alignment prompt lives in src/prompts.js (RESUME_ALIGNMENT_SYSTEM)
 
-async function readPdfText(pdfPath) {
-  // Pure-JS extraction via pdf-parse v2 (pdfjs-dist under the hood). The
-  // prior shell-out to `pdftotext` silently swallowed ENOENT when poppler
-  // wasn't installed, leaving the daily scoring loop running with empty
-  // résumé text on machines without the brew formula. This removes that
-  // latent failure mode. Errors still resolve to '' so callers don't need
-  // to handle extraction failure separately from "no résumé".
+async function readPdfText(buf) {
+  // Pure-JS extraction via pdf-parse v2 (pdfjs-dist under the hood). Errors
+  // resolve to '' so callers don't handle extraction failure separately from
+  // "no résumé".
   try {
     const { PDFParse } = await import('pdf-parse');
-    const buf = await readFile(pdfPath);
     const parser = new PDFParse({ data: buf });
     const result = await parser.getText();
     return result?.text || '';
   } catch (err) {
-    log.warn({ err: err.message, pdfPath }, 'pdf-parse extraction failed');
+    log.warn({ err: err.message }, 'pdf-parse extraction failed');
     return '';
   }
 }
 
-export async function extractResumeText(filePath) {
-  const ext = extname(filePath).toLowerCase();
-  if (ext === '.pdf') return await readPdfText(filePath);
-  if (ext === '.txt') return await readFile(filePath, 'utf-8');
+// Extract text from a document buffer. `filename` only supplies the extension.
+export async function extractText(filename, buffer) {
+  const ext = extname(filename).toLowerCase();
+  if (ext === '.pdf') return await readPdfText(buffer);
+  if (ext === '.txt') return buffer.toString('utf-8');
   return '';
 }
 
@@ -305,8 +280,8 @@ export async function getProfileResumeMeta() {
 export async function getProfileResumeText() {
   const meta = await getProfileResumeMeta();
   if (!meta) return null;
-  const path = await getDocumentPath(PROFILE_FINGERPRINT, meta.file);
-  const text = await extractResumeText(path);
+  const buf = await getDocBuffer(PROFILE_FINGERPRINT, meta.file);
+  const text = await extractText(meta.file, buf);
   return text ? text.slice(0, 8000) : null;
 }
 
@@ -315,12 +290,12 @@ export async function scoreResumeAgainstJd({ fingerprint, listing }) {
   const resume = docs.resume?.current;
   if (!resume) return null;
 
-  const resumePath = await getDocumentPath(fingerprint, resume.file);
-  const resumeHash = await hashFileContents(resumePath);
+  const resumeBuf = await getDocBuffer(fingerprint, resume.file);
+  const resumeHash = hashBuffer(resumeBuf);
   const userNotes = (docs.resume?.userNotes || '').trim();
   const prior = resume.alignmentScore || null;
 
-  const resumeText = (await extractResumeText(resumePath)).slice(0, 8000);
+  const resumeText = (await extractText(resume.file, resumeBuf)).slice(0, 8000);
   if (!resumeText) {
     return { error: 'Could not extract text from resume' };
   }
@@ -381,12 +356,12 @@ export async function scoreCoverLetterAgainstJd({ fingerprint, listing }) {
   const cover = docs.cover?.current;
   if (!cover) return null;
 
-  const coverPath = await getDocumentPath(fingerprint, cover.file);
-  const coverHash = await hashFileContents(coverPath);
+  const coverBuf = await getDocBuffer(fingerprint, cover.file);
+  const coverHash = hashBuffer(coverBuf);
   const userNotes = (docs.cover?.userNotes || '').trim();
   const prior = cover.alignmentScore || null;
 
-  const coverText = (await extractResumeText(coverPath)).slice(0, 8000);
+  const coverText = (await extractText(cover.file, coverBuf)).slice(0, 8000);
   if (!coverText) {
     return { error: 'Could not extract text from cover letter' };
   }

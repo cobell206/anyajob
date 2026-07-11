@@ -6,8 +6,12 @@ Sibling project `coffeeScale` (nyespresso) is the reference for the AWS/CDK
 shape — but note it was *born* serverless as a static SPA; anyaJob is a
 stateful Express monolith, so the pattern is adapted, not copied.
 
-**Status:** M0–M2 complete (storage seam, S3 backend, CDK infra, PDF-only +
-LibreOffice removed). M3 (documents → S3) next.
+**Status:** M0–M3 complete (storage seam, S3 backend, CDK infra, PDF-only,
+documents → S3). The app runs fully on S3 (data + docs); no local-disk
+dependency remains. M4 (Lambda + API Gateway) next.
+
+**Serverless env (set on EC2 to run on S3; becomes Lambda env at M4):**
+`STORAGE=s3  S3_BUCKET=anyajob-data  DOCS_BUCKET=anyajob-docs  AWS_REGION=us-east-1`
 
 **Infra is CDK, like espresso.** `infra/` holds the CDK app (`AnyaJobStack`).
 No click-ops — every AWS resource is defined in code. Deploy: `cd infra &&
@@ -209,3 +213,20 @@ CI deploy).
   *code* (only explanatory comments); booted app lists the profile resume with
   a `previewFile` and streams it 200 `application/pdf`. The app is now a plain
   JS + pure-JS-libs bundle — no binary deps, so it fits a zip Lambda (M4).
+- 2026-07-11 — **M3 done.** New `src/docstore.js` — the binary sibling of
+  `store.js` (fs/s3 by the same `STORAGE` flag), keyed `{fingerprint}/{file}`,
+  own `DOCS_BUCKET`. Refactored `documents.js` to drop *all* fs: `saveDocument`
+  → `putDoc`; `getDocumentPath` (returned a path) replaced by `getDocBuffer`
+  (bytes, for hashing/extraction/base64) and `getDocStream` (Readable, for the
+  routes); `extractResumeText(path)` → `extractText(filename, buffer)`;
+  `hashFileContents` → `hashBuffer`. Updated consumers: `feedback.js` (résumé
+  text + PDF base64 block), `routes/documents.js` + `routes/profile.js` (now
+  pipe a stream instead of `res.sendFile`). `documents.js` and `feedback.js`
+  no longer import `node:fs` at all. CDK: added the `anyajob-docs` bucket
+  (RETAIN/versioned/private/SSL), deployed; existing docs migrated via
+  `aws s3 sync data/documents/ s3://anyajob-docs/`. New
+  `src/docstore.contract.test.js` (7 tests, incl. path-traversal rejection).
+  Gate: docstore contract **7/7 on fs and s3**; full suite **89/89**; booted
+  app with `STORAGE=s3` + both buckets → general smoke green **and** the profile
+  résumé streamed from the S3 docs bucket (200 `application/pdf`, valid header);
+  fs doc-serving regression clean after the sendFile→pipe change.

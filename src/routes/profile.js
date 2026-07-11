@@ -7,7 +7,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import {
   saveDocument,
-  getDocumentPath,
+  getDocStream,
   deleteDocument,
   validateUpload,
   getProfileResumeMeta,
@@ -31,20 +31,16 @@ router.get('/resume', async (req, res) => {
     const meta = await getProfileResumeMeta();
     if (req.query.download === '1') {
       if (!meta) return res.status(404).json({ error: 'No resume uploaded' });
-      const path = await getDocumentPath(PROFILE_FINGERPRINT, meta.file);
-      const ext = meta.file.split('.').pop().toLowerCase();
-      const mime = {
-        pdf: 'application/pdf',
-        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        doc: 'application/msword',
-        txt: 'text/plain; charset=utf-8',
-      }[ext] || 'application/octet-stream';
-      res.setHeader('Content-Type', mime);
+      const { body, contentType, contentLength } = await getDocStream(
+        PROFILE_FINGERPRINT, meta.file,
+      );
+      res.setHeader('Content-Type', contentType);
+      if (contentLength != null) res.setHeader('Content-Length', contentLength);
       res.setHeader(
         'Content-Disposition',
         `inline; filename="${meta.originalName || meta.file}"`,
       );
-      return res.sendFile(path);
+      return body.pipe(res);
     }
     res.json({ resume: meta });
   } catch (err) {

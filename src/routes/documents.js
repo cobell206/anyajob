@@ -9,7 +9,7 @@ import { readJson } from '../io.js';
 import {
   saveDocument,
   listDocuments,
-  getDocumentPath,
+  getDocStream,
   deleteDocument,
   validateUpload,
   scoreResumeAgainstJd,
@@ -67,21 +67,22 @@ router.post('/:fp/upload', upload.single('file'), async (req, res) => {
 // browser previews the file rather than downloading it.
 router.get('/:fp/file/:filename', async (req, res) => {
   try {
-    const path = await getDocumentPath(req.params.fp, req.params.filename);
+    const { body, contentType, contentLength } = await getDocStream(
+      req.params.fp, req.params.filename,
+    );
     const inline = req.query.inline === '1';
-    const ext = req.params.filename.split('.').pop().toLowerCase();
-    const mime = {
-      pdf: 'application/pdf',
-      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      doc: 'application/msword',
-      txt: 'text/plain; charset=utf-8',
-    }[ext] || 'application/octet-stream';
-    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Type', contentType);
+    if (contentLength != null) res.setHeader('Content-Length', contentLength);
     res.setHeader(
       'Content-Disposition',
       `${inline ? 'inline' : 'attachment'}; filename="${req.params.filename}"`,
     );
-    res.sendFile(path);
+    body.on('error', (err) => {
+      log.error({ err, fp: req.params.fp }, 'doc stream error');
+      if (!res.headersSent) res.status(500).end();
+      else res.destroy(err);
+    });
+    body.pipe(res);
   } catch (err) {
     res.status(404).json({ error: err.message });
   }

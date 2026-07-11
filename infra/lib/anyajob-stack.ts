@@ -27,6 +27,19 @@ export class AnyaJobStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
+    // Uploaded application materials (résumés / cover letters). Binaries keyed
+    // {fingerprint}/{file} (see src/docstore.js). Same guarantees as the data
+    // bucket — source of truth, so RETAIN + versioned.
+    const docsBucket = new s3.Bucket(this, "DocsBucket", {
+      bucketName: "anyajob-docs",
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      versioned: true,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
     new cdk.CfnOutput(this, "DataBucketName", { value: dataBucket.bucketName });
+    new cdk.CfnOutput(this, "DocsBucketName", { value: docsBucket.bucketName });
   }
 }
