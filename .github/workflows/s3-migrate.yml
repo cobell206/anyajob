@@ -46,8 +46,8 @@ jobs:
             cd "$REPO_PATH"
             # Ensure the migration script is present/current regardless of deploy timing
             git fetch --quiet origin main
-            git checkout origin/main -- scripts/migrate-to-s3.sh
-            bash scripts/migrate-to-s3.sh "$MODE"
+            git checkout origin/main -- scripts/migrate-to-s3.mjs
+            node scripts/migrate-to-s3.mjs "$MODE"
           EOF
 
       - name: Cleanup
