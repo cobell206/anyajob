@@ -178,6 +178,18 @@ function setActiveLens(lens) {
 // feedback-modal owns the PDF viewer controller — no equivalent here.
 let feedbackCache = { text: '', feedback: {}, resume: null };
 
+// A cached entry is displayable only when it's a completed result. Async scoring
+// (Lambda) leaves a { status: 'pending' } marker while the worker runs and
+// { status: 'error' } on failure — neither should render as feedback. Legacy
+// entries predate the status field and are treated as done.
+function isDoneEntry(entry) {
+  return !!entry && (!entry.status || entry.status === 'done');
+}
+function displayEntry(lens) {
+  const e = feedbackCache.feedback[lens];
+  return isDoneEntry(e) ? e : null;
+}
+
 // Refreshes the summary card after every load / generate / modal close.
 async function loadFeedback() {
   try {
@@ -207,7 +219,7 @@ function renderFeedbackSummary({ error } = {}) {
     return;
   }
   const lens = getActiveLens();
-  const entry = feedbackCache.feedback[lens];
+  const entry = displayEntry(lens);
   if (!entry) {
     // Empty state — never run feedback for this résumé yet under this lens.
     root.innerHTML = `
@@ -248,7 +260,7 @@ let _modalCtrl = null;
 
 function openProfileFeedbackModal() {
   const lens = getActiveLens();
-  const entry = feedbackCache.feedback[lens];
+  const entry = displayEntry(lens);
   _modalCtrl = openFeedbackModal({
     title: 'Résumé feedback',
     resumeUrl: '/api/profile/resume?download=1',
@@ -259,7 +271,7 @@ function openProfileFeedbackModal() {
     activeLens: lens,
     onLensChange: (newLens) => {
       setActiveLens(newLens);
-      const next = feedbackCache.feedback[newLens];
+      const next = displayEntry(newLens);
       _modalCtrl?.render(next ? entryToPayload(next, newLens) : { state: 'empty', activeLens: newLens });
     },
     onGenerate: () => runFeedback(getActiveLens()),
@@ -309,9 +321,14 @@ async function runFeedback(lens) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ lens }),
     });
-    const entry = await res.json().catch(() => ({}));
-    if (!res.ok || entry.error) {
-      const msg = entry.error || entry.raw || `HTTP ${res.status}`;
+    const body = await res.json().catch(() => ({}));
+    // 202 = async scoring (Lambda): the worker runs in the background, so poll
+    // GET until the entry flips to done/error. 200 = synchronous (EC2/local):
+    // scoring already finished. Anything else is a hard failure.
+    if (res.status === 202 || body.status === 'pending') {
+      await pollResumeFeedback(lens);
+    } else if (!res.ok || body.error) {
+      const msg = body.error || body.raw || `HTTP ${res.status}`;
       _modalCtrl.render({ state: 'error', message: msg, activeLens: lens });
       return;
     }
@@ -323,12 +340,37 @@ async function runFeedback(lens) {
       feedback: data.feedback || {},
       resume: data.resume || feedbackCache.resume,
     };
-    _modalCtrl.render(entryToPayload(feedbackCache.feedback[lens] || entry, lens));
+    const entry = displayEntry(lens);
+    if (!entry) {
+      _modalCtrl.render({ state: 'error', message: 'Feedback did not come back — please try again.', activeLens: lens });
+      return;
+    }
+    _modalCtrl.render(entryToPayload(entry, lens));
   } catch (err) {
     _modalCtrl.render({ state: 'error', message: err.message, activeLens: lens });
   } finally {
     _modalCtrl.setGenerating(false);
   }
+}
+
+// Poll the feedback GET until the async worker (Lambda) finishes this lens.
+// Resolves on done; throws on error or timeout. On EC2/local this never runs —
+// scoring returns synchronously (200) and runFeedback skips the poll.
+async function pollResumeFeedback(lens, { intervalMs = 3000, timeoutMs = 150000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, intervalMs));
+    let data;
+    try {
+      data = await api('/api/profile/resume/feedback?lens=' + encodeURIComponent(lens));
+    } catch {
+      continue; // transient GET failure — keep polling until the deadline
+    }
+    const status = data.feedback?.status;
+    if (status === 'done' || (data.feedback && !status)) return;
+    if (status === 'error') throw new Error(data.feedback.error || 'Scoring failed.');
+  }
+  throw new Error('Scoring is taking longer than expected — please try again.');
 }
 
 // ---------- About-you fields ----------

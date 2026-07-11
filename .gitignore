@@ -48,3 +48,4 @@ infra/cdk.out/
 
 # Local Claude Code configs (per-dev, not project state)
 .claude/
+infra/.app-bundle/

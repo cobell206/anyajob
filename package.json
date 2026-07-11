@@ -14,10 +14,12 @@
     "test": "node --test src/*.test.js test/*.test.js",
     "smoke": "node scripts/smoke.mjs",
     "test-score": "node src/score.js --test",
-    "test-email": "node scripts/test-email.js"
+    "test-email": "node scripts/test-email.js",
+    "bundle:lambda": "bash scripts/build-lambda-bundle.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
+    "@aws-sdk/client-lambda": "^3.1085.0",
     "@aws-sdk/client-s3": "^3.1085.0",
     "@aws-sdk/client-ses": "^3.658.0",
     "cheerio": "^1.0.0",
@@ -29,7 +31,8 @@
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^5.7.284",
     "pino": "^9.5.0",
-    "pino-pretty": "^11.3.0"
+    "pino-pretty": "^11.3.0",
+    "serverless-http": "^4.0.0"
   },
   "engines": {
     "node": ">=20.0.0"

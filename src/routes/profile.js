@@ -13,7 +13,7 @@ import {
   getProfileResumeMeta,
   PROFILE_FINGERPRINT,
 } from '../documents.js';
-import { generateResumeFeedback, getResumeFeedback } from '../feedback.js';
+import { startResumeFeedback, getResumeFeedback } from '../feedback.js';
 import { RESUME_FEEDBACK_LENSES } from '../prompts.js';
 import { createLogger } from '../log.js';
 
@@ -102,11 +102,15 @@ router.post('/resume/feedback', async (req, res) => {
     if (!RESUME_FEEDBACK_LENSES.includes(lens)) {
       return res.status(400).json({ error: `unknown lens: ${lens}` });
     }
-    const result = await generateResumeFeedback({ lens });
+    // Dual-mode: on Lambda this returns {status:'pending'} after firing the
+    // background worker (202 → client polls GET); on EC2/local it runs inline
+    // and returns the finished entry (200) — see startResumeFeedback.
+    const result = await startResumeFeedback({ lens });
     if (result.error) return res.status(422).json(result);
+    if (result.status === 'pending') return res.status(202).json(result);
     res.json(result);
   } catch (err) {
-    log.error({ err }, 'generateResumeFeedback failed');
+    log.error({ err }, 'startResumeFeedback failed');
     res.status(500).json({ error: err.message });
   }
 });

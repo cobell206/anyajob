@@ -33,7 +33,7 @@ const log = createLogger('server');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 
-const app = express();
+export const app = express();
 // Behind Cloudflare Tunnel — trust exactly one upstream proxy so
 // express-rate-limit reads the real client IP from X-Forwarded-For instead
 // of seeing every request as coming from 127.0.0.1.
@@ -141,7 +141,13 @@ app.use('/api', (err, req, res, next) => {
   res.status(500).json({ error: err.message || 'Internal error' });
 });
 
-const port = parseInt(process.env.PORT || '3000', 10);
-app.listen(port, () => {
-  log.info({ port, url: `http://localhost:${port}` }, 'server listening');
-});
+// Only bind a port when run directly (`node src/server.js`, systemd, dev).
+// When the Lambda adapter (src/lambda.js) imports `app`, it drives it through
+// serverless-http instead, so we must NOT listen there.
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+if (isMain) {
+  const port = parseInt(process.env.PORT || '3000', 10);
+  app.listen(port, () => {
+    log.info({ port, url: `http://localhost:${port}` }, 'server listening');
+  });
+}

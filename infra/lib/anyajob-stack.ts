@@ -1,9 +1,18 @@
 import * as cdk from "aws-cdk-lib";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
+import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
+import { HttpIamAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
+import { fileURLToPath } from "node:url";
+import * as path from "node:path";
 import type { Construct } from "constructs";
 
 const GITHUB_REPO = "cobell206/anyajob";
+
+// infra/ is ESM (type-stripped), so __dirname isn't defined — derive it.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // AnyaJob serverless infrastructure (see SERVERLESS-TRANSITION.md).
 //
@@ -103,9 +112,113 @@ export class AnyaJobStack extends cdk.Stack {
       roles: [ec2Role.roleName],
     });
 
+    // ---- M4: web Lambda + HTTP API (deployed dark; parity-tested vs EC2 on
+    // the same live S3 before any traffic — see SERVERLESS-TRANSITION.md) ----
+    //
+    // The entire Express app as one zip ("lambdalith"), driven by serverless-http
+    // (src/lambda.js). The asset is prebuilt by scripts/build-lambda-bundle.sh
+    // into infra/.app-bundle — production deps PLUS the linux @napi-rs/canvas
+    // native binary that npm can't install on a mac (résumé-scoring PDF text
+    // extraction needs it). Run `npm run bundle:lambda` before `cdk deploy`.
+    // Anthropic key: CloudFormation does NOT allow {{resolve:ssm-secure:…}} in a
+    // Lambda env var, so we take it as a noEcho stack parameter instead and pass
+    // it from the SSM SecureString at deploy time (kept out of source & console):
+    //   npx cdk deploy --parameters AnthropicApiKey="$(aws ssm get-parameter \
+    //     --name /anyajob/anthropic-api-key --with-decryption --region us-east-1 \
+    //     --query Parameter.Value --output text)"
+    const anthropicApiKey = new cdk.CfnParameter(this, "AnthropicApiKey", {
+      type: "String",
+      noEcho: true,
+      minLength: 1,
+      description:
+        "Anthropic API key for the web Lambda. Pass from SSM at deploy; not stored in source.",
+    });
+
+    // Shared code asset (CDK dedupes it) and env for both the web Lambda and the
+    // scoring worker — same app, same live S3. ANTHROPIC_API_KEY comes from the
+    // noEcho parameter above; AWS_REGION is reserved (the runtime provides it).
+    const appAsset = lambda.Code.fromAsset(
+      path.join(__dirname, "..", ".app-bundle"),
+    );
+    const commonEnv: Record<string, string> = {
+      STORAGE: "s3",
+      S3_BUCKET: dataBucket.bucketName,
+      DOCS_BUCKET: docsBucket.bucketName,
+      NODE_ENV: "production",
+      LOG_LEVEL: "info",
+      MAX_DAILY_SPEND: "2.00",
+      NOTIFY_FROM: "AnyaJob <alerts@anyalawgirly.com>",
+      PUBLIC_URL: "https://jobs.anyalawgirly.com",
+      ANTHROPIC_API_KEY: anthropicApiKey.valueAsString,
+    };
+
+    // M4.5 — background scoring worker. Résumé scoring (~54s) exceeds API
+    // Gateway's 30s integration cap, so the web Lambda async-invokes this off
+    // the SAME asset (handler src/worker.handler); it runs the Claude call and
+    // persists the result to S3, and the client polls GET. Long timeout, no SES.
+    const scoringWorkerFn = new lambda.Function(this, "ScoringWorkerFn", {
+      functionName: "anyajob-scoring-worker",
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.X86_64,
+      handler: "src/worker.handler",
+      code: appAsset,
+      timeout: cdk.Duration.seconds(300),
+      memorySize: 512,
+      environment: commonEnv,
+    });
+    dataBucket.grantReadWrite(scoringWorkerFn);
+    docsBucket.grantReadWrite(scoringWorkerFn);
+
+    const webFn = new lambda.Function(this, "WebFn", {
+      functionName: "anyajob-web",
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.X86_64, // matches canvas-linux-x64-gnu
+      handler: "src/lambda.handler",
+      code: appAsset,
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 512,
+      environment: {
+        ...commonEnv,
+        // Presence of this flips POST /resume/feedback to async: mark pending,
+        // invoke the worker, return 202. Unset on EC2/local → inline scoring.
+        SCORING_WORKER_FN: scoringWorkerFn.functionName,
+      },
+    });
+    dataBucket.grantReadWrite(webFn);
+    docsBucket.grantReadWrite(webFn);
+    webFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ses:SendEmail", "ses:SendRawEmail"],
+        resources: ["*"],
+      }),
+    );
+    // Let the web Lambda async-invoke the scoring worker.
+    scoringWorkerFn.grantInvoke(webFn);
+
+    // HTTP API with AWS_IAM auth on every route (decision D1): only SigV4-signed
+    // callers with execute-api:Invoke reach the Lambda during the dark soak, so
+    // the raw endpoint never serves the résumé to an anonymous URL.
+    // scripts/smoke.mjs signs automatically. Cloudflare fronts this at M5 — that
+    // flip revisits the auth model (Cloudflare can't SigV4-sign).
+    const httpApi = new apigwv2.HttpApi(this, "WebApi", {
+      apiName: "anyajob-web",
+      defaultIntegration: new HttpLambdaIntegration("WebFnIntegration", webFn),
+      defaultAuthorizer: new HttpIamAuthorizer(),
+    });
+
+    // Cap runaway Anthropic/S3 spend from a stuck client or abuse (the reason we
+    // chose an HTTP API over a bare Function URL). Modest single-user limits.
+    const stage = httpApi.defaultStage!.node.defaultChild as apigwv2.CfnStage;
+    stage.defaultRouteSettings = {
+      throttlingBurstLimit: 20,
+      throttlingRateLimit: 10,
+    };
+
     new cdk.CfnOutput(this, "Ec2InstanceProfile", { value: ec2Profile.ref });
     new cdk.CfnOutput(this, "DataBucketName", { value: dataBucket.bucketName });
     new cdk.CfnOutput(this, "DocsBucketName", { value: docsBucket.bucketName });
     new cdk.CfnOutput(this, "DeployRoleArn", { value: deployRole.roleArn });
+    new cdk.CfnOutput(this, "WebApiUrl", { value: httpApi.apiEndpoint });
+    new cdk.CfnOutput(this, "WebFnName", { value: webFn.functionName });
   }
 }

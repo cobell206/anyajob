@@ -146,6 +146,7 @@ export async function generateResumeFeedback({ lens = 'law-school' } = {}) {
 
   const entry = {
     ...parsed,
+    status: 'done',
     lens,
     model: MODEL,
     generatedAt: new Date().toISOString(),
@@ -156,6 +157,50 @@ export async function generateResumeFeedback({ lens = 'law-school' } = {}) {
 
   await persistFeedback(lens, entry);
   return entry;
+}
+
+// ---- async scoring (M4.5) ------------------------------------------------
+// On Lambda, résumé scoring (~54s) can't finish inside API Gateway's 30s cap,
+// so POST /resume/feedback fires a background worker and returns 202; the client
+// polls GET until the entry's status flips. On EC2 / local dev there's no
+// gateway cap and no worker, so scoring runs inline — today's behavior. The
+// switch is SCORING_WORKER_FN (the worker's name), set only in the Lambda.
+
+// Status-only marker for a lens so GET (and the poller) can see pending/error.
+// resumeFile must match the current résumé or getResumeFeedback filters it out.
+async function markResumeFeedback(lens, patch) {
+  const meta = await getProfileResumeMeta();
+  if (!meta) return;
+  await persistFeedback(lens, { lens, resumeFile: meta.file, ...patch });
+}
+
+export function markResumeFeedbackPending(lens) {
+  return markResumeFeedback(lens, { status: 'pending', startedAt: new Date().toISOString() });
+}
+
+export function markResumeFeedbackError(lens, error) {
+  return markResumeFeedback(lens, { status: 'error', error, generatedAt: new Date().toISOString() });
+}
+
+async function invokeScoringWorker(payload) {
+  const { LambdaClient, InvokeCommand } = await import('@aws-sdk/client-lambda');
+  const client = new LambdaClient({});
+  await client.send(new InvokeCommand({
+    FunctionName: process.env.SCORING_WORKER_FN,
+    InvocationType: 'Event', // fire-and-forget; worker persists the result
+    Payload: Buffer.from(JSON.stringify(payload)),
+  }));
+}
+
+// Route entrypoint: async (returns {status:'pending'}) on Lambda; synchronous
+// (returns the finished entry, or {error}) on EC2 / local dev.
+export async function startResumeFeedback({ lens = 'law-school' } = {}) {
+  if (process.env.SCORING_WORKER_FN) {
+    await markResumeFeedbackPending(lens);
+    await invokeScoringWorker({ job: 'resume-feedback', lens });
+    return { status: 'pending', lens };
+  }
+  return await generateResumeFeedback({ lens });
 }
 
 // Read cached feedback for a single lens, or all lenses if none specified.

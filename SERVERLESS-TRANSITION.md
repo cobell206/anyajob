@@ -6,9 +6,13 @@ Sibling project `coffeeScale` (nyespresso) is the reference for the AWS/CDK
 shape — but note it was *born* serverless as a static SPA; anyaJob is a
 stateful Express monolith, so the pattern is adapted, not copied.
 
-**Status:** M0–M3.5 complete. **Production (EC2) is now running on the S3
-backend** — off local disk, serving real data from S3. Soaking before M4
-(Lambda + API Gateway).
+**Status:** M0–M4.5 complete. Production (EC2) runs on the S3 backend, and a
+**dark Lambda + API Gateway now serves the same live S3, fully capable** —
+reads parity-identical to the reference (incl. binary PDF), and résumé scoring
+works via async worker + client polling (API Gateway's 30 s cap can't hold the
+~54 s Claude call synchronously). Next: **M5** — flip the Cloudflare origin from
+EC2 to the API Gateway (revisiting auth: the dark route uses AWS_IAM, but
+Cloudflare can't SigV4-sign).
 
 **Serverless env (set on EC2 to run on S3; becomes Lambda env at M4):**
 `STORAGE=s3  S3_BUCKET=anyajob-data  DOCS_BUCKET=anyajob-docs  AWS_REGION=us-east-1`
@@ -134,6 +138,204 @@ Each row is an independently mergeable/deployable PR with its own gate.
 | **M7** | **Decommission EC2** — *stop* first, soak ~1 week, then terminate. | — | Site + crons healthy for a week with EC2 stopped | Start EC2 back up (until terminated) |
 
 **Dependencies:** M0 → M1 → M3 → M3.5 → M4 → M5; M2 independent but before M4 (zip-ability); M6 needs M1; M7 last after M5+M6 soak.
+
+## M4 runbook — Lambda + API Gateway in parallel (dark)
+
+**Objective:** stand up the web app as a zip Lambda behind an API Gateway HTTP
+API, reading the *same live S3* that EC2 already serves (M3.5). **Zero prod
+traffic** — Cloudflare still points at EC2. Success = the Lambda origin is
+byte-for-byte identical to the EC2 origin on the same data. This is a pure
+compute-host swap; the data layer is already proven.
+
+**Safety model:** additive-only. Nothing user-facing changes until M5. If
+anything is wrong, `cdk destroy` the new constructs and prod is untouched.
+
+### Pre-flight — confirmed against the code (not assumed)
+- `src/server.js:36` builds `const app = express()`; `:145` calls
+  `app.listen(port)` directly — **the app is not exported.** M4 must export
+  `app` and guard the listen so importing the module (Lambda) doesn't bind a
+  port. (`npm run dev` and the systemd unit both still run `server.js`
+  directly, so they must keep listening.)
+- Only shell-out in the request path is `src/routes/admin.js:36` — `spawn`ing
+  `node scripts/daily.js` for the "run daily now" button. **This cannot work in
+  Lambda** (no long child process, 15-min cap). It's cron territory → M6. For
+  M4, that route is excluded from the parity gate and left to no-op/501 on
+  Lambda (decision D2 below).
+- No `pdftotext`/poppler/libreoffice/mammoth anywhere in `src/` — text
+  extraction is pure-JS / Anthropic SDK. Zip Lambda is viable (M2 premise,
+  re-confirmed).
+
+### Known-fiddly bits (where a flop would come from — handle explicitly)
+1. **Binary responses through API Gateway.** `docstore.getDocStream` pipes PDF
+   bytes to `res`. HTTP API + Lambda proxy only returns binary via base64 +
+   `isBase64Encoded: true`. `serverless-http` handles this **only** when the
+   response content-type is in its `binary` allowlist — must configure
+   `binary: ['application/pdf', 'application/octet-stream']` (or `binarySettings`
+   by matching content-types). **The parity gate must fetch a real résumé PDF
+   and byte-compare it**, not just diff `/api/listings` JSON. This is the single
+   most likely silent break.
+2. **Response payload cap.** API Gateway caps responses at ~6 MB (base64 inflates
+   ~33%, so ~4.5 MB of real bytes). Current docs are small résumé/cover PDFs, so
+   fine — but note it. If a doc ever exceeds it, switch that route to a
+   `302 → presigned S3 URL` (already floated in workstream 4). Not needed now.
+3. **Dark URL must not be openly hittable during soak.** Cloudflare Access only
+   fronts the origin at M5. **Decision D1 = IAM auth on the API route**
+   (`authorizationType: AWS_IAM`): only SigV4-signed callers with
+   `execute-api:Invoke` get in — no secret to leak, nothing serves her résumé to
+   an anonymous URL. Cost: `smoke.mjs --compare` must **SigV4-sign** its requests
+   to the API-GW origin (plain requests to the EC2 origin). **M5 handoff wrinkle
+   to resolve later, not now:** Cloudflare can't SigV4-sign, so at cutover the
+   route auth must change (swap to `NONE` behind Cloudflare Access, or sign in a
+   Cloudflare Worker). IAM auth is strictly the dark-soak guard; the M5 row
+   revisits the production auth model.
+4. **Lambda env + region.** The serverless env (`STORAGE=s3 S3_BUCKET=anyajob-data
+   DOCS_BUCKET=anyajob-docs AWS_REGION=us-east-1`) plus `ANTHROPIC_API_KEY` and
+   the SES/notify vars must be set as Lambda environment from CDK — pulled from
+   the same source as EC2's `.env`. Secrets go via CDK context/SSM, not
+   committed.
+
+### Decisions to lock before coding
+- **D1 — dark-soak auth:** **IAM auth on the API route** (`AWS_IAM`). Only
+  SigV4-signed callers with `execute-api:Invoke` reach the Lambda; `smoke.mjs`
+  signs. No app-level header/middleware needed. M5 must revisit the auth model
+  (Cloudflare can't sign — see fiddly bit #3).
+- **D2 — admin manual-daily route on Lambda:** return `501 Not Implemented`
+  (the button belongs to M6/EventBridge). Excluded from the parity gate.
+- **D3 — one Lambda vs many:** M4 ships the **web lambdalith only**. Daily/weekly
+  handlers are M6. Keeps M4 to one deployable.
+
+### Steps
+1. **Export the app.** `src/server.js`: `export const app` (or move app assembly
+   to `src/app.js` and have `server.js` import + listen). Guard the listen:
+   only `app.listen` when run as the entrypoint, not when imported. Unit suite +
+   `npm run dev` must stay green.
+2. **Adapter.** New `src/lambda.js`: `import serverless from 'serverless-http'`;
+   `export const handler = serverless(app, { binary: [...] })`. No app-level auth
+   middleware — auth is the gateway's job (D1, IAM). `npm install serverless-http`
+   (not yet installed).
+3. **CDK — extend `AnyaJobStack`** (`infra/lib/anyajob-stack.ts`), additive:
+   - `NodejsFunction` (or zip asset) `anyajob-web`, handler `src/lambda.handler`,
+     `runtime nodejs20`, env from step-4 vars, `timeout ~30s`, `memory 512MB`.
+   - `grantReadWrite` **both** buckets to the Lambda role (mirror `ec2Role`).
+   - `HttpApi` with a default route → Lambda integration, **`AWS_IAM`
+     authorization** (D1) on the route, a throttled stage.
+   - Grant the signing principal (my/CI local creds during soak)
+     `execute-api:Invoke` on the API.
+   - Store `ANTHROPIC_API_KEY`/SES secrets via SSM SecureString param +
+     `fromSecureString` (or CDK context) — **never** literal in code.
+   - Output the invoke URL (`CfnOutput`).
+4. **Deploy dark.** `cd infra && npx cdk deploy`, run **locally via `!`**
+   (decision: not through the CI OIDC role — it has S3 only). No Cloudflare change.
+5. **Parity gate.** `scripts/smoke.mjs --compare <EC2-on-s3 base> <API-GW base>` —
+   **SigV4-signing requests to the API-GW origin** (add `@aws-sdk/signature-v4` +
+   a hasher, or `aws4`; EC2 origin stays unsigned). Must assert, at minimum:
+   - `GET /api/listings` — identical count + payload.
+   - `GET /api/diagnostic` — identical redacted snapshot (the existing anchor).
+   - **A real document fetch — byte-identical PDF** (extend smoke if it only
+     checks status today; this is the #1 fiddly bit).
+   - Admin manual-daily route excluded (D2).
+6. **Green = M4 done.** Log it. Do **not** touch Cloudflare — that's M5.
+
+### Validation gate (row M4)
+`smoke.mjs --compare` **identical across all probes including a byte-equal PDF
+download**, both origins on the same live S3, admin-spawn route excepted.
+
+### Rollback
+`cdk destroy` the M4 constructs (Lambda + HTTP API; buckets are RETAIN and
+shared, so they stay). Nothing user-facing was ever pointed at the new origin,
+so rollback is invisible to prod.
+
+## M4.5 runbook — async scoring (unblocks M5)
+
+**Why:** M4 dark-deploy proved the read/serve path (parity green, incl. binary
+PDF). But résumé **scoring takes ~54 s** (a Claude call with the PDF as a
+document block), and **API Gateway HTTP API hard-caps integration at 30 s** — so
+scoring 503s through the gateway. Direct-invoke confirmed the Lambda itself
+scores fine in 54 s (HTTP 200, real feedback), so it's purely the gateway
+ceiling. Must be fixed before M5 (real traffic). **Decision (user): async +
+poll**, keeping API Gateway for everything.
+
+**Surface (only one flow is actually wired to the UI):**
+- `POST /api/profile/resume/feedback {lens}` → `generateResumeFeedback` (54 s),
+  persists to the documents index (`current.feedback[lens]`, has `generatedAt`);
+  `GET /api/profile/resume/feedback?lens` reads it back. Frontend: `profile.js`.
+- `POST /api/documents/:fp/score-resume|score-cover` are also >30 s but have **no
+  frontend callers** (dormant) — deferred; left returning their current result
+  (they'd 503 only if someone wired them up). Tracked, not fixed now.
+
+**Design:**
+- **POST** becomes fire-and-forget: mark the lens `status:'pending'` in the
+  index, async-invoke the worker (`InvocationType:'Event'`), return `202
+  {status:'pending'}`.
+- **Worker Lambda** (`anyajob-scoring-worker`, same asset, `src/worker.handler`,
+  300 s timeout): runs `generateResumeFeedback({lens})` — which persists the
+  done entry — then on `{error}`/throw persists `status:'error'`.
+- **Status model:** the persisted feedback entry carries `status`
+  (`pending|done|error`) alongside the existing fields; a pending marker
+  replaces the prior entry. `GET` already returns the entry, so the frontend
+  reads status from it.
+- **Frontend** (`profile.js`): POST → show "scoring…" → poll `GET` every ~3 s
+  until `status==='done'` (render) or `'error'` (surface) or ~2 min timeout.
+
+**Chunks:**
+1. Backend: `status` field + `markPending`/`markError` helpers in `feedback.js`;
+   POST → 202 + async-invoke; new `src/worker.js`; add `@aws-sdk/client-lambda`.
+2. CDK: worker Lambda + `lambda:InvokeFunction` grant + `SCORING_WORKER_FN` env
+   on the web fn; web timeout back to 30 s (reconcile the 120 s measurement
+   drift); `npm run bundle:lambda` unchanged (worker shares the asset).
+3. Frontend: `profile.js` polling + scoring/error UI states.
+4. Deploy + validate: POST returns 202 fast; poll → done; worker CloudWatch shows
+   completion; parity smoke still green.
+
+**Rollback:** worker + async are additive; reverting the POST handler to the
+synchronous path restores today's behavior (which only fails >30 s through the
+gateway anyway).
+
+**Progress:**
+- 2026-07-11 — **M4.5 chunk 1 (backend async) done.** `feedback.js`: success
+  entry now carries `status:'done'`; added `markResumeFeedbackPending/Error`
+  (status-only markers, `resumeFile`-matched so GET surfaces them) and
+  `startResumeFeedback` — the dual-mode entrypoint: **async 202 + worker invoke
+  when `SCORING_WORKER_FN` is set (Lambda), synchronous inline otherwise (EC2/
+  local, unchanged)**. New `src/worker.js` (off the same asset, `worker.handler`)
+  runs `generateResumeFeedback` and records done/error. `routes/profile.js` POST
+  → `startResumeFeedback`, 202 on pending. Added `@aws-sdk/client-lambda`.
+  Validated: 89/89 suite; module graph imports; pending/error status round-trips
+  through GET locally (index restored after). Next: CDK worker Lambda (chunk 2).
+- 2026-07-11 — **M4.5 chunk 2 (CDK worker) done + synth-validated.** Factored a
+  shared `appAsset` + `commonEnv`; added **`anyajob-scoring-worker`**
+  (`src/worker.handler`, 300 s, S3 rw, no SES/invoke). Web fn gets
+  `SCORING_WORKER_FN` = the worker's name and `grantInvoke` on it; web timeout
+  reset to 30 s (reconciles the 120 s measurement drift). Rebuilt the asset
+  (176 M) — `worker.js` + `@aws-sdk/client-lambda` included. Synth confirms both
+  functions, the env flag, and the `lambda:InvokeFunction` grant. Deploy (via
+  `!`) then validate the async path before the frontend chunk.
+- 2026-07-11 — **M4.5 chunk 2 DEPLOYED + async path proven on real infra.**
+  Stack `UPDATE_COMPLETE`; both fns Active (web 30 s w/ `SCORING_WORKER_FN`,
+  worker 300 s). Signed POST → **202 `{status:pending}` instantly** (no 30 s
+  gateway timeout); polled GET flipped `pending → done` at ~55 s with real
+  feedback — the full web→worker→S3→poll loop works. Also confirmed the **web
+  Lambda GET extracts résumé text (4596 chars)** → the linux `@napi-rs/canvas`
+  binary loads and works there (it IS load-bearing, for the GET's quote-anchor
+  extraction, even though PDF scoring skips it).
+- 2026-07-11 — **M4.5 chunk 3 (frontend polling) done.** `public/profile.js`
+  `runFeedback` is now dual-mode: **202 → `pollResumeFeedback` (GET every 3 s,
+  150 s timeout)**, **200 → today's synchronous render** (EC2/local). Added a
+  `displayEntry` guard so `pending`/`error` markers (and a page reload mid-
+  scoring) don't render as feedback; legacy statusless entries count as done.
+  Syntax-checked; `profile.js` is the only POST consumer (rest are GET); suite
+  89/89. Contract already proven end-to-end, so the frontend is validated by
+  proxy. Next: rebuild asset + redeploy so the Lambda serves the new frontend
+  (chunk 4), optional local browser UX test.
+- 2026-07-11 — **M4.5 chunk 4 (redeploy) done — M4 + M4.5 COMPLETE.** Rebuilt
+  the asset (new `profile.js`) and redeployed (code-only, no IAM; 47 s,
+  `UPDATE_COMPLETE`). Validated contract-only (backend unchanged since the proven
+  chunk-2 deploy, so no extra scoring run): signed GET `/profile.js` from the
+  Lambda serves the polling frontend (`pollResumeFeedback` + 202 handling, 200);
+  parity re-check **green** across all probes incl. binary PDF. The dark Lambda
+  is now feature-complete on the same live S3. **M5 remains** (Cloudflare origin
+  flip + auth-at-cutover); a full browser UX pass can be done then behind
+  Cloudflare, or locally against the real worker beforehand if desired.
 
 ## Testing strategy
 
@@ -274,3 +476,104 @@ CI deploy).
   instance role). Added a **30-day noncurrent-version lifecycle rule** to both
   buckets (verified Enabled). Deleted the 2 orphan dev `_profile` docs — docs
   bucket now **97 objects**, matching prod exactly, no dev residue.
+- 2026-07-11 — **M4 runbook drafted** (own section above), before any code — the
+  discipline the S3 step lacked up front. Verified against the code, not
+  assumed: `server.js` listens directly (needs `export`+guarded listen); the
+  only request-path shell-out is `admin.js`'s daily-run `spawn` (→ M6, 501 on
+  Lambda); no binary deps in `src/`. Flagged the four fiddly bits — **binary PDF
+  responses via base64/`isBase64Encoded` (parity gate must byte-compare a real
+  PDF, not just JSON)**, the ~6 MB payload cap, the unauthenticated dark
+  `execute-api` URL, and Lambda env/secrets from CDK. **Decisions locked with
+  the user:** D1 = **IAM auth** on the API route for the dark soak (smoke
+  SigV4-signs; M5 revisits the model since Cloudflare can't sign); D2 = admin
+  daily-run route → 501 on Lambda (it's M6); D3 = web lambdalith only. Deploy =
+  local `cdk deploy` via `!` (CI OIDC role is S3-only). Verified prereqs:
+  `smoke.mjs` does **not** yet byte-compare a PDF (probes are text/JSON only) and
+  `serverless-http` isn't installed — both are M4 work. No code changed.
+- 2026-07-11 — **M4 chunk 1 (adapter) done.** `src/server.js` now `export`s
+  `app` and only calls `app.listen` under an `isMain` guard (so the Lambda
+  import doesn't bind a port; dev/systemd still listen). New `src/lambda.js`
+  wraps `app` with `serverless-http` (^4, prod dep), binary allowlist
+  `application/pdf`+`application/octet-stream` for PDF downloads. Proven:
+  direct `node src/server.js` still serves 200; a synthetic API Gateway v2 event
+  through `handler` → 200 `application/json`; full suite **89/89**.
+- 2026-07-11 — **M4 chunk 2 (parity harness) done.** Extended `scripts/smoke.mjs`:
+  (a) a **binary PDF probe** `GET /api/profile/resume?download=1` that sha256
+  **byte-compares** the download (soft-skips 404 in health; matched 404s still
+  pass parity) — the #1 fiddly bit now has a real gate; (b) **auto SigV4
+  signing** for any `.execute-api.` origin (service `execute-api`, region parsed
+  from host, ambient credential chain, libs lazy-imported — no new deps, all
+  present via `@aws-sdk/client-s3`), so `--compare <EC2> <API-GW>` works despite
+  the gateway's `AWS_IAM` auth (D1). Proven: local health all ✔ incl. the PDF;
+  self-parity byte-identical incl. the PDF hash; signer dry-run emits a valid
+  `execute-api/aws4_request` signature. Next: CDK Lambda + HttpApi (chunk 3).
+- 2026-07-11 — **M4 chunk 3 (CDK Lambda + HTTP API) written + synth-validated.**
+  Extended `AnyaJobStack`: `anyajob-web` Lambda (nodejs20, **x86_64**,
+  `src/lambda.handler`, 512 MB / 30 s, S3 rw on both buckets + SES), an
+  `HttpApi` with **`AWS_IAM` auth on every route** (D1) and a throttled default
+  stage (20 burst / 10 rate) to cap runaway Anthropic/S3 spend. Env mirrors the
+  EC2 web path; `ANTHROPIC_API_KEY` via `{{resolve:ssm-secure:/anyajob/
+  anthropic-api-key}}`; **`AWS_REGION` deliberately omitted** (reserved — the
+  runtime sets it). `cdk synth` clean; template asserts every one of these.
+  **Native-dep discovery + bundling decision (D4):** résumé/cover scoring's PDF
+  text extraction (`pdf-parse` → pdfjs) hard-requires the **native
+  `@napi-rs/canvas`** (`DOMMatrix`) — proven by extraction crashing when it's
+  removed. The mac dev tree only has the darwin binary; Lambda is linux, and npm
+  won't install the linux prebuilt on a mac. **Chosen (user): ship the linux
+  prebuilt, plain zip, no Docker, scoring behavior unchanged.** New
+  `scripts/build-lambda-bundle.sh` (`npm run bundle:lambda`) stages
+  `infra/.app-bundle`: `npm ci --omit=dev`, then fetches
+  `@napi-rs/canvas-linux-x64-gnu` at the **exact version of the installed
+  wrapper (0.1.80, not npm-latest 1.0.2 — ABI must match)** and drops the
+  client-vendored top-level `pdfjs-dist` (~60 MB, unused server-side). Result:
+  **173 MB** unpacked, verified linux ELF binary present, well under the 250 MB
+  cap. **Note the trap:** extraction is a POST path the M4 parity probes don't
+  hit, so a broken native binary would NOT show in the dark gate — it must be
+  validated at deploy by an actual scoring invoke, not just smoke.
+  **Two deploy-time items to confirm (deploy is user-gated via `!`):** (1) stage
+  the SSM SecureString `/anyajob/anthropic-api-key`; (2) verify `ssm-secure`
+  resolves in a Lambda env var at deploy (fallback: `CfnParameter` noEcho or a
+  Secrets Manager ref). Next: `npm run bundle:lambda` → `cdk deploy` dark →
+  `smoke.mjs --compare` EC2-vs-Lambda + a scoring invoke.
+- 2026-07-11 — **M4 chunk 4 (parity plumbing) done + reference side proven.**
+  Chose the parity **reference = a local server on `STORAGE=s3`** (same M4 code,
+  same prod buckets) rather than EC2 — EC2 runs pre-M4 code and isn't directly
+  reachable without a CF token/SSH tunnel, so "same code, different host" is the
+  truer M4 diff. New `scripts/parity-m4.sh <API_URL>`: boots the local s3 server,
+  waits for health, runs `smoke.mjs --compare local↔Lambda` (Lambda auto-signed;
+  all probes GET → no prod writes). New `scripts/invoke-scoring.mjs <API_URL>`:
+  opt-in SigV4-signed **POST** to `/api/profile/resume/feedback` that exercises
+  the native canvas/pdf-parse path the GET probes miss (costs one Anthropic call,
+  refreshes cached feedback). Proven now: local-on-s3 served **55 real prod
+  listings** (local creds read the buckets) and self-parity passed every probe
+  **incl. the PDF bytes** — the whole reference/harness side is green; it just
+  needs the deployed Lambda URL. **SSM secret `/anyajob/anthropic-api-key`
+  staged** (pulled from `.env`). **Ready to deploy dark:** `npm run bundle:lambda`
+  → `cd infra && npx cdk deploy` (via `!`) → `bash scripts/parity-m4.sh <WebApiUrl>`
+  → `node scripts/invoke-scoring.mjs <WebApiUrl>`.
+- 2026-07-11 — **First dark deploy hit the flagged `ssm-secure` limit** and was
+  fixed on the spot. CloudFormation rejects `{{resolve:ssm-secure:…}}` in a
+  Lambda env var (`SSM Secure reference is not supported in
+  …/Environment/Variables/ANTHROPIC_API_KEY`) — exactly the item chunk 3 called
+  out. Switched to a **`noEcho` CfnParameter `AnthropicApiKey`** whose value is
+  passed from the SSM SecureString at deploy via command substitution — keeps the
+  secret out of source/console, no app rebuild, no new dep, SecureString
+  untouched. Deploy command:
+  `npx cdk deploy --parameters AnthropicApiKey="$(aws ssm get-parameter --name
+  /anyajob/anthropic-api-key --with-decryption --region us-east-1 --query
+  Parameter.Value --output text)"`. Synth confirms env → `{"Ref":"AnthropicApiKey"}`.
+- 2026-07-11 — **M4 dark deploy LIVE + read-path proven; scoring blocker found.**
+  Stack deployed (11 resources, 67 s): `anyajob-web` Lambda + `WebApi` HTTP API
+  (IAM auth, throttled) at `https://khtnbu5pbl.execute-api.us-east-1.amazonaws.com`.
+  **Parity gate GREEN** — `parity-m4.sh` diffed local-on-s3 vs Lambda: all probes
+  identical **including the binary PDF byte-compare**, proving base64/
+  `isBase64Encoded` binary responses survive API Gateway and that IAM+SigV4 auth
+  works. Then the scoring invoke 503'd: root-caused via CloudWatch + a
+  **direct invoke** (bypasses the gateway) → scoring returns **HTTP 200 with real
+  feedback in ~54 s**; the 503 is API Gateway's **30 s integration cap**, not the
+  Lambda. Also confirmed `extractedChars:0` is **normal** (PDF résumés skip text
+  extraction — Claude reads the PDF block), so **canvas was never the blocker**
+  (the linux-binary work still correctly covers non-PDF extraction). → Added
+  **M4.5 (async scoring + poll)**, user's chosen fix; see its runbook above.
+  Temporarily set the web Lambda timeout to 120 s for measurement (drift from
+  CDK's 30 s — reconciled in M4.5 chunk 2).
