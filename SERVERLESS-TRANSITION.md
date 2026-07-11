@@ -6,12 +6,13 @@ Sibling project `coffeeScale` (nyespresso) is the reference for the AWS/CDK
 shape — but note it was *born* serverless as a static SPA; anyaJob is a
 stateful Express monolith, so the pattern is adapted, not copied.
 
-**Status:** M0–M5 complete. **Production traffic is now served by the Lambda +
-API Gateway** — `jobs.anyalawgirly.com` (Cloudflare, Full-strict) → Access →
-JWT authorizer → `anyajob-web` Lambda → S3. EC2 is idle (still on S3) as the
-rollback path. CI deploys both EC2 and the Lambda/infra on push. Remaining:
-**M6** (cron → EventBridge) and **M7** (decommission EC2 — the actual $10/mo
-saving). Post-flip UX (esp. the async scoring modal) to confirm in-browser.
+**Status:** M0–M6 complete. **Fully serverless in production:** web + scoring on
+`anyajob-web` Lambda + API Gateway (Cloudflare Access → JWT authorizer),
+scheduled jobs on EventBridge → `anyajob-cron` Lambda, all on S3. **EC2 now does
+nothing** — no traffic (M5) and no crons (M6, crontab removed) — it stays only as
+the rollback path. CI deploys EC2 + Lambda/infra on push. Remaining: **M7** —
+stop EC2, soak ~1 week, terminate (the actual ~$10/mo saving). Post-cutover UX
+(async scoring modal) still worth an in-browser confirm.
 
 **Serverless env (set on EC2 to run on S3; becomes Lambda env at M4):**
 `STORAGE=s3  S3_BUCKET=anyajob-data  DOCS_BUCKET=anyajob-docs  AWS_REGION=us-east-1`
