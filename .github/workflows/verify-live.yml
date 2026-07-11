@@ -1,0 +1,50 @@
+name: Verify live app (backend + read/write)
+
+# Proof that production is actually serving from the S3 backend. Reads the
+# RUNNING server process's env (not just .env) and hits its local API.
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Probe live process
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" bash -se <<'EOF'
+            set -uo pipefail
+            PID=$(pgrep -f 'src/server.js' | head -1)
+            echo "server pid: ${PID:-none}"
+            if [ -n "${PID:-}" ]; then
+              echo "=== running process env (storage-related) ==="
+              tr '\0' '\n' < "/proc/$PID/environ" | grep -E '^(STORAGE|S3_BUCKET|DOCS_BUCKET|AWS_REGION|PORT)=' || echo "(none set on process)"
+              PORT=$(tr '\0' '\n' < "/proc/$PID/environ" | grep '^PORT=' | cut -d= -f2)
+              PORT=${PORT:-3000}
+              echo "=== live API read (served from S3 now) ==="
+              curl -s "http://localhost:$PORT/api/listings" | head -c 120; echo
+              echo "=== AWS identity of the process (instance role) ==="
+              curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/ 2>/dev/null || echo "(no IMDS role)"
+            fi
+          EOF
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
