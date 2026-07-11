@@ -13,6 +13,15 @@ MODE="${1:-inspect}"
 DATA_BUCKET="${DATA_BUCKET:-anyajob-data}"
 DOCS_BUCKET="${DOCS_BUCKET:-anyajob-docs}"
 
+# The AWS creds live in .env (dotenv feeds them to the Node app, but a raw
+# shell doesn't load them). Export just the AWS_* lines so the aws CLI can
+# authenticate the same way the app does.
+if [ -f .env ]; then
+  while IFS= read -r line; do
+    case "$line" in AWS_*) export "$line" ;; esac
+  done < .env
+fi
+
 echo "=== AWS identity (this is what needs bucket write access) ==="
 aws sts get-caller-identity 2>&1 || echo "!! no working AWS creds on EC2"
 echo "=== region ==="
