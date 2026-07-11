@@ -37,7 +37,7 @@ const DOCS_INDEX = join(__dirname, '..', 'data', 'documents.json');
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = 'claude-sonnet-4-6';
 
-// Pull résumé text via the shared extractor (pdf-parse / mammoth / txt).
+// Pull résumé text via the shared extractor (pdf-parse / txt).
 // Distinct from getProfileResumeText, which caps to 8000 chars for the
 // scoring loop — feedback needs the full document so Claude's verbatim
 // quotes can match anywhere in the résumé.
@@ -79,7 +79,7 @@ export async function generateResumeFeedback({ lens = 'law-school' } = {}) {
   // PDF résumés go in as a document block with citations enabled — this
   // gives Claude visual PDF understanding (vs basic text extraction) and
   // returns cited_text spans we use to corroborate findings. Non-PDF
-  // résumés (DOCX, TXT) fall back to extracted text in the user message;
+  // résumés (TXT) fall back to extracted text in the user message;
   // Anthropic only accepts PDF for document blocks today.
   const isPdf = extname(meta.file).toLowerCase() === '.pdf';
   let userContent;

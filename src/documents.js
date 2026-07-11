@@ -1,15 +1,15 @@
 // src/documents.js
 // Per-listing application materials (resume, cover letter, other).
 // Files stored on EBS at data/documents/{fingerprint}/{slot}-{timestamp}.{ext}
-// Old versions kept (archived). DOCX converted to PDF on upload for preview.
-// Backed up to S3 nightly via separate cron (see DEPLOY.md).
+// Old versions kept (archived). Uploads are PDF/TXT only — PDFs are their own
+// preview (rendered client-side by public/pdf-viewer.js), so there is no
+// server-side conversion step. Backed up to S3 nightly via separate cron.
 
 import 'dotenv/config';
 import { readFile, writeFile, mkdir, readdir, copyFile, stat } from 'node:fs/promises';
 import { existsSync, createReadStream } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, extname, basename } from 'node:path';
-import { spawn } from 'node:child_process';
+import { dirname, join, extname } from 'node:path';
 import { createHash } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import { RESUME_ALIGNMENT_SYSTEM, COVER_LETTER_ALIGNMENT_SYSTEM } from './prompts.js';
@@ -23,7 +23,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DOCS_ROOT = join(__dirname, '..', 'data', 'documents');
 const DOCS_INDEX = join(__dirname, '..', 'data', 'documents.json');
 
-const ALLOWED_EXTENSIONS = new Set(['.pdf', '.docx', '.doc', '.txt']);
+// PDF/TXT only. Word docs were previously accepted and converted to PDF via
+// LibreOffice for preview; that shell-out is gone (serverless migration), and
+// the store is PDF-only in practice. Reject anything else at upload.
+const ALLOWED_EXTENSIONS = new Set(['.pdf', '.txt']);
 const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5MB
 
 // ---------- Index management ----------
@@ -56,42 +59,6 @@ function timestamp() {
 
 function safeFilename(s) {
   return s.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
-}
-
-// ---------- DOCX → PDF conversion ----------
-// Uses LibreOffice headless. Falls back gracefully if not installed.
-async function convertDocxToPdf(srcPath, destDir) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('libreoffice', [
-      '--headless',
-      '--convert-to', 'pdf',
-      '--outdir', destDir,
-      srcPath,
-    ], { timeout: 30000 });
-
-    let stderr = '';
-    proc.stderr?.on('data', (d) => { stderr += d.toString(); });
-    proc.on('error', (err) => {
-      // libreoffice not installed; not fatal — just no preview
-      log.warn({ err }, 'LibreOffice not available; skipping PDF conversion');
-      resolve(null);
-    });
-    proc.on('close', (code) => {
-      if (code !== 0) {
-        log.warn({ exitCode: code, stderr }, 'LibreOffice exited non-zero');
-        return resolve(null);
-      }
-      const expected = join(
-        destDir,
-        basename(srcPath, extname(srcPath)) + '.pdf',
-      );
-      if (existsSync(expected)) {
-        resolve(expected);
-      } else {
-        resolve(null);
-      }
-    });
-  });
 }
 
 // ---------- Public API ----------
@@ -134,15 +101,9 @@ export async function saveDocument({
   const destPath = join(dir, fname);
   await writeFile(destPath, buffer);
 
-  // Convert DOCX → PDF for preview if applicable
-  let previewFile = null;
-  if (ext === '.docx' || ext === '.doc') {
-    const pdfPath = await convertDocxToPdf(destPath, dir);
-    if (pdfPath) previewFile = basename(pdfPath);
-  } else if (ext === '.pdf') {
-    previewFile = fname; // PDF is its own preview
-  }
-  // .txt files: no preview, will be rendered as text
+  // PDF is its own preview (rendered client-side). .txt has no preview and is
+  // rendered as text. No other types reach here (validated above).
+  const previewFile = ext === '.pdf' ? fname : null;
 
   // Update index
   const idx = await readIndex();
@@ -322,21 +283,9 @@ async function readPdfText(pdfPath) {
   }
 }
 
-async function readDocxText(docxPath) {
-  // Try mammoth if available (it's already a dep elsewhere or can be added)
-  try {
-    const mammoth = (await import('mammoth')).default || (await import('mammoth'));
-    const result = await mammoth.extractRawText({ path: docxPath });
-    return result.value || '';
-  } catch {
-    return '';
-  }
-}
-
 export async function extractResumeText(filePath) {
   const ext = extname(filePath).toLowerCase();
   if (ext === '.pdf') return await readPdfText(filePath);
-  if (ext === '.docx') return await readDocxText(filePath);
   if (ext === '.txt') return await readFile(filePath, 'utf-8');
   return '';
 }

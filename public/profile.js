@@ -44,7 +44,7 @@ function renderResume(meta) {
           <line x1="8" y1="17" x2="16" y2="17"/>
         </svg>
         <div class="resume-blank-prompt">Drag a résumé here, or <em>click to browse</em>.</div>
-        <div class="resume-blank-help">PDF · DOCX · DOC · TXT — up to 5 MB</div>
+        <div class="resume-blank-help">PDF · TXT — up to 5 MB</div>
       </div>
     `;
     wireDropzone();

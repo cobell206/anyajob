@@ -6,7 +6,8 @@ Sibling project `coffeeScale` (nyespresso) is the reference for the AWS/CDK
 shape — but note it was *born* serverless as a static SPA; anyaJob is a
 stateful Express monolith, so the pattern is adapted, not copied.
 
-**Status:** M0 + M1 complete (storage seam, S3 backend, CDK infra). M2 next.
+**Status:** M0–M2 complete (storage seam, S3 backend, CDK infra, PDF-only +
+LibreOffice removed). M3 (documents → S3) next.
 
 **Infra is CDK, like espresso.** `infra/` holds the CDK app (`AnyaJobStack`).
 No click-ops — every AWS resource is defined in code. Deploy: `cd infra &&
@@ -198,3 +199,13 @@ CI deploy).
   the real Express app booted with `STORAGE=s3` → smoke green; `smoke --compare`
   fs-vs-s3 origins **identical** across all probes (also validates the M4/M5
   parity harness early). fs full suite still 76/76.
+- 2026-07-11 — **M2 done.** Restricted uploads to `.pdf`/`.txt`
+  (`ALLOWED_EXTENSIONS`); `validateUpload`/`saveDocument` now reject Word docs.
+  Deleted `convertDocxToPdf` (the LibreOffice shell-out) and the `readDocxText`
+  mammoth path; dropped the `mammoth` dep; removed the now-unused `spawn`/
+  `basename` imports from documents.js. Frontend `accept` + help text narrowed
+  to PDF/TXT. New `src/documents.test.js` (6 tests) covers `validateUpload`.
+  Gate: full suite **82/82**; grep confirms no LibreOffice/convert/mammoth
+  *code* (only explanatory comments); booted app lists the profile resume with
+  a `previewFile` and streams it 200 `application/pdf`. The app is now a plain
+  JS + pure-JS-libs bundle — no binary deps, so it fits a zip Lambda (M4).
