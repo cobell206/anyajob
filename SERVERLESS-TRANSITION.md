@@ -402,6 +402,13 @@ header. Update the CDK route auth + the app's header check accordingly.
   infra devDep; the linux runner installs canvas natively. Separate concurrency
   group from the EC2 deploy so both run in parallel; EC2 workflow retires at M7.
   Pushed together with A1 — this push is the first CI-driven `cdk deploy`.
+- 2026-07-11 — **M5 Part A COMPLETE.** First CI-driven `cdk deploy` green
+  (OIDC → `bundle:lambda` → `cdk deploy`, 1m12s); EC2 deploy ran green in
+  parallel; stack `UPDATE_COMPLETE`; `parity-m4.sh` identical incl. binary PDF.
+  **Lockstep closed:** one push to main now deploys EC2 (deploy.yml) AND the
+  Lambda + infra (deploy-infra.yml) — no more local hand-deploys. Remaining M5:
+  Part B (prod auth model — Cloudflare can't SigV4-sign the IAM route) then
+  Part C (Cloudflare origin flip EC2 → API Gateway).
 
 ## Testing strategy
 
