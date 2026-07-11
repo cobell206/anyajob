@@ -13,13 +13,14 @@ dependency remains. M4 (Lambda + API Gateway) next.
 **Serverless env (set on EC2 to run on S3; becomes Lambda env at M4):**
 `STORAGE=s3  S3_BUCKET=anyajob-data  DOCS_BUCKET=anyajob-docs  AWS_REGION=us-east-1`
 
-**⚠️ The S3 buckets currently hold a STALE DEV SNAPSHOT, not production data.**
-The M1/M3 `aws s3 sync` ran from a *local* checkout (~June) purely to exercise
-the s3 backend for the gates. Live data lives on EC2 (fs) and has drifted since
-— e.g. the two M2 test uploads are on EC2 only, not in `anyajob-docs`. The
-authoritative migration is a fresh `aws s3 sync` **sourced from the live EC2
-box** (`data/` + `data/documents/`), run at the M5 cutover moment. Do NOT treat
-the current bucket contents as the source of truth.
+**Buckets now hold real production data** (migrated 2026-07-11 from the live
+EC2 box: 10 JSON + 97 documents, sizes byte-matched). EC2 is still the live
+writer (fs), so S3 will drift again until the `STORAGE=s3` flip — re-run the
+migration `execute` one final time immediately before flipping EC2 to S3
+(M3.5). Mechanism: `.github/workflows/s3-migrate.yml` (OIDC role assumes
+`anyajob-github-deploy`, runs `scripts/migrate-to-s3.mjs` on EC2 with injected
+short-lived creds). Uses `PutObject` per file (not `sync` — dev-snapshot
+timestamps would have caused skips).
 
 **Infra is CDK, like espresso.** `infra/` holds the CDK app (`AnyaJobStack`).
 No click-ops — every AWS resource is defined in code. Deploy: `cd infra &&
@@ -126,12 +127,13 @@ Each row is an independently mergeable/deployable PR with its own gate.
 | **M1** | **S3 storage backend** behind `STORAGE=fs\|s3` (default `fs`). | EC2, flag off | **Storage contract test green on `s3`** (same suite, both backends); run EC2 with `STORAGE=s3` on a seeded bucket → smoke green, writes land in S3 | Flip flag to `fs` |
 | **M2** | **Restrict to PDF + delete LibreOffice** (drop `convertDocxToPdf`, `mammoth`). | EC2 | Unit test: `validateUpload` rejects `.docx`, accepts `.pdf`; grep confirms no `libreoffice`/`convertDocxToPdf` refs; browser: PDF previews, docx rejected with message | Revert commit |
 | **M3** | **Documents → S3** (uploads + index; endpoint streams from S3). | EC2, `STORAGE=s3` | Smoke: upload via API → fetch back byte-equal; preview loads; index object in S3 | Flip flag to `fs` |
-| **M4** | **Lambda + API Gateway in parallel** (`serverless-http` + CDK stack), reads the same S3. **No prod traffic.** | New infra, dark | **`smoke.mjs --compare <EC2> <API-GW>`** returns identical for key endpoints while both read shared S3 | Delete stack; nothing user-facing touched |
+| **M3.5** | **Migrate prod data + cut EC2 over to `STORAGE=s3` and soak** (added per review — validate the data layer on real data + real traffic before Lambda). Migrate: `s3-migrate.yml` execute. Then set `STORAGE=s3`+bucket envs on EC2, restart. | EC2 (now on S3) | Final `s3-migrate execute` right before flip; app healthy on S3; daily cron writes land in S3; doc upload lands in `anyajob-docs`; soak a few days | Set `STORAGE=fs`, `sync` S3→disk if writes occurred |
+| **M4** | **Lambda + API Gateway in parallel** (`serverless-http` + CDK stack), reads the same S3. **No prod traffic.** | New infra, dark | **`smoke.mjs --compare <EC2-on-s3> <API-GW>`** identical, both on the same live S3 data | Delete stack; nothing user-facing touched |
 | **M5** | **Traffic cutover** — Cloudflare origin → API Gateway; add shared-secret header + Access verify. | Cloudflare | Smoke green vs production hostname; flip-back rehearsed once; error logs clean over a soak window | Point Cloudflare back to EC2 |
 | **M6** | **Cron → EventBridge** (daily/weekly Lambdas; disable EC2 crontab). | New infra | Manually invoke each scheduled Lambda → new listings/summary in S3 + notification fired; confirm no double-run (EC2 crons off) | Re-enable EC2 crons |
 | **M7** | **Decommission EC2** — *stop* first, soak ~1 week, then terminate. | — | Site + crons healthy for a week with EC2 stopped | Start EC2 back up (until terminated) |
 
-**Dependencies:** M0 → M1 → M3 → M4 → M5; M2 independent but before M4 (zip-ability); M6 needs M1; M7 last after M5+M6 soak.
+**Dependencies:** M0 → M1 → M3 → M3.5 → M4 → M5; M2 independent but before M4 (zip-ability); M6 needs M1; M7 last after M5+M6 soak.
 
 ## Testing strategy
 
@@ -238,3 +240,20 @@ CI deploy).
   app with `STORAGE=s3` + both buckets → general smoke green **and** the profile
   résumé streamed from the S3 docs bucket (200 `application/pdf`, valid header);
   fs doc-serving regression clean after the sendFile→pipe change.
+- 2026-07-11 — **Production data migrated to S3** (authoritative). Discovery
+  showed the earlier bucket contents were a ~June dev snapshot (~2% of prod:
+  local `listings.json` 28 KB vs live 1.28 MB; 2 docs vs 97) — exactly the gap
+  that made validating only against it insufficient. Also found EC2 has **no
+  AWS creds** reachable by a process (no `.env` keys, no `~/.aws`, no instance
+  role), so migration can't use EC2's identity. Fix: added a GitHub **OIDC
+  deploy role** to the CDK stack (`anyajob-github-deploy`, S3 read/write on both
+  buckets, assumable only by `repo:cobell206/anyajob`) — pulled forward from
+  M4/M5, no stored keys. New `scripts/migrate-to-s3.mjs` (Node, authenticates
+  like the app) + `.github/workflows/s3-migrate.yml` (OIDC → inject short-lived
+  creds over SSH → run on EC2). Ran inspect (creds resolve, buckets reachable)
+  then execute: **10 data files + 97 documents** uploaded; verified bucket
+  sizes byte-match EC2's live inventory.
+  **Re-sequencing (per review):** insert **M3.5 — cut EC2 over to `STORAGE=s3`
+  and soak** BEFORE M4, so the data layer is proven on production data + real
+  traffic on trusted infra before Lambda. M4 then becomes a pure compute-host
+  swap (parity: EC2-on-s3 vs Lambda-on-s3, same live S3 data).
