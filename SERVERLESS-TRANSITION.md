@@ -267,6 +267,10 @@ CI deploy).
   listings — served from S3. EC2 now writes to S3 (source of truth is S3);
   local `data/` is frozen. **Soak:** watch daily cron writes land in S3 and a
   doc upload land in `anyajob-docs`. Rollback: `cutover-to-s3.yml` backend=fs
-  (sync S3→disk first if writes occurred). Note: the S3-backup cron
-  (`npm run backup`) now lacks perms for the old backup bucket and is redundant
-  (bucket versioning) — disable it. Then M4 (Lambda) is a pure host swap.
+  (sync S3→disk first if writes occurred). Then M4 (Lambda) is a pure host swap.
+- 2026-07-11 — **Post-cutover cleanup done.** Retired the S3-backup cron
+  (removed from `setup.sh` + live crontab via `disable-backup-cron.yml`;
+  redundant now that versioning is the backup, and it errored under the
+  instance role). Added a **30-day noncurrent-version lifecycle rule** to both
+  buckets (verified Enabled). Deleted the 2 orphan dev `_profile` docs — docs
+  bucket now **97 objects**, matching prod exactly, no dev residue.
