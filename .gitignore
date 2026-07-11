@@ -42,5 +42,9 @@ TODO.md
 dist/
 build/
 
+# CDK synth output
+cdk.out/
+infra/cdk.out/
+
 # Local Claude Code configs (per-dev, not project state)
 .claude/

@@ -17,6 +17,13 @@ import { open, rename, unlink, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, basename } from 'node:path';
+import {
+  S3Client,
+  GetObjectCommand,
+  PutObjectCommand,
+  HeadObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 import { createLogger } from './log.js';
 
 const log = createLogger('store');
@@ -64,11 +71,67 @@ const fsBackend = {
   },
 };
 
-// S3 backend lands in M1. Guarded so a misconfigured env fails loudly rather
-// than silently falling back to disk (which would read stale data).
+// ---- s3 backend: same interface as fs, backed by one object per key.
+// PutObject is atomic (readers see the whole old or new object, never a
+// partial), so no tmp+rename dance is needed. Missing objects are mapped to an
+// ENOENT-coded error so readJsonSafe's fallback path works identically to fs.
+function makeS3Backend() {
+  const bucket = process.env.S3_BUCKET;
+  if (!bucket) throw new Error('STORAGE=s3 requires S3_BUCKET to be set');
+  const region = process.env.AWS_REGION || 'us-east-1';
+  const prefix = process.env.S3_PREFIX || ''; // e.g. "data/"; empty = bucket root
+  const client = new S3Client({ region });
+  const s3key = (key) => prefix + key;
+
+  const isMissing = (err) =>
+    err?.name === 'NoSuchKey' ||
+    err?.name === 'NotFound' ||
+    err?.$metadata?.httpStatusCode === 404;
+
+  return {
+    async readText(key) {
+      try {
+        const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: s3key(key) }));
+        return await res.Body.transformToString('utf-8');
+      } catch (err) {
+        if (isMissing(err)) {
+          const e = new Error(`no such object: ${s3key(key)}`);
+          e.code = 'ENOENT'; // match fs so readJsonSafe returns its fallback
+          throw e;
+        }
+        throw err;
+      }
+    },
+    async writeText(key, text) {
+      await client.send(new PutObjectCommand({
+        Bucket: bucket,
+        Key: s3key(key),
+        Body: text,
+        ContentType: 'application/json',
+      }));
+    },
+    async exists(key) {
+      try {
+        await client.send(new HeadObjectCommand({ Bucket: bucket, Key: s3key(key) }));
+        return true;
+      } catch (err) {
+        if (isMissing(err)) return false;
+        throw err;
+      }
+    },
+    async remove(key) {
+      // DeleteObject is idempotent — no error if the key is already absent.
+      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: s3key(key) }));
+    },
+  };
+}
+
+// Guarded so a misconfigured env fails loudly rather than silently falling
+// back to disk (which would read stale data).
 function selectBackend(name) {
   if (name === 'fs') return fsBackend;
-  throw new Error(`Unknown STORAGE backend: ${name} (fs is the only backend until M1)`);
+  if (name === 's3') return makeS3Backend();
+  throw new Error(`Unknown STORAGE backend: ${name} (expected fs | s3)`);
 }
 const backend = selectBackend(BACKEND);
 

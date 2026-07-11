@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
+    "@aws-sdk/client-s3": "^3.1085.0",
     "@aws-sdk/client-ses": "^3.658.0",
     "cheerio": "^1.0.0",
     "dotenv": "^16.4.5",

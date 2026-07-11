@@ -13,5 +13,9 @@ export {
   writeJson,
   readJsonSafe,
   readJsonStrict,
+  readRaw,
+  writeRaw,
+  exists,
+  removeFile,
   fbKey,
 } from './store.js';

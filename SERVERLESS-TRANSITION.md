@@ -6,7 +6,11 @@ Sibling project `coffeeScale` (nyespresso) is the reference for the AWS/CDK
 shape — but note it was *born* serverless as a static SPA; anyaJob is a
 stateful Express monolith, so the pattern is adapted, not copied.
 
-**Status:** M0 complete (storage seam + test harnesses). M1 (S3 backend) next.
+**Status:** M0 + M1 complete (storage seam, S3 backend, CDK infra). M2 next.
+
+**Infra is CDK, like espresso.** `infra/` holds the CDK app (`AnyaJobStack`).
+No click-ops — every AWS resource is defined in code. Deploy: `cd infra &&
+npx cdk deploy`. Account already CDK-bootstrapped (shared with espresso).
 
 ## Goal & guardrails
 
@@ -179,3 +183,18 @@ CI deploy).
 - 2026-07-11 — M0 merged to main (7137d73) and **deployed to EC2** via CI
   (tests green, SSH deploy 9s). Running in production on the fs backend, still
   reading the same data/ files. M1 (S3 backend behind STORAGE=s3) is next.
+- 2026-07-11 — **M1 done.** Added the `s3` backend to `store.js` (Get/Put/Head/
+  Delete via `@aws-sdk/client-s3`; missing objects mapped to ENOENT so
+  `readJsonSafe` fallback matches fs). `STORAGE=s3` + `S3_BUCKET` selects it;
+  unset ⇒ fs, so EC2/dev unchanged. Swapped `registry.js`'s `existsSync` for
+  `store.exists`; exposed `exists/removeFile/readRaw/writeRaw` through the
+  `io.js` facade.
+  **Infra as CDK (decision B — no click-ops):** scaffolded `infra/` mirroring
+  espresso (`node bin/infra.ts` type-stripping, `AnyaJobStack`). Deleted the
+  imperative test bucket; `cdk deploy` now owns `anyajob-data` (RETAIN +
+  versioned + block-public + enforce-SSL). `data/*.json` seeded via
+  `aws s3 sync`.
+  Gate: contract suite **10/10 on both fs and s3** (against the CDK bucket);
+  the real Express app booted with `STORAGE=s3` → smoke green; `smoke --compare`
+  fs-vs-s3 origins **identical** across all probes (also validates the M4/M5
+  parity harness early). fs full suite still 76/76.
