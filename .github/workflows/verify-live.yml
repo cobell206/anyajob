@@ -31,18 +31,30 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" bash -se <<'EOF'
             set -uo pipefail
-            PID=$(pgrep -f 'src/server.js' | head -1)
+            PID=$(pgrep -f 'src/server.js' | head -1 || true)
             echo "server pid: ${PID:-none}"
-            if [ -n "${PID:-}" ]; then
-              echo "=== running process env (storage-related) ==="
-              tr '\0' '\n' < "/proc/$PID/environ" | grep -E '^(STORAGE|S3_BUCKET|DOCS_BUCKET|AWS_REGION|PORT)=' || echo "(none set on process)"
-              PORT=$(tr '\0' '\n' < "/proc/$PID/environ" | grep '^PORT=' | cut -d= -f2)
-              PORT=${PORT:-3000}
-              echo "=== live API read (served from S3 now) ==="
-              curl -s "http://localhost:$PORT/api/listings" | head -c 120; echo
-              echo "=== AWS identity of the process (instance role) ==="
-              curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/ 2>/dev/null || echo "(no IMDS role)"
-            fi
+            [ -n "${PID:-}" ] || { echo "FAIL: no server process"; exit 1; }
+
+            echo "=== running process env (storage-related) ==="
+            ENVV=$(tr '\0' '\n' < "/proc/$PID/environ")
+            echo "$ENVV" | grep -E '^(STORAGE|S3_BUCKET|DOCS_BUCKET|AWS_REGION|PORT)=' || echo "(none set)"
+            STORAGE_VAL=$(echo "$ENVV" | grep '^STORAGE=' | cut -d= -f2 || true)
+            PORT=$(echo "$ENVV" | grep '^PORT=' | cut -d= -f2 || true); PORT=${PORT:-3000}
+
+            echo "=== live API read (served from S3) ==="
+            RESP=$(curl -s "http://localhost:$PORT/api/listings" || true)
+            COUNT=$(printf '%s' "$RESP" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).count)}catch{console.log('ERR')}})")
+            echo "listings count served: $COUNT"
+
+            echo "=== instance role (IMDS) ==="
+            ROLE=$(curl -s --max-time 3 http://169.254.169.254/latest/meta-data/iam/security-credentials/ || true)
+            echo "instance role: ${ROLE:-none}"
+
+            echo "=== assertions ==="
+            [ "$STORAGE_VAL" = "s3" ] || { echo "FAIL: live process not on s3 (STORAGE=$STORAGE_VAL)"; exit 1; }
+            case "$COUNT" in ''|*[!0-9]*) echo "FAIL: API did not return a listings count ($COUNT)"; exit 1;; esac
+            [ "$COUNT" -gt 0 ] || { echo "FAIL: 0 listings served"; exit 1; }
+            echo "VERIFIED: production live on the S3 backend; $COUNT listings served from S3"
           EOF
 
       - name: Cleanup
