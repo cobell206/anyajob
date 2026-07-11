@@ -4,12 +4,11 @@
 
 import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
-import { readFile } from 'node:fs/promises';
 import { writeJsonAtomic } from './atomic.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { buildSystemBlocks, buildUserMessage } from './prompts.js';
-import { fbKey } from './io.js';
+import { fbKey, readJson, readJsonSafe } from './io.js';
 import { createLogger } from './log.js';
 
 const log = createLogger('score');
@@ -30,12 +29,7 @@ const PRICING = {
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function loadSpend() {
-  try {
-    const raw = await readFile(SPEND_PATH, 'utf-8');
-    return JSON.parse(raw);
-  } catch {
-    return { byDay: {} };
-  }
+  return readJsonSafe(SPEND_PATH, { fallback: { byDay: {} } });
 }
 
 async function saveSpend(spend) {
@@ -84,11 +78,7 @@ function calcCost(usage) {
 
 async function loadFeedback() {
   try {
-    const raw = await readFile(
-      join(__dirname, '..', 'data', 'feedback.json'),
-      'utf-8',
-    );
-    return JSON.parse(raw);
+    return await readJson('feedback.json');
   } catch {
     return {};
   }
@@ -179,16 +169,8 @@ export async function scoreOne(listing, preferences, examples = [], resumeText =
 // Pull recent feedback for prompt-caching examples
 export async function loadRecentFeedback(maxExamples = 6) {
   try {
-    const raw = await readFile(
-      join(__dirname, '..', 'data', 'feedback.json'),
-      'utf-8',
-    );
-    const feedback = JSON.parse(raw);
-    const listingsRaw = await readFile(
-      join(__dirname, '..', 'data', 'listings.json'),
-      'utf-8',
-    );
-    const { listings } = JSON.parse(listingsRaw);
+    const feedback = await readJson('feedback.json');
+    const { listings } = await readJson('listings.json');
     // Feedback is keyed by dedupKey when available, fingerprint as fallback.
     const byKey = new Map(listings.map((l) => [fbKey(l), l]));
 
@@ -212,11 +194,7 @@ export async function loadRecentFeedback(maxExamples = 6) {
 
 // CLI test mode: node src/score.js --test
 if (process.argv.includes('--test')) {
-  const prefsRaw = await readFile(
-    join(__dirname, '..', 'data', 'preferences.json'),
-    'utf-8',
-  );
-  const prefs = JSON.parse(prefsRaw);
+  const prefs = await readJson('preferences.json');
   const fakeListing = {
     source: 'test',
     company: 'Davis Polk & Wardwell',

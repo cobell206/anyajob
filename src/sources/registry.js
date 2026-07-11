@@ -17,12 +17,12 @@
 // Sources persist in data/sources.json. On first run, the file is seeded
 // from DEFAULT_SOURCES below. After that, the file is the source of truth.
 
-import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { writeJsonAtomic } from '../atomic.js';
+import { readJson } from '../io.js';
 import { createLogger } from '../log.js';
 
 const log = createLogger('sources');
@@ -68,7 +68,9 @@ export async function loadSources() {
     await writeJsonAtomic(SOURCES_PATH, seeded);
     return seeded;
   }
-  return JSON.parse(await readFile(SOURCES_PATH, 'utf-8'));
+  // NOTE (M1): existsSync above is an fs primitive — S3 backend will need a
+  // store.exists(key) equivalent for the first-run seed check.
+  return readJson(SOURCES_PATH);
 }
 
 export async function saveSources(data) {

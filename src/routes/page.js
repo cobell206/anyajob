@@ -15,7 +15,7 @@ import { Router } from 'express';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { readJson, fbKey } from '../io.js';
+import { readJson, readJsonSafe, fbKey } from '../io.js';
 import { createLogger } from '../log.js';
 import { applyNav } from '../nav.js';
 
@@ -78,10 +78,7 @@ async function computeInitialData() {
   }
 
   // Summaries: best-effort. Missing file → null and front-end skips the brief.
-  let summaries = null;
-  try {
-    summaries = JSON.parse(await readFile(SUMMARIES_PATH, 'utf-8'));
-  } catch { /* leave null */ }
+  const summaries = await readJsonSafe(SUMMARIES_PATH, { fallback: null });
 
   // Pending source candidates: just the count + the run's summary copy so the
   // roles page can paint the pending-review pill without an extra fetch. The

@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import { RESUME_ALIGNMENT_SYSTEM, COVER_LETTER_ALIGNMENT_SYSTEM } from './prompts.js';
 import { writeJsonAtomic } from './atomic.js';
-import { readJson, fbKey } from './io.js';
+import { readJson, readJsonSafe, fbKey } from './io.js';
 import { createLogger } from './log.js';
 
 const log = createLogger('documents');
@@ -37,11 +37,7 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5MB
 // }
 
 async function readIndex() {
-  try {
-    return JSON.parse(await readFile(DOCS_INDEX, 'utf-8'));
-  } catch {
-    return {};
-  }
+  return readJsonSafe(DOCS_INDEX, { fallback: {} });
 }
 
 async function writeIndex(idx) {

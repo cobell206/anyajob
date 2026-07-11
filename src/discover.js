@@ -11,7 +11,6 @@
 
 import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -20,7 +19,7 @@ import { DISCOVERY_SYSTEM } from './prompts.js';
 import { findOverlap, smartfetchSources } from './discover-overlap.js';
 import { getProfileResumeText } from './documents.js';
 import { writeJsonAtomic } from './atomic.js';
-import { fbKey } from './io.js';
+import { fbKey, readJson, readJsonSafe } from './io.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PREFS_PATH = join(__dirname, '..', 'data', 'preferences.json');
@@ -181,15 +180,11 @@ function deriveUrl(c) {
 }
 
 async function readJsonOrDefault(path, fallback) {
-  try {
-    return JSON.parse(await readFile(path, 'utf-8'));
-  } catch {
-    return fallback;
-  }
+  return readJsonSafe(path, { fallback });
 }
 
 export async function discoverSources({ maxCandidates = 12, hint = '' } = {}) {
-  const prefs = JSON.parse(await readFile(PREFS_PATH, 'utf-8'));
+  const prefs = await readJson(PREFS_PATH);
   const existing = await loadSources();
   const resumeText = await getProfileResumeText();
   const listingsData = await readJsonOrDefault(LISTINGS_PATH, { listings: [] });
@@ -299,11 +294,9 @@ export async function discoverSources({ maxCandidates = 12, hint = '' } = {}) {
 // =====================================================================
 
 export async function loadDiscoveries() {
-  try {
-    return JSON.parse(await readFile(DISCOVERIES_PATH, 'utf-8'));
-  } catch {
-    return { candidates: [], lastRunAt: null, history: [] };
-  }
+  return readJsonSafe(DISCOVERIES_PATH, {
+    fallback: { candidates: [], lastRunAt: null, history: [] },
+  });
 }
 
 // Drop candidates that are stale (dismissed > 30 days, pending > 60 days,

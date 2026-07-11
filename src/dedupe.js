@@ -22,10 +22,10 @@
 // On reposts at the same source: a new externalId → new dedupKey → kept
 // as a fresh listing.
 
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { writeJsonAtomic } from './atomic.js';
+import { readJsonSafe } from './io.js';
 import { fingerprint, dedupKey } from './dedupe-core.js';
 
 // Re-export the pure functions so callers can import everything from one place.
@@ -35,13 +35,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const SEEN_PATH = join(__dirname, '..', 'data', 'seen.json');
 
 export async function loadSeen() {
-  try {
-    const raw = await readFile(SEEN_PATH, 'utf-8');
-    const data = JSON.parse(raw);
-    return new Set(data.fingerprints || []);
-  } catch {
-    return new Set();
-  }
+  const data = await readJsonSafe(SEEN_PATH, { fallback: { fingerprints: [] } });
+  return new Set(data.fingerprints || []);
 }
 
 export async function saveSeen(set) {

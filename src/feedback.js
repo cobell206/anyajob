@@ -25,7 +25,7 @@ import {
   getDocumentPath,
   extractResumeText,
 } from './documents.js';
-import { readJson } from './io.js';
+import { readJson, readJsonSafe } from './io.js';
 import { writeJsonAtomic } from './atomic.js';
 import { createLogger } from './log.js';
 
@@ -193,11 +193,7 @@ export async function getResumeFeedback({ lens } = {}) {
 }
 
 async function readIndex() {
-  try {
-    return JSON.parse(await readFile(DOCS_INDEX, 'utf-8'));
-  } catch {
-    return {};
-  }
+  return readJsonSafe(DOCS_INDEX, { fallback: {} });
 }
 
 async function persistFeedback(lens, entry) {

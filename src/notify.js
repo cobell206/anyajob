@@ -9,8 +9,8 @@
 
 import 'dotenv/config';
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
-import { readFile } from 'node:fs/promises';
 import { writeJsonAtomic } from './atomic.js';
+import { readJsonSafe } from './io.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -29,11 +29,7 @@ function ses() {
 }
 
 async function loadLog() {
-  try {
-    return JSON.parse(await readFile(NOTIFY_LOG, 'utf-8'));
-  } catch {
-    return { sent: [] };
-  }
+  return readJsonSafe(NOTIFY_LOG, { fallback: { sent: [] } });
 }
 
 async function saveLog(log) {

@@ -5,7 +5,6 @@
 
 import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
-import { readFile } from 'node:fs/promises';
 import { writeJsonAtomic } from './atomic.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -15,7 +14,7 @@ import {
   WEEKLY_REFLECTION_SYSTEM,
   buildWeeklyReflectionUser,
 } from './prompts.js';
-import { fbKey } from './io.js';
+import { fbKey, readJson, readJsonSafe } from './io.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SUMMARIES_PATH = join(__dirname, '..', 'data', 'summaries.json');
@@ -41,11 +40,7 @@ function isoDaysAgo(n) {
 }
 
 async function loadSummaries() {
-  try {
-    return JSON.parse(await readFile(SUMMARIES_PATH, 'utf-8'));
-  } catch {
-    return { daily: {}, weekly: {} };
-  }
+  return readJsonSafe(SUMMARIES_PATH, { fallback: { daily: {}, weekly: {} } });
 }
 
 async function saveSummaries(s) {
@@ -55,12 +50,7 @@ async function saveSummaries(s) {
 async function trackSpend(usage) {
   const cost = (usage.input_tokens || 0) * PRICING.input +
                (usage.output_tokens || 0) * PRICING.output;
-  let spend;
-  try {
-    spend = JSON.parse(await readFile(SPEND_PATH, 'utf-8'));
-  } catch {
-    spend = { byDay: {} };
-  }
+  const spend = await readJsonSafe(SPEND_PATH, { fallback: { byDay: {} } });
   spend.byDay[today()] = (spend.byDay[today()] || 0) + cost;
   await writeJsonAtomic(SPEND_PATH, spend);
   return cost;
@@ -74,9 +64,9 @@ async function trackSpend(usage) {
 // notable pattern in one breath. Prompt lives in src/prompts.js.
 
 export async function generateDailyBrief() {
-  const { listings } = JSON.parse(await readFile(LISTINGS_PATH, 'utf-8'));
-  const feedback = JSON.parse(await readFile(FEEDBACK_PATH, 'utf-8'));
-  const prefs = JSON.parse(await readFile(PREFS_PATH, 'utf-8'));
+  const { listings } = await readJson(LISTINGS_PATH);
+  const feedback = await readJson(FEEDBACK_PATH);
+  const prefs = await readJson(PREFS_PATH);
 
   const td = today();
   const newToday = listings.filter((l) => (l.ingestedAt || '').startsWith(td));
@@ -158,9 +148,9 @@ export async function generateDailyBrief() {
 // Sunday-morning reflection on the past 7 days. Prompt lives in src/prompts.js.
 
 export async function generateWeeklyReflection() {
-  const { listings } = JSON.parse(await readFile(LISTINGS_PATH, 'utf-8'));
-  const feedback = JSON.parse(await readFile(FEEDBACK_PATH, 'utf-8'));
-  const prefs = JSON.parse(await readFile(PREFS_PATH, 'utf-8'));
+  const { listings } = await readJson(LISTINGS_PATH);
+  const feedback = await readJson(FEEDBACK_PATH);
+  const prefs = await readJson(PREFS_PATH);
 
   const weekAgo = isoDaysAgo(7);
 

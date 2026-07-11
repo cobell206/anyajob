@@ -3,7 +3,6 @@
 // Pipeline: fetch → dedupe → pre-filter → score → save → generate summaries.
 
 import 'dotenv/config';
-import { readFile } from 'node:fs/promises';
 import { writeJsonAtomic } from './atomic.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -12,7 +11,7 @@ import { dedupeListings, saveSeen } from './dedupe.js';
 import { scoreOne, loadRecentFeedback, buildIgnoreContext } from './score.js';
 import { generateDailyBrief, generateWeeklyReflection } from './summaries.js';
 import { getProfileResumeText } from './documents.js';
-import { fbKey } from './io.js';
+import { fbKey, readJson } from './io.js';
 import { classifyLocation } from './location.js';
 import { requiresLawDegree } from './degree.js';
 import { createLogger } from './log.js';
@@ -80,8 +79,8 @@ async function main() {
   const startedAt = new Date().toISOString();
   log.info({ startedAt }, 'daily run starting');
 
-  const prefs = JSON.parse(await readFile(PREFS_PATH, 'utf-8'));
-  const existing = JSON.parse(await readFile(LISTINGS_PATH, 'utf-8'));
+  const prefs = await readJson(PREFS_PATH);
+  const existing = await readJson(LISTINGS_PATH);
 
   // 1. Fetch
   log.info('fetching from all sources');
@@ -179,7 +178,7 @@ async function main() {
           .slice(0, 5);
 
         // Scan for saved/applied/interview-status listings closing within 3 days
-        const feedback = JSON.parse(await readFile(join(__dirname, '..', 'data', 'feedback.json'), 'utf-8'));
+        const feedback = await readJson('feedback.json');
         const now = Date.now();
         const cutoff = now + 3 * 86400000;
         const TRACKED = new Set(['saved', 'applied', 'interview', 'new']);
@@ -216,8 +215,7 @@ async function main() {
         // Pending discovery candidates — surface count, link to settings
         let discoveryCount = 0;
         try {
-          const discPath = join(__dirname, '..', 'data', 'discoveries.json');
-          const disc = JSON.parse(await readFile(discPath, 'utf-8'));
+          const disc = await readJson('discoveries.json');
           discoveryCount = (disc.candidates || []).filter((c) => c.status === 'pending').length;
           if (discoveryCount) log.info({ count: discoveryCount }, 'pending discovery candidates');
         } catch {

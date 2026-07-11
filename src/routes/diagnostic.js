@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { redactObject, redactLogText } from '../redact.js';
 import { loadSources } from '../sources/registry.js';
+import { readJsonSafe as storeReadJsonSafe } from '../io.js';
 import { createLogger } from '../log.js';
 
 const log = createLogger('diag-route');
@@ -21,11 +22,7 @@ const REPO_ROOT = join(__dirname, '..', '..');
 const DATA = join(REPO_ROOT, 'data');
 
 async function readJsonSafe(filename, fallback = null) {
-  try {
-    return JSON.parse(await readFile(join(DATA, filename), 'utf-8'));
-  } catch {
-    return fallback;
-  }
+  return storeReadJsonSafe(filename, { fallback });
 }
 
 async function tailLog(filename, n = 50) {

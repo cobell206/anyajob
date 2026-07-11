@@ -12,6 +12,7 @@
     "weekly": "node scripts/weekly.js",
     "discover": "node scripts/discover.js",
     "test": "node --test src/*.test.js test/*.test.js",
+    "smoke": "node scripts/smoke.mjs",
     "test-score": "node src/score.js --test",
     "test-email": "node scripts/test-email.js"
   },
