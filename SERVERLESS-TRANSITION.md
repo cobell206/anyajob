@@ -13,6 +13,14 @@ dependency remains. M4 (Lambda + API Gateway) next.
 **Serverless env (set on EC2 to run on S3; becomes Lambda env at M4):**
 `STORAGE=s3  S3_BUCKET=anyajob-data  DOCS_BUCKET=anyajob-docs  AWS_REGION=us-east-1`
 
+**⚠️ The S3 buckets currently hold a STALE DEV SNAPSHOT, not production data.**
+The M1/M3 `aws s3 sync` ran from a *local* checkout (~June) purely to exercise
+the s3 backend for the gates. Live data lives on EC2 (fs) and has drifted since
+— e.g. the two M2 test uploads are on EC2 only, not in `anyajob-docs`. The
+authoritative migration is a fresh `aws s3 sync` **sourced from the live EC2
+box** (`data/` + `data/documents/`), run at the M5 cutover moment. Do NOT treat
+the current bucket contents as the source of truth.
+
 **Infra is CDK, like espresso.** `infra/` holds the CDK app (`AnyaJobStack`).
 No click-ops — every AWS resource is defined in code. Deploy: `cd infra &&
 npx cdk deploy`. Account already CDK-bootstrapped (shared with espresso).
