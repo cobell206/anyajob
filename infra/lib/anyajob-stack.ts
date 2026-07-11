@@ -3,6 +3,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
+import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { HttpIamAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers";
 import { fileURLToPath } from "node:url";
@@ -245,6 +246,18 @@ export class AnyaJobStack extends cdk.Stack {
       throttlingBurstLimit: 20,
       throttlingRateLimit: 10,
     };
+
+    // M5 Part C (C-1) — TLS cert for the API Gateway custom domain that
+    // Cloudflare will proxy to. DNS validation, but the domain's DNS is on
+    // Cloudflare (not Route53), so CDK can't auto-create the record: the deploy
+    // BLOCKS until the emitted validation CNAME is added to Cloudflare by hand
+    // and ACM issues. Must be in us-east-1 (same region as the regional HTTP
+    // API). Used by the custom domain in C-2.
+    const siteCert = new acm.Certificate(this, "SiteCert", {
+      domainName: "jobs.anyalawgirly.com",
+      validation: acm.CertificateValidation.fromDns(),
+    });
+    new cdk.CfnOutput(this, "SiteCertArn", { value: siteCert.certificateArn });
 
     new cdk.CfnOutput(this, "Ec2InstanceProfile", { value: ec2Profile.ref });
     new cdk.CfnOutput(this, "DataBucketName", { value: dataBucket.bucketName });
