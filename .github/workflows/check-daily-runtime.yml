@@ -1,0 +1,63 @@
+name: Check daily.js runtime (one-shot)
+
+# M6 C-0 — measure how long the daily scrape actually takes on EC2, to decide
+# whether a plain scheduled Lambda (15-min hard cap) can run it. Reads the
+# startedAt/finishedAt pairs daily.js logs to daily.log. See SERVERLESS-TRANSITION.md.
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Extract daily run durations
+        env:
+          SSH_HOST: ${{ secrets.EC2_HOST }}
+          SSH_USER: ${{ secrets.EC2_USER }}
+          REPO_PATH: ${{ secrets.REPO_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" bash -se <<EOF
+            set -uo pipefail
+            cd "$REPO_PATH"
+            LOG=daily.log
+            [ -f "\$LOG" ] || { echo "FAIL: no daily.log at $REPO_PATH"; exit 1; }
+            echo "=== daily.log: \$(wc -l < \$LOG) lines ==="
+            tail -n 8000 "\$LOG" | node -e '
+              const rl=require("readline").createInterface({input:process.stdin});
+              let cur=null; const runs=[];
+              rl.on("line",l=>{
+                const m=l.match(/(20\d\d-\d\d-\d\dT[0-9:.]+Z)/);
+                if(!m)return;
+                if(l.includes("daily run starting"))cur=new Date(m[1]);
+                else if(l.includes("daily run done")&&cur){runs.push([cur,(new Date(m[1])-cur)/1000]);cur=null;}
+              });
+              rl.on("close",()=>{
+                if(!runs.length)return console.log("no complete daily runs found in the tail");
+                console.log("recent runs (startedAt -> duration):");
+                for(const [s,secs] of runs.slice(-10))console.log("  "+s.toISOString()+"  "+secs.toFixed(0)+"s ("+(secs/60).toFixed(1)+" min)");
+                const mx=Math.max(...runs.map(r=>r[1])),av=runs.reduce((a,r)=>a+r[1],0)/runs.length;
+                console.log("--- runs analyzed: "+runs.length+" | avg "+(av/60).toFixed(1)+" min | MAX "+(mx/60).toFixed(1)+" min ("+mx.toFixed(0)+"s)");
+                console.log(mx>720?"WARN: max approaches the 15-min Lambda cap — plan a split/Fargate":"OK: comfortably under the 15-min Lambda cap");
+              });
+            '
+          EOF
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
