@@ -583,14 +583,24 @@ function setZoom(container, z) {
   if (!scale) return;
   const clamped = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
   scale.dataset.zoom = String(clamped);
-  // Size the scale wrapper to (zoom × 100%) wide and (zoom × viewport
-  // height) tall. The iframe inside fills 100%×100%, and the browser's
-  // PDF viewer fit-to-widths the document — so a wider iframe = bigger
-  // rendered PDF. No CSS transform needed; the natural sizing creates
-  // a scrollable region inside .doc-preview-viewport.
   const viewportH = viewport?.clientHeight || 360;
-  scale.style.width = `${clamped * 100}%`;
-  scale.style.height = `${clamped * viewportH}px`;
+  if (clamped >= 1) {
+    // Zoom in (>=100%): widen the scale wrapper so the browser's PDF viewer
+    // fit-to-widths the page at a larger size (crisp re-render), and the
+    // viewport scrolls. The iframe fills 100%×100% of the wrapper.
+    scale.style.transform = 'none';
+    scale.style.width = `${clamped * 100}%`;
+    scale.style.height = `${clamped * viewportH}px`;
+  } else {
+    // Zoom out (<100%): keep the wrapper filling the viewport and scale it
+    // down in place, so the PDF shrinks (centered, top-anchored) instead of
+    // the iframe collapsing into a small box in the corner. Transform is
+    // visual-only, so no scrollbars appear below 100%.
+    scale.style.width = '100%';
+    scale.style.height = `${viewportH}px`;
+    scale.style.transformOrigin = 'top center';
+    scale.style.transform = `scale(${clamped})`;
+  }
   if (label) label.textContent = `${Math.round(clamped * 100)}%`;
 }
 
