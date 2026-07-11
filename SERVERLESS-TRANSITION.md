@@ -514,6 +514,12 @@ S3). Optionally revert the route auth JWT → IAM. No data moves.
   **C-3 first check:** confirm the JWT authorizer accepts Cloudflare's *raw*
   `Cf-Access-Jwt-Assertion` (no `Bearer`) — a quick test with a real Access
   token, a `jobs-test` rehearsal, or flip-with-instant-rollback.
+- 2026-07-11 — **Raw-token risk RETIRED (pre-flip test).** Sent a real
+  `Cf-Access-Jwt-Assertion` (from the browser `CF_Authorization` cookie) to the
+  execute-api URL → **HTTP 200**; token `aud`/`iss` match the authorizer. So the
+  gateway accepts Cloudflare's raw token as-is (no `Bearer`) and the C-3 flip is
+  safe. Remaining C-3 = the Cloudflare DNS change (`jobs.anyalawgirly.com` →
+  `d-qpq1b1ahih…`, proxied, Access on, SSL Full-strict) + browser validation.
 
 ## Testing strategy
 
