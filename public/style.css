@@ -1481,7 +1481,7 @@ td {
 .modal {
   background: var(--surface);
   width: 100%;
-  max-width: 960px;
+  max-width: 1200px;
   max-height: 92dvh;
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   overflow-y: auto;

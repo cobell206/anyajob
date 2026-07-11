@@ -605,7 +605,14 @@ function fitPreviewHeight(container) {
   if (!viewport || !modal) return;
   const modalHead = modal.querySelector('.modal-head');
   const previewHead = container.querySelector('.doc-preview-head');
-  const modalH = modal.clientHeight;
+  // Size against the modal's *max* height, not its current clientHeight.
+  // With the preview open and the rest of the modal hidden, the modal only
+  // fits its content — so measuring clientHeight would feed back a tiny
+  // preview. The max-height cap (86dvh desktop / 92dvh mobile) is the space
+  // we actually want to fill; the preview grows to it and pulls the modal
+  // up to the cap.
+  const maxH = parseFloat(getComputedStyle(modal).maxHeight);
+  const modalH = Number.isFinite(maxH) ? maxH : (window.innerHeight * 0.9);
   const headH = modalHead?.offsetHeight || 70;
   const previewHeadH = previewHead?.offsetHeight || 45;
   // 52 = modal-body padding (20 top + 32 bottom). 16 = small bottom
