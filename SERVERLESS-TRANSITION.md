@@ -485,6 +485,16 @@ S3). Optionally revert the route auth JWT → IAM. No data moves.
 - A Cloudflare Access **service token** for automated `smoke.mjs` post-flip.
 - Cloudflare SSL mode = **Full (strict)** so it trusts the ACM cert on origin.
 
+### Part C progress
+- 2026-07-11 — **C-1 done. ACM cert ISSUED.** Added `SiteCert`
+  (`jobs.anyalawgirly.com`, DNS-validated) to the stack; local `cdk deploy`
+  created it PENDING and blocked; added the ACM validation CNAME to Cloudflare
+  DNS (grey-cloud) by hand → **ISSUED in ~80 s**, stack `UPDATE_COMPLETE`. Then
+  pushed `9faa542` — CI `cdk deploy` saw the cert already issued and went green
+  (no hang). Cert ARN
+  `arn:aws:acm:us-east-1:378962034618:certificate/180feb7f-a742-4c80-ba95-4fa972974238`.
+  Next: C-2 (custom domain + mapping + JWT authorizer swap + asset cache-stamp).
+
 ## Testing strategy
 
 Every migration is gated by **(a) the unit suite green** (`npm test`) **plus
