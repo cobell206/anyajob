@@ -383,6 +383,16 @@ header. Update the CDK route auth + the app's header check accordingly.
   rehearsed once; error logs clean over a soak window.
 - Rollback: point Cloudflare back to EC2 (still running, same S3).
 
+### M5 Part A progress
+- 2026-07-11 — **A1 (expand OIDC deploy role) written + synth-validated.** Added
+  to `anyajob-github-deploy`: `sts:AssumeRole` on the CDK bootstrap roles
+  (`cdk-hnb659fds-{deploy,file-publishing,lookup}-role-<acct>-us-east-1`, which
+  exist) so CI's `cdk deploy` works through them without broad perms; plus
+  `ssm:GetParameter` on `/anyajob/anthropic-api-key` and `kms:Decrypt` (via
+  `ssm.us-east-1.amazonaws.com`) to read the key at deploy. Synth confirms.
+  Applied by a **local `cdk deploy`** first (the role is defined in the stack it
+  will later deploy — chicken-and-egg), then A2 adds the CI workflow.
+
 ## Testing strategy
 
 Every migration is gated by **(a) the unit suite green** (`npm test`) **plus

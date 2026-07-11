@@ -88,6 +88,38 @@ export class AnyaJobStack extends cdk.Stack {
     dataBucket.grantReadWrite(deployRole);
     docsBucket.grantReadWrite(deployRole);
 
+    // M5 Part A — let CI run `cdk deploy`. cdk does the real work through the
+    // account's bootstrap roles, so this role only needs to *assume* those
+    // (not broad CFN/Lambda/IAM perms). Plus read the Anthropic key param at
+    // deploy so the workflow can pass it as the noEcho stack parameter.
+    deployRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["sts:AssumeRole"],
+        resources: [
+          `arn:aws:iam::${this.account}:role/cdk-hnb659fds-deploy-role-${this.account}-${this.region}`,
+          `arn:aws:iam::${this.account}:role/cdk-hnb659fds-file-publishing-role-${this.account}-${this.region}`,
+          `arn:aws:iam::${this.account}:role/cdk-hnb659fds-lookup-role-${this.account}-${this.region}`,
+        ],
+      }),
+    );
+    deployRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter"],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/anyajob/anthropic-api-key`,
+        ],
+      }),
+    );
+    deployRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["kms:Decrypt"],
+        resources: ["*"], // the account's default aws/ssm key
+        conditions: {
+          StringEquals: { "kms:ViaService": `ssm.${this.region}.amazonaws.com` },
+        },
+      }),
+    );
+
     // EC2 app role: the instance currently has NO credentials, so it can't run
     // on the S3 backend. Attach this (S3 on both buckets + SES for the existing
     // email) so EC2 can be flipped to STORAGE=s3 — running production on S3
