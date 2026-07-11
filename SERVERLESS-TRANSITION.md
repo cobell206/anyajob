@@ -642,6 +642,18 @@ chronically bumping the cap (workload grows as discovery adds sources).
   and serves no traffic — it does nothing.** Rollback: re-add the crontab block +
   set schedules DISABLED. Remaining: **M7** (stop EC2, soak ~1 week, terminate).
 
+- 2026-07-11 — **M7 started: EC2 STOPPED.** Instance `i-0fb0c9e04b10c9993` →
+  `stopped`. Verified the serverless stack is fully independent: with EC2 off,
+  `jobs.anyalawgirly.com/api/listings` → **200, 85 listings** (Cloudflare →
+  Lambda → S3). Listings grew 55 → 85 from the manual daily Lambda run, so the
+  cron → S3 → web path is proven live too. **Compute cost (~$8/mo) is now off;**
+  the EBS root (~$1/mo) remains until terminate. Rollback still possible: start
+  the instance, re-add the tunnel hostname + crontab, disable schedules.
+  Remaining: soak ~1 week watching scheduled runs, then **terminate** (deletes
+  EBS → full saving). Before terminate: nothing critical is EC2-only (code in
+  git, data in S3, API key in SSM) — the only EC2-only artifact is the
+  `cloudflared` tunnel config, unused since the M5 flip.
+
 ## Testing strategy
 
 Every migration is gated by **(a) the unit suite green** (`npm test`) **plus
