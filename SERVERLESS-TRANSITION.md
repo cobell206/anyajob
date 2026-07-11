@@ -506,6 +506,14 @@ S3). Optionally revert the route auth JWT → IAM. No data moves.
   mapping; rebuilt bundle has no `__CACHE_VERSION__` left. Deploying via CI; the
   dark Lambda now requires an Access JWT (SigV4 parity no longer applies — that's
   expected), validated by config + a negative (401) check, positive test at C-3.
+- 2026-07-11 — **C-2 deployed (CI) + validated.** Custom domain
+  `jobs.anyalawgirly.com` is **AVAILABLE** with the C-1 cert; regional target for
+  the C-3 flip = **`d-qpq1b1ahih.execute-api.us-east-1.amazonaws.com`**.
+  Unauthenticated `GET /api/listings` -> **401** (JWT authorizer live; was IAM
+  403). Positive path (real Access JWT -> 200) needs Cloudflare in front -> C-3.
+  **C-3 first check:** confirm the JWT authorizer accepts Cloudflare's *raw*
+  `Cf-Access-Jwt-Assertion` (no `Bearer`) — a quick test with a real Access
+  token, a `jobs-test` rehearsal, or flip-with-instant-rollback.
 
 ## Testing strategy
 
