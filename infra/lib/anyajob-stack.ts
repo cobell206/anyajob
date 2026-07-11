@@ -1,6 +1,9 @@
 import * as cdk from "aws-cdk-lib";
 import * as s3 from "aws-cdk-lib/aws-s3";
+import * as iam from "aws-cdk-lib/aws-iam";
 import type { Construct } from "constructs";
+
+const GITHUB_REPO = "cobell206/anyajob";
 
 // AnyaJob serverless infrastructure (see SERVERLESS-TRANSITION.md).
 //
@@ -39,7 +42,37 @@ export class AnyaJobStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
+    // GitHub Actions OIDC role — lets CI assume a role with no stored keys.
+    // Used now for the one-shot prod->S3 data migration, and by M4/M5 for the
+    // frontend/data-plane deploys. The account-level OIDC provider already
+    // exists (created by the espresso stack in this account), so reference it
+    // by ARN rather than creating a second one (which would conflict).
+    const oidcProvider =
+      iam.OpenIdConnectProvider.fromOpenIdConnectProviderArn(
+        this,
+        "GithubOidc",
+        `arn:aws:iam::${this.account}:oidc-provider/token.actions.githubusercontent.com`,
+      );
+    const deployRole = new iam.Role(this, "GithubDeployRole", {
+      roleName: "anyajob-github-deploy", // fixed name -> ARN known before deploy
+      assumedBy: new iam.WebIdentityPrincipal(
+        oidcProvider.openIdConnectProviderArn,
+        {
+          StringEquals: {
+            "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          },
+          StringLike: {
+            "token.actions.githubusercontent.com:sub": `repo:${GITHUB_REPO}:*`,
+          },
+        },
+      ),
+      maxSessionDuration: cdk.Duration.hours(1),
+    });
+    dataBucket.grantReadWrite(deployRole);
+    docsBucket.grantReadWrite(deployRole);
+
     new cdk.CfnOutput(this, "DataBucketName", { value: dataBucket.bucketName });
     new cdk.CfnOutput(this, "DocsBucketName", { value: docsBucket.bucketName });
+    new cdk.CfnOutput(this, "DeployRoleArn", { value: deployRole.roleArn });
   }
 }

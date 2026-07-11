@@ -1,9 +1,10 @@
 name: Migrate data to S3 (one-shot)
 
 # Manually-triggered. Copies live data/ (JSON) + data/documents/ from the EC2
-# host into the S3 buckets. Runs scripts/migrate-to-s3.sh. See
-# SERVERLESS-TRANSITION.md. Default mode is inspect (read-only); choose execute
-# to actually copy. Never runs automatically.
+# host into the S3 buckets by running scripts/migrate-to-s3.mjs ON EC2.
+# EC2 has no AWS creds of its own, so CI assumes the anyajob-github-deploy role
+# via OIDC (no stored keys) and injects the short-lived creds into the SSH
+# session. Default mode is inspect (read-only). See SERVERLESS-TRANSITION.md.
 
 on:
   workflow_dispatch:
@@ -13,6 +14,10 @@ on:
         type: choice
         options: [inspect, execute]
         default: inspect
+
+permissions:
+  id-token: write
+  contents: read
 
 concurrency:
   group: deploy-prod
@@ -24,6 +29,12 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      - name: Assume AWS role (OIDC, no stored keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::378962034618:role/anyajob-github-deploy
+          aws-region: us-east-1
+
       - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
@@ -34,7 +45,7 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Run migration script on EC2
+      - name: Run migration on EC2 (short-lived creds injected over SSH)
         env:
           SSH_HOST: ${{ secrets.EC2_HOST }}
           SSH_USER: ${{ secrets.EC2_USER }}
@@ -44,9 +55,12 @@ jobs:
           ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" bash -se <<EOF
             set -euo pipefail
             cd "$REPO_PATH"
-            # Ensure the migration script is present/current regardless of deploy timing
             git fetch --quiet origin main
             git checkout origin/main -- scripts/migrate-to-s3.mjs
+            export AWS_ACCESS_KEY_ID='$AWS_ACCESS_KEY_ID'
+            export AWS_SECRET_ACCESS_KEY='$AWS_SECRET_ACCESS_KEY'
+            export AWS_SESSION_TOKEN='$AWS_SESSION_TOKEN'
+            export AWS_REGION='us-east-1'
             node scripts/migrate-to-s3.mjs "$MODE"
           EOF
 
