@@ -454,6 +454,32 @@
 .grading-guidance-examples { font-style: italic; color: var(--ink-2); }
 .grading-guidance-foot { color: var(--muted); }
 
+/* Live preview of the exact priorities block injected into the scoring prompt. */
+.prompt-preview {
+  margin: 4px 0 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+}
+.prompt-preview-head {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--muted);
+  padding: 7px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+.prompt-preview-body {
+  margin: 0; padding: 12px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px; line-height: 1.5; color: var(--ink);
+  white-space: pre-wrap; word-break: break-word;
+}
+.prompt-preview-empty {
+  margin: 0; padding: 12px;
+  font-size: 12px; font-style: italic; color: var(--muted);
+}
+
 .prefs-advanced { margin-top: 22px; }
 .prefs-advanced > summary {
   cursor: pointer; font-size: 13px; font-weight: 600;

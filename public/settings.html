@@ -246,21 +246,23 @@
             <textarea id="deprioritize" rows="2" placeholder="e.g. roles requiring relocation out of NYC, pure admin"></textarea>
           </div>
 
-          <!-- Shown only when BOTH priority fields are empty: explains how
-               scoring works and what these fields do. Hidden once either has text. -->
-          <div class="grading-guidance" id="grading-guidance" hidden>
-            <p class="grading-guidance-lead">Nothing here yet — here's how scoring works and what these fields do.</p>
+          <!-- Always visible: explains how scoring works and shows a LIVE
+               preview of exactly what the priority fields add to the scoring
+               prompt (updated on input by settings.js). -->
+          <div class="grading-guidance" id="grading-guidance">
+            <p class="grading-guidance-lead">How scoring works — and what your priorities add to the prompt.</p>
             <p><strong>Every role gets two 0–10 scores</strong>, combined into the overall score you sort by:</p>
             <ul>
               <li><strong>Qualification fit</strong> — how well your background matches what the role asks for.</li>
               <li><strong>Law-school value</strong> — how much the role strengthens your application to your target schools (legal exposure, brand-name employers, writing/research, pipeline programs).</li>
             </ul>
             <p>The <strong>weighting</strong> below decides how those two combine into the overall number. Your résumé, keyword filters, and past thumbs up/down also feed in automatically — the 0–10 scale and what a good score means stay fixed, so scores stay comparable across roles.</p>
-            <p><strong>These two fields let you nudge the ranking</strong> without changing that scale. Put role types or traits you want favored under <em>Emphasize</em>, and ones you want pushed down under <em>Deprioritize</em>. They shape both scoring and which new sources get suggested. For example:</p>
-            <ul class="grading-guidance-examples">
-              <li><strong>Emphasize:</strong> “public-interest, writing-heavy roles, judicial internships”</li>
-              <li><strong>Deprioritize:</strong> “relocation out of NYC, pure admin”</li>
-            </ul>
+            <p><strong>Your two fields nudge the ranking</strong> without changing that scale. Here's exactly what they add to the scoring prompt, updating as you type:</p>
+            <div class="prompt-preview">
+              <div class="prompt-preview-head">Added to the scoring prompt</div>
+              <pre class="prompt-preview-body" id="prompt-preview-body" hidden></pre>
+              <p class="prompt-preview-empty" id="prompt-preview-empty">Both fields are empty — no priorities block is added, and roles are scored on the rubric alone.</p>
+            </div>
             <p class="grading-guidance-foot">After you save, new roles use these immediately. To apply them to a role already scored, open it and hit <strong>Re-score</strong>.</p>
           </div>
 

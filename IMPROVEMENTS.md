@@ -136,6 +136,18 @@ indirectly. Biggest opportunity area.
 
 ## Follow-ups (post-review enhancements)
 
+### F3 Keep guidance visible + live prompt preview — `[x]`
+- **Where:** `public/settings.{html,js,css}`
+- **Context:** the guidance panel hid once either priority field had text; wanted
+  it kept and showing the priorities live as they'd appear in the prompt.
+- **Done:** guidance panel is now always visible and contains a live preview box
+  that renders the exact `HER CURRENT PRIORITIES` block, rebuilt on every
+  keystroke from the Emphasize/Deprioritize fields. Both empty → shows a "no
+  block added" note. `buildPriorityPreview` mirrors `prompts.js` verbatim
+  (verified the backend prompt contains the preview string byte-for-byte).
+- **Note:** the preview string is a client-side mirror — a comment flags that it
+  must track `buildSystemBlocks` in `src/prompts.js` if that wording changes.
+
 ### F2 Structured priority slots + fix injection strength — `[x]`
 - **Where:** `src/prompts.js`, `src/discover.js`, `src/routes/preferences.js`,
   `public/settings.{html,js,css}`, `data/preferences.example.json`

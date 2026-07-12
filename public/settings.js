@@ -957,20 +957,44 @@ function renderGradingSection() {
   const radio = document.querySelector(`input[name="weighting"][value="${weight}"]`)
     || document.querySelector('input[name="weighting"][value="law-school"]');
   if (radio) radio.checked = true;
-  updateGradingGuidance();
+  updatePromptPreview();
 }
 
-// Show the "how scoring works" guidance only while BOTH priority fields are empty.
-function updateGradingGuidance() {
-  const guidance = $('#grading-guidance');
-  if (!guidance) return;
-  const hasText = $('#emphasize').value.trim().length > 0
-    || $('#deprioritize').value.trim().length > 0;
-  guidance.hidden = hasText;
+// Live preview of the exact priorities block the scoring prompt receives.
+// MUST mirror buildSystemBlocks() in src/prompts.js — if that wording changes,
+// change it here too. Both fields empty → the block is omitted entirely.
+function buildPriorityPreview(emphasize, deprioritize) {
+  const lines = [];
+  if (emphasize) lines.push(`- Emphasize (nudge these up): ${emphasize}`);
+  if (deprioritize) lines.push(`- Deprioritize / avoid (nudge these down): ${deprioritize}`);
+  if (!lines.length) return null;
+  return "HER CURRENT PRIORITIES — use these to prioritize WITHIN the rubric above. "
+    + "They raise or lower a role's standing, but do NOT change the 0-10 scale, "
+    + "the two dimensions, or the required JSON output format:\n"
+    + lines.join('\n');
 }
 
-$('#emphasize')?.addEventListener('input', updateGradingGuidance);
-$('#deprioritize')?.addEventListener('input', updateGradingGuidance);
+function updatePromptPreview() {
+  const body = $('#prompt-preview-body');
+  const empty = $('#prompt-preview-empty');
+  if (!body) return;
+  const preview = buildPriorityPreview(
+    $('#emphasize').value.trim(),
+    $('#deprioritize').value.trim(),
+  );
+  if (preview) {
+    body.textContent = preview;
+    body.hidden = false;
+    if (empty) empty.hidden = true;
+  } else {
+    body.textContent = '';
+    body.hidden = true;
+    if (empty) empty.hidden = false;
+  }
+}
+
+$('#emphasize')?.addEventListener('input', updatePromptPreview);
+$('#deprioritize')?.addEventListener('input', updatePromptPreview);
 
 $('#save-grading').addEventListener('click', async () => {
   const status = $('#grading-status');
