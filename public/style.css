@@ -1823,6 +1823,43 @@ td {
   font-variant-numeric: tabular-nums;
 }
 
+/* Re-score control at the foot of the score card. Quiet by default; the
+   stale hint appears only when the score predates the current goals. */
+.modal-score-rescore {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.modal-score-stale {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+  font-style: italic;
+}
+.modal-rescore-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.modal-rescore-btn:hover:not(:disabled) { border-color: var(--ink-2); color: var(--ink); }
+.modal-rescore-btn:disabled { opacity: 0.6; cursor: default; }
+.modal-rescore-btn svg { width: 14px; height: 14px; }
+
 /* Decision section inside the summary row — no h3, no top margin.
    The top-row context (alongside the score card) makes the heading
    redundant. Inherits .modal-section's vertical rhythm but tightens

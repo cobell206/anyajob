@@ -944,7 +944,40 @@ async function loadPrefs() {
   prefs = await api('/api/preferences');
   $('#json').value = JSON.stringify(prefs, null, 2);
   renderNotifySection();
+  renderGradingSection();
 }
+
+// Friendly editors for the scoring knobs (goals + weighting). Reads from the
+// shared `prefs` object; kept in sync with the raw JSON editor below.
+function renderGradingSection() {
+  $('#goals').value = prefs?.goals || '';
+  const weight = prefs?.scoreWeighting || 'law-school';
+  const radio = document.querySelector(`input[name="weighting"][value="${weight}"]`)
+    || document.querySelector('input[name="weighting"][value="law-school"]');
+  if (radio) radio.checked = true;
+}
+
+$('#save-grading').addEventListener('click', async () => {
+  const status = $('#grading-status');
+  const btn = $('#save-grading');
+  const originalLabel = btn.innerHTML;
+  const goals = $('#goals').value.trim();
+  const scoreWeighting = document.querySelector('input[name="weighting"]:checked')?.value || 'law-school';
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner sm on-primary"></span> Saving…';
+  try {
+    const updated = { ...prefs, goals, scoreWeighting };
+    await api('/api/preferences', { method: 'POST', body: updated });
+    prefs = updated;
+    $('#json').value = JSON.stringify(updated, null, 2);
+    setStatus(status, '✓ Saved — new roles use this immediately; re-score existing ones from their card', 'success', 4000);
+  } catch (err) {
+    setStatus(status, 'Save failed: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
+  }
+});
 
 $('#save-prefs').addEventListener('click', async () => {
   const status = $('#prefs-status');
@@ -963,6 +996,7 @@ $('#save-prefs').addEventListener('click', async () => {
     await api('/api/preferences', { method: 'POST', body: parsed });
     prefs = parsed;
     renderNotifySection(); // pick up changes if user edited notifications JSON directly
+    renderGradingSection(); // ditto for goals / weighting
     setStatus(status, '✓ Saved', 'success', 2000);
   } catch (err) {
     setStatus(status, 'Save failed: ' + err.message, 'error');

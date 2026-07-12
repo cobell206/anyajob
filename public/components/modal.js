@@ -6,9 +6,31 @@ import { renderDocumentsSection, wireDocumentActions } from './documents.js';
 let currentListing = null;
 let onUpdateCallback = null;
 
+// When did the scoring config (goals + weighting) last change? A listing scored
+// before this was scored under older intent — the modal offers a re-score and
+// shows a subtle hint. Loaded once and cached; refreshed after a re-score.
+let scoringConfigUpdatedAt = null;
+let scoringConfigLoaded = false;
+async function ensureScoringConfig() {
+  if (scoringConfigLoaded) return;
+  try {
+    const p = await api('/api/preferences');
+    scoringConfigUpdatedAt = p?.scoringConfigUpdatedAt || null;
+  } catch { /* non-fatal: no hint, button still works */ }
+  scoringConfigLoaded = true;
+}
+ensureScoringConfig(); // warm the cache at module load
+
+// A score is "stale" when it was produced before the last goals/weighting edit.
+function scoreIsStale(score) {
+  return !!(scoringConfigUpdatedAt && score?._scoredAt && score._scoredAt < scoringConfigUpdatedAt);
+}
+
 // Lucide-style external-link icon. 18px stroked, no fill — matches the
 // rest of the app's icon vocabulary. Sits inline after the title.
 const SVG_OPEN_EXTERNAL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+// Refresh / re-score icon — stroked, matches the icon vocabulary.
+const SVG_REFRESH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>';
 
 const backdrop = document.createElement('div');
 backdrop.className = 'modal-backdrop';
@@ -115,6 +137,12 @@ export function openModal(listing, onUpdate) {
             <span class="modal-score-stat-value">${fmtSalary(s.salaryMin, s.salaryMax)}</span>
           </li>
         </ul>
+        ${s.overallScore != null ? `
+        <div class="modal-score-rescore">
+          <p class="modal-score-stale" id="m-score-stale" ${scoreIsStale(s) ? '' : 'hidden'}>Scored under older goals</p>
+          <button type="button" class="modal-rescore-btn" id="m-rescore" title="Re-score with current goals & weighting">${SVG_REFRESH}<span>Re-score</span></button>
+        </div>
+        ` : ''}
       </div>
 
       <div class="modal-decision modal-section">
@@ -385,6 +413,39 @@ export function openModal(listing, onUpdate) {
           showMsg(`Failed to save: ${err.message}`, 'error');
         });
     }, 500);
+  });
+
+  // Re-score this one listing with the current goals + weighting. Reuses the
+  // same scoreOne path as the daily scrape, then re-renders the modal (and the
+  // roles table via onUpdate) with the fresh score.
+  $('#m-rescore')?.addEventListener('click', async () => {
+    if (!currentListing) return;
+    const btn = $('#m-rescore');
+    const key = currentListing.dedupKey || currentListing.fingerprint;
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner sm"></span><span>Re-scoring…</span>';
+    try {
+      const { listing: updated } = await api(
+        `/api/listings/${encodeURIComponent(key)}/rescore`, { method: 'POST' },
+      );
+      Object.assign(currentListing, updated);
+      onUpdateCallback?.(currentListing);
+      openModal(currentListing, onUpdateCallback); // full re-render with new score
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+      // scoreOne throws on the daily spend cap; surface whatever it says.
+      showMsg(`Re-score failed: ${err.message}`, 'error');
+    }
+  });
+
+  // The stale hint depends on the scoring-config timestamp, which may still be
+  // loading on the very first modal open. Refresh it once the cache resolves.
+  ensureScoringConfig().then(() => {
+    if (currentListing !== listing) return; // modal moved on
+    const stale = $('#m-score-stale');
+    if (stale) stale.hidden = !scoreIsStale(listing.score || {});
   });
 
   backdrop.classList.add('open');

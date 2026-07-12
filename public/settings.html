@@ -224,20 +224,45 @@
       <div class="section-head" data-section="prefs">
         <div>
           <div class="section-title">Profile & preferences</div>
-          <div class="section-sub">Edit her profile, target schools, keyword filters</div>
+          <div class="section-sub">Search goals, grading weight, profile, keyword filters</div>
         </div>
         <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
       <div class="section-body">
         <div class="section-body-inner">
-        <textarea id="json" rows="22" style="font-family:var(--font-mono);font-size:13px;line-height:1.55"></textarea>
-        <div class="row-between" style="margin-top:12px">
-          <p id="prefs-status" class="status-message"></p>
-          <div style="display:flex;gap:8px">
-            <button class="btn" id="reset-prefs" title="Replace with defaults from preferences.example.json">Reset to defaults</button>
-            <button class="btn primary" id="save-prefs">Save preferences</button>
+
+        <!-- Friendly editors for the two knobs that steer scoring + discovery.
+             They read/write the same prefs object as the raw JSON below and
+             keep it in sync (mirrors the Notifications pattern). -->
+        <div class="grading-controls">
+          <h3 class="zone-label">What matters to me right now</h3>
+          <p class="grading-hint">Free text. Steers both how roles are scored and what new sources get suggested — when it conflicts with the general rubric, this wins.</p>
+          <textarea id="goals" rows="4" placeholder="e.g. Leaning public-interest over BigLaw this cycle; deprioritize anything requiring relocation; writing-heavy roles are a plus."></textarea>
+
+          <h3 class="zone-label" style="margin-top:18px">Score weighting</h3>
+          <p class="grading-hint">How the overall score balances the two dimensions.</p>
+          <div class="weighting-options" id="weighting-options">
+            <label class="weighting-opt"><input type="radio" name="weighting" value="law-school"><span><strong>Law-school value</strong><small>Roles that strengthen the T14 application score higher</small></span></label>
+            <label class="weighting-opt"><input type="radio" name="weighting" value="balanced"><span><strong>Balanced</strong><small>Even blend of qualification fit and law-school value</small></span></label>
+            <label class="weighting-opt"><input type="radio" name="weighting" value="qualification"><span><strong>Qualification &amp; pay</strong><small>Practical fit now weighs more than law-school signal</small></span></label>
+          </div>
+          <div class="row-between" style="margin-top:14px">
+            <p id="grading-status" class="status-message"></p>
+            <button class="btn primary" id="save-grading">Save grading</button>
           </div>
         </div>
+
+        <details class="prefs-advanced">
+          <summary>Advanced: edit raw preferences JSON</summary>
+          <textarea id="json" rows="22" style="font-family:var(--font-mono);font-size:13px;line-height:1.55"></textarea>
+          <div class="row-between" style="margin-top:12px">
+            <p id="prefs-status" class="status-message"></p>
+            <div style="display:flex;gap:8px">
+              <button class="btn" id="reset-prefs" title="Replace with defaults from preferences.example.json">Reset to defaults</button>
+              <button class="btn primary" id="save-prefs">Save preferences</button>
+            </div>
+          </div>
+        </details>
         </div>
       </div>
     </div>

@@ -87,26 +87,28 @@ without a concrete pain. The items below harden the current model.
 The grading rubric is hardcoded in `src/prompts.js`; she can only steer it
 indirectly. Biggest opportunity area.
 
-### 3.1 Editable "Search goals / what matters to me" field — `[ ]`
+### 3.1 Editable "Search goals / what matters to me" field — `[x]`
 - **Priority:** high (highest leverage)
-- **Change:** one free-text field in Settings → Preferences, injected as a
-  cacheable system block into **both** `SCORING_SYSTEM` and `DISCOVERY_SYSTEM`.
-  Lets her re-steer scoring *and* source discovery in plain language without a
-  code change.
+- **Done:** `preferences.goals` (free text) injected into **both** scoring
+  (`buildSystemBlocks`, as an authoritative override block) and discovery
+  (`buildDiscoveryUserMessage`). Editable via a friendly textarea in Settings →
+  Profile & preferences (syncs with the raw-JSON editor).
 
-### 3.2 Score-weighting preset — `[ ]`
+### 3.2 Score-weighting preset — `[x]`
 - **Priority:** medium
-- **Problem:** `overallScore` is hardcoded "weighted toward law school value."
-- **Change:** a simple preset (not a slider framework) — *Law-school value* /
-  *Balanced* / *Qualification & pay* — that swaps one sentence in the scoring
-  prompt.
+- **Done:** `preferences.scoreWeighting` (law-school | balanced | qualification)
+  drives a `WEIGHTING POLICY` sentence in the scoring prompt; the static
+  `overallScore` rubric line now defers to it. Default `law-school` preserves the
+  historical behavior. Exposed as a radio group in Settings.
 
-### 3.3 "Re-score current listings" action — `[ ]`
+### 3.3 Per-listing re-score action — `[x]`
 - **Priority:** high (makes 3.1 / 3.2 actually visible)
-- **Problem:** changing preferences only affects newly-scraped listings; no
-  re-score endpoint exists (`src/routes/admin.js` only has `run-daily`).
-- **Change:** add a "Re-score current listings with these preferences" action in
-  Settings + the backend endpoint.
+- **Decision:** per-listing (not bulk) — cheapest, most controlled.
+- **Done:** `POST /api/listings/:key/rescore` re-scores one listing via the same
+  `scoreOne` path as the scrape. A `⟳ Re-score` button lives in the roles modal's
+  score card, plus a "Scored under older goals" hint shown when the score's
+  `_scoredAt` predates `preferences.scoringConfigUpdatedAt` (stamped only when
+  goals/weighting actually change).
 
 ### 3.4 Template `targetSchools` into the scoring prompt — `[ ]`
 - **Priority:** low
