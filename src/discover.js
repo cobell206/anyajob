@@ -127,6 +127,15 @@ export function buildDiscoveryUserMessage({
 }) {
   const targetSchools = prefs.profile?.targetSchools || [];
 
+  // Her free-text "what matters to me right now" — the same statement that
+  // steers scoring (see buildSystemBlocks in prompts.js). Surfaced high in the
+  // prompt so source discovery aligns with her current intent, not just the
+  // static profile.
+  const goals = (prefs.goals || '').trim();
+  const goalsBlock = goals
+    ? `\n\nWHAT SHE'S OPTIMIZING FOR RIGHT NOW (her own words — prioritize sources that serve this):\n${goals}`
+    : '';
+
   const positiveBlock = formatPositiveSignal(listings, feedback);
   const negativeBlock = formatNegativeSignal(feedback);
   const dismissedBlock = formatDismissedSignal(discoveries);
@@ -141,7 +150,7 @@ ${JSON.stringify({
   targetSchools,
   currentRole: prefs.profile?.currentRole,
   yearsOutOfUndergrad: prefs.profile?.yearsOutOfUndergrad,
-}, null, 2)}
+}, null, 2)}${goalsBlock}
 
 KEYWORDS:
 boost: ${(prefs.keywords?.boost || []).join(', ')}

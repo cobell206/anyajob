@@ -11,6 +11,8 @@
     "geo": "NYC",
     "additionalContext": "FILL IN — volunteer work, languages, prior legal exposure, etc."
   },
+  "goals": "FILL IN — free text: what matters most in her search right now. Steers both scoring and source discovery. e.g. 'Leaning public-interest over BigLaw this cycle; deprioritize anything requiring relocation; writing-heavy roles are a plus.'",
+  "scoreWeighting": "law-school",
   "keywords": {
     "boost": ["paralegal", "judicial", "pro bono", "policy", "research", "legal assistant"],
     "exclude": ["unpaid", "commission only", "MLM"],

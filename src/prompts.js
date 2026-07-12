@@ -54,7 +54,7 @@ Return strict JSON only, no preamble:
 {
   "qualificationFit": <0-10 integer>,
   "lawSchoolValue": <0-10 integer>,
-  "overallScore": <0-10 integer, weighted toward law school value>,
+  "overallScore": <0-10 integer — apply the WEIGHTING POLICY given below the profile>,
   "rationale": "<2-3 sentences explaining the score>",
   "strengths": ["<short bullet>", "<short bullet>"],
   "concerns": ["<short bullet>", "<short bullet>"],
@@ -65,9 +65,31 @@ Return strict JSON only, no preamble:
   "workMode": "<string or null>"
 }`;
 
+// How to weight overallScore between the two dimensions. She sets this from
+// Settings (preferences.scoreWeighting); default matches the historical
+// behavior (law-school-first) so unset preferences score exactly as before.
+const WEIGHTING_POLICY = {
+  'law-school': 'WEIGHTING POLICY: weight overallScore toward LAW SCHOOL VALUE. A role that meaningfully strengthens her T14 application should outscore one that merely fits her background.',
+  balanced: 'WEIGHTING POLICY: weight overallScore as a roughly even blend of QUALIFICATION FIT and LAW SCHOOL VALUE — neither dimension dominates.',
+  qualification: 'WEIGHTING POLICY: weight overallScore toward QUALIFICATION FIT and practical fit (including pay and timing). How well she matches the role, and whether it is a good job to take right now, matters more than law-school signal.',
+};
+
+export function weightingPolicy(scoreWeighting) {
+  return WEIGHTING_POLICY[scoreWeighting] || WEIGHTING_POLICY['law-school'];
+}
+
 export function buildSystemBlocks(preferences, resumeText = null) {
   const profileText = JSON.stringify(preferences.profile, null, 2);
   const keywordsText = JSON.stringify(preferences.keywords, null, 2);
+  const weighting = weightingPolicy(preferences.scoreWeighting);
+
+  // Her own free-text statement of what she's optimizing for right now. When
+  // present it's authoritative — it should override the general rubric on any
+  // conflict, since it's the most current read on her intent.
+  const goals = (preferences.goals || '').trim();
+  const goalsBlock = goals
+    ? `\n\nWHAT SHE'S OPTIMIZING FOR RIGHT NOW (her own words — weight this heavily; when it conflicts with the general rubric above, defer to this):\n${goals}`
+    : '';
 
   const blocks = [
     {
@@ -77,7 +99,7 @@ export function buildSystemBlocks(preferences, resumeText = null) {
     },
     {
       type: 'text',
-      text: `\n\nAPPLICANT PROFILE:\n${profileText}\n\nHER KEYWORD PREFERENCES:\n${keywordsText}`,
+      text: `\n\nAPPLICANT PROFILE:\n${profileText}\n\nHER KEYWORD PREFERENCES:\n${keywordsText}\n\n${weighting}${goalsBlock}`,
       cache_control: { type: 'ephemeral' },
     },
   ];

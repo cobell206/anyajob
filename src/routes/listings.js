@@ -3,7 +3,9 @@
 // (status, rating, note, dates) before returning.
 
 import { Router } from 'express';
-import { readJson } from '../io.js';
+import { readJson, readJsonSafe, writeJson } from '../io.js';
+import { scoreOne, loadRecentFeedback, buildIgnoreContext } from '../score.js';
+import { getProfileResumeText } from '../documents.js';
 
 const router = Router();
 
@@ -109,6 +111,38 @@ router.get('/stats', async (req, res) => {
     byStatus: counts,
     appliedThisWeek,
   });
+});
+
+// Re-score a single listing with the CURRENT preferences (goals + weighting +
+// profile + feedback calibration). Offered from the roles modal when a listing
+// was scored under an older scoring config. Uses the same scoreOne path as the
+// daily scrape, so the result is identical to what a fresh scrape would produce.
+router.post('/listings/:key/rescore', async (req, res) => {
+  try {
+    const { key } = req.params;
+    const data = await readJson('listings.json');
+    const idx = (data.listings || []).findIndex(
+      (l) => (l.dedupKey || l.fingerprint) === key,
+    );
+    if (idx < 0) return res.status(404).json({ error: 'listing not found' });
+
+    const prefs = await readJson('preferences.json');
+    const [examples, resumeText, ignoreContext] = await Promise.all([
+      loadRecentFeedback(6),
+      getProfileResumeText(),
+      buildIgnoreContext(),
+    ]);
+
+    const score = await scoreOne(data.listings[idx], prefs, examples, resumeText, ignoreContext);
+    data.listings[idx] = { ...data.listings[idx], score };
+    await writeJson('listings.json', data);
+
+    const feedback = await readJsonSafe('feedback.json', { fallback: {} });
+    res.json({ listing: hydrate(data.listings[idx], feedback) });
+  } catch (err) {
+    // scoreOne throws on the daily spend cap; surface it so the UI can explain.
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.get('/spend', async (req, res) => {
