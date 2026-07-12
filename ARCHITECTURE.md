@@ -116,15 +116,15 @@ and why there's a custom bundle script instead of a plain `cdk` asset.
 ## What's dead / vestigial
 
 EC2 is **stopped** (instance `i-0fb0c9e04b10c9993`; EBS retained as rollback
-until termination). `deploy.yml` ("Deploy to EC2") was the only EC2 workflow
-that fired on push — it SSHed to the stopped host and failed every push, so it
-was **deleted** (2026-07). The remaining EC2-era / one-shot-migration workflows
-are all `workflow_dispatch`-only (manual), so they never run on their own and
-are harmless clutter: `fetch-logs.yml`, `verify-live.yml`,
-`disable-ec2-crons.yml`, `disable-backup-cron.yml`, `cutover-to-s3.yml`,
-`s3-migrate.yml`, `read-cron-env.yml`, `check-daily-runtime.yml`,
-`migrate-degree.yml`, `migrate-location.yml`, `clear-parse-failed.yml`. Only
-**`deploy-infra.yml`** is a live recurring workflow.
+until termination). All the EC2-era workflows were **deleted** (2026-07):
+`deploy.yml` ("Deploy to EC2"), which fired on push and failed against the
+stopped host, plus the `workflow_dispatch`-only one-shots (`fetch-logs`,
+`verify-live`, `disable-ec2-crons`, `disable-backup-cron`, `cutover-to-s3`,
+`s3-migrate`, `read-cron-env`, `check-daily-runtime`, `migrate-degree`,
+`migrate-location`, `clear-parse-failed`) — all completed migrations or EC2 SSH
+diagnostics with nothing left to act on. **`deploy-infra.yml`** is now the only
+workflow in the repo. The `EC2_SSH_KEY` / `EC2_HOST` / `EC2_USER` repo secrets
+they used are unreferenced and can be deleted from Settings → Secrets.
 
 ## Cost
 
