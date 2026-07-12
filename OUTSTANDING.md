@@ -1,5 +1,10 @@
 # Outstanding issues
 
+> ⚠️ **Pre-serverless (2026-05) — verify before trusting.** Some entries may be
+> resolved or reshaped by the 2026-07 EC2→Lambda migration (e.g. anything about
+> the host, cron, or local-disk state). Check against
+> [`ARCHITECTURE.md`](ARCHITECTURE.md) before acting on an item here.
+
 Things known to be broken or under-built, ordered by severity. Each entry has
 the symptom, where it surfaced, the root cause as best we know it, and a fix
 sketch. Cross off as resolved.

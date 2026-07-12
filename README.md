@@ -6,63 +6,54 @@ Daily job-search pipeline for someone applying to Columbia or NYU Law. Scrapes l
 
 If you're a new contributor or AI agent picking this up, read this section first. It covers the load-bearing facts about how production runs and how to debug it without SSH'ing in.
 
-### Production
+### Production (serverless — since 2026-07)
 
 - **URL:** <https://jobs.anyalawgirly.com>
-- **Host:** EC2 (us-east-1) behind a Cloudflare Tunnel + **Cloudflare Access** (zero-trust SSO). Every endpoint redirects to an SSO login page unless authenticated.
-- **Deploy:** GitHub Actions on push to `main` → SSH to EC2 → `git pull` → restart systemd. See `.github/workflows/deploy.yml`.
+- **Runtime:** the entire Express app runs as **AWS Lambda `anyajob-web`** (via `serverless-http`) behind an **API Gateway HTTP API**, in `us-east-1`. There is **no server to SSH into** — the EC2 box is retired.
+- **Auth:** Cloudflare fronts the origin (DNS + Full-strict TLS) and enforces **Cloudflare Access** (zero-trust SSO). API Gateway validates the `Cf-Access-Jwt-Assertion` JWT; a request straight to the execute-api URL with no Access JWT gets a 401.
+- **State:** all in **S3** (`anyajob-data` for the JSON "database", `anyajob-docs` for uploads) via the `src/store.js` seam. No local files in prod.
+- **Crons:** **EventBridge → Lambda `anyajob-cron`** (daily 6am ET, discovery Mon/Thu 7am ET).
+- **Deploy:** push to `main` → `.github/workflows/deploy-infra.yml` bundles the Lambda and `cdk deploy`s the stack.
 
-### Remote log access (no SSH required)
+**→ Full architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md). Agent operating guide: [`CLAUDE.md`](CLAUDE.md).**
 
-The server exposes redacted logs + a diagnostic bundle behind Cloudflare Access:
-- `GET /api/logs/sources` — what log files exist
-- `GET /api/logs/:source?since=1h&level=warn&limit=500` — one log, filtered + redacted
-- `GET /api/diagnostic` — curated state bundle (sources, listings counts, spend, log tails)
+### Logs & debugging
 
-To hit these from a laptop or from a Claude Code session, you need a **Cloudflare Access service token**:
+Lambda writes to **CloudWatch Logs**, one group per function:
+`/aws/lambda/anyajob-web`, `/aws/lambda/anyajob-cron`,
+`/aws/lambda/anyajob-scoring-worker`. That's the source of truth.
 
-1. **Create the token** — Cloudflare Zero Trust → Access → Service Auth → Create Service Token → name it `claude-debug` (or similar).
-2. **Add the token to the Access policy** for `jobs.anyalawgirly.com` as an Include rule → Service Auth → your token.
-3. **Save to `.env.local`** (gitignored, local-only — never commit):
-   ```
-   ANYAJOB_URL=https://jobs.anyalawgirly.com
-   CF_CLIENT_ID=<token client id>
-   CF_CLIENT_SECRET=<token client secret>
-   ```
-4. **Hit the endpoints** with the matching headers:
-   ```bash
-   set -a; source .env.local; set +a
-   curl -H "CF-Access-Client-Id: $CF_CLIENT_ID" \
-        -H "CF-Access-Client-Secret: $CF_CLIENT_SECRET" \
-        "$ANYAJOB_URL/api/logs/server?since=2h&level=warn"
-   ```
-
-The shell CLI `bin/anyajob-logs` wraps the same auth and reads the same three vars from `.env.local` (auto-sourced from the cwd or repo root). So `./bin/anyajob-logs daily 1h` or `./bin/anyajob-logs --copy diag` works without any further setup once `.env.local` is in place. Run `./bin/anyajob-logs --help` for the full flag list.
+> The in-app `/api/logs/*` endpoints (and the `bin/anyajob-logs` CLI that wrapped them) tailed a `server.log` file on disk — an EC2-only pattern. Lambda's filesystem is ephemeral, so use CloudWatch in prod.
 
 ### Deploy quirks worth knowing
 
-The deploy script (`.github/workflows/deploy.yml`) does two non-obvious things that matter when debugging cache issues:
+`scripts/build-lambda-bundle.sh` (run inside `deploy-infra.yml`) does two non-obvious things that matter when debugging cache issues:
 
-1. **HTML cache-bust** — sed replaces every literal `__CACHE_VERSION__` in `public/*.html` with the current commit SHA. So `<script src="/foo.js?v=__CACHE_VERSION__">` becomes `?v=abc1234`. The non-HTML static files are served with `Cache-Control: public, max-age=31536000, immutable` from Cloudflare's CDN — the commit-SHA query string is what forces browsers to refetch on every deploy.
-2. **JS import cache-bust** — same idea but for ES module imports inside `public/**/*.js`. The regex (`\.+/[^'?]*\.js`) rewrites `from './foo.js'` and `from '../app.js'` to include `?v=$COMMIT_SHA`. **Burned us on 2026-05-25:** the earlier version of the regex only matched same-directory imports (`./`), so after the `components/` subdir refactor every `from '../app.js'` import silently pinned to a year-old immutable-cached copy of `/app.js`. Latent bug — only surfaced when a downstream file actually referenced a new export. Fixed in `169b7bf`. **If you add a transitive import path the regex still doesn't match** (e.g. absolute paths, deep relatives, anything funky), check that file after deploy or the same class of bug returns.
+1. **HTML cache-bust** — perl replaces every literal `__CACHE_VERSION__` in `public/*.html` with the current commit SHA, so `<script src="/foo.js?v=__CACHE_VERSION__">` becomes `?v=abc1234`. Static assets are served long-lived/immutable, so the commit-SHA query string is what forces browsers to refetch on every deploy.
+2. **JS import cache-bust** — same idea for ES module imports inside `public/**/*.js`. The regex (`\.+/[^'?]*\.js`) rewrites `from './foo.js'` and `from '../app.js'` to include `?v=$COMMIT_SHA`. **Burned us on 2026-05-25:** an earlier regex only matched same-directory imports (`./`), so after the `components/` subdir refactor every `from '../app.js'` silently pinned to a year-old cached copy. Fixed in `169b7bf`. **If you add an import path the regex still doesn't match** (absolute paths, deep relatives, anything funky), check that file after deploy or the bug returns.
+
+It also fetches the linux `@napi-rs/canvas` prebuilt (native dep `pdf-parse` needs for résumé PDF text extraction) — the reason the Lambda arch is pinned `x86_64` and there's a custom bundle step instead of a plain CDK asset.
 
 ### Codebase entry points
 
-- **Server:** `src/server.js` (Express, mounts route files)
-- **Daily pipeline (cron):** `src/daily.js` — scrape → score → email → cleanup
-- **Routes:** `src/routes/{listings,sources,profile,documents,logs,diagnostic,…}.js`
+- **Web (Lambda):** `src/lambda.js` → wraps `src/server.js` (Express, mounts route files)
+- **Scoring worker (Lambda):** `src/worker.js` — async résumé scoring (off the 30s API GW cap)
+- **Cron (Lambda):** `src/cron.js` — dispatches `{job}` → `src/daily.js` / `scripts/discover.js` / `scripts/weekly.js`
+- **Daily pipeline:** `src/daily.js` — scrape → score → summaries → cleanup
+- **Routes:** `src/routes/{listings,sources,profile,documents,…}.js`
+- **Storage seam:** `src/store.js` (+ `io.js`/`atomic.js` re-exports), `src/docstore.js` for uploads
 - **AI prompts (centralized):** `src/prompts.js` — all of them in one file
-- **Frontend pages:** `public/{index,profile,settings,ignored}.html` + matching `.js`
+- **Frontend pages:** `public/{index,profile,settings}.html` + matching `.js`
 - **Shared frontend modules:** `public/components/`, `public/app.js`
-- **Vendored libraries:** `public/vendor/pdfjs/` — pdfjs-dist for the résumé feedback PDF viewer
+- **Infra (CDK):** `infra/lib/anyajob-stack.ts` (`AnyaJobStack`)
 
 ### Where to look next
 
-- `DEPLOY.md` — EC2 + Cloudflare Tunnel + SES setup, deploy details
-- `HANDOFF.md` — design rationale and the "ongoing concerns" file
-- `OUTSTANDING.md` — known production issues by severity
-- `GITHUB.md` — repo + push-to-deploy setup
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — **current-state architecture (start here)**
+- [`CLAUDE.md`](CLAUDE.md) — operating guide for AI agents
+- `SERVERLESS-TRANSITION.md` — the migration history (how we got from EC2 to here)
 - `data/preferences.example.json` — schema for `data/preferences.json` (gitignored, holds Anya's profile)
+- `DEPLOY.md` / `HANDOFF.md` / `OUTSTANDING.md` / `GITHUB.md` — **pre-serverless**; historical context only (see banners at the top of each)
 
 ## What's in this version
 
@@ -108,60 +99,50 @@ To see the design without setup, open `public/preview.html` directly in a browse
 ## Project structure
 
 ```
-job-tracker/
+anyajob/
 ├── README.md              ← this file
-├── DEPLOY.md              ← EC2 + Cloudflare Tunnel + SES setup
-├── GITHUB.md              ← GitHub repo setup + push-to-deploy
-├── setup.sh               ← idempotent provisioning script
+├── ARCHITECTURE.md        ← current-state serverless architecture (start here)
+├── CLAUDE.md              ← operating guide for AI agents
+├── SERVERLESS-TRANSITION.md ← migration history (EC2 → serverless)
 ├── package.json
 ├── .env.example
-├── .gitignore
-├── .github/
-│   └── workflows/
-│       └── deploy.yml     ← push-to-deploy workflow
-├── data/
+├── .github/workflows/
+│   ├── deploy-infra.yml   ← THE deploy: bundle Lambda + cdk deploy (on push to main)
+│   └── …                  ← other workflows are EC2-era / one-shot migrations (dead)
+├── infra/                 ← AWS CDK app (TypeScript, ESM type-stripped)
+│   ├── bin/infra.ts
+│   └── lib/anyajob-stack.ts   ← AnyaJobStack: Lambdas, HTTP API, S3, schedules, alarms
+├── data/                  ← LOCAL dev store only (STORAGE=fs); prod state is in S3
 │   ├── preferences.example.json  ← committed template
 │   ├── preferences.json          ← her actual profile (gitignored)
-│   ├── listings.json
-│   ├── feedback.json
-│   ├── seen.json
-│   ├── spend.json
-│   └── documents/                ← uploaded resumes/cover letters
+│   └── …                         ← listings.json, feedback.json, seen.json, spend.json
 ├── src/
-│   ├── daily.js
-│   ├── server.js
-│   ├── score.js
-│   ├── prompts.js
-│   ├── dedupe.js
-│   ├── notify.js          ← SES email + templates
-│   ├── summaries.js       ← daily brief + weekly reflection generators
-│   ├── documents.js       ← resume/cover upload, DOCX→PDF, scoring
-│   └── sources/
-│       ├── index.js
-│       ├── greenhouse.js
-│       ├── lever.js
-│       ├── usajobs.js
-│       ├── idealist.js
-│       ├── nycbar.js
-│       └── psjd.js
+│   ├── lambda.js          ← web Lambda entrypoint (serverless-http → server.js)
+│   ├── worker.js          ← scoring-worker Lambda (async résumé scoring)
+│   ├── cron.js            ← cron Lambda dispatcher (daily/discover/weekly)
+│   ├── server.js          ← Express app (mounts routes)
+│   ├── daily.js           ← daily pipeline: scrape → score → summaries
+│   ├── discover.js        ← source discovery (Mon/Thu)
+│   ├── store.js / io.js / atomic.js  ← storage seam (fs | s3)
+│   ├── docstore.js        ← uploaded-doc binaries (S3 anyajob-docs)
+│   ├── score.js · prompts.js · dedupe*.js · summaries.js · documents.js · notify.js
+│   ├── routes/            ← listings, sources, profile, documents, …
+│   └── sources/           ← greenhouse, lever, usajobs, idealist, nycbar, psjd
 ├── scripts/
-│   ├── backup.js          ← nightly S3 sync
-│   ├── restore.sh         ← restore from S3
-│   ├── weekly.js          ← Sunday digest cron
-│   └── test-email.js      ← verify SES setup
+│   ├── build-lambda-bundle.sh ← builds infra/.app-bundle (deps + canvas + cache-bust)
+│   ├── weekly.js · discover.js · smoke.mjs · test-email.js · backup.js · restore.sh
 └── public/
-    ├── index.html         ← table view + modal (+ add-role modal trigger)
-    ├── settings.html      ← preferences editor
-    │                       (email previews + test send live in settings.html → Notifications section)
-    ├── style.css
-    ├── app.js
+    ├── index.html · profile.html · settings.html
+    ├── style.css · app.js
     └── components/
         ├── modal.js                    ← listing detail modal
-        ├── add-role-modal.js           ← manual JD scorer modal (opens from roles page)
-        ├── review-candidates-modal.js  ← pending source candidates (opens from roles page)
-        ├── candidates.js               ← shared source-candidate card renderer
-        └── documents.js                ← upload UI
+        ├── documents.js                ← application-materials + PDF preview
+        ├── feedback-modal.js           ← résumé/cover feedback modal
+        ├── add-role-modal.js · review-candidates-modal.js · candidates.js
 ```
+
+> `setup.sh` and `DEPLOY.md` provision the **old EC2 host** — kept for history,
+> not used by the serverless deployment.
 
 ## Setup (on laptop)
 
@@ -221,27 +202,23 @@ Edit `data/preferences.json`:
 
 ## Deploy
 
-See `DEPLOY.md` for full EC2 + Cloudflare Tunnel + SES setup. ~30 minutes (plus 24h SES approval wait).
-See `GITHUB.md` for repo setup and optional push-to-deploy via GitHub Actions.
+**Push to `main`.** `.github/workflows/deploy-infra.yml` runs the tests, bundles
+the Lambda (`npm run bundle:lambda`), and `cdk deploy`s `AnyaJobStack`. Doc-only
+pushes (`*.md`) are skipped. That's the whole deploy path — see
+[`ARCHITECTURE.md`](ARCHITECTURE.md) for the stack detail and the manual
+`cdk deploy` command (including the SSM-sourced Anthropic key parameter).
 
-Quickstart:
-
-```bash
-# On a fresh Ubuntu 24.04 (or 26.04) EC2:
-git clone git@github.com:<your-github-user>/anyajob.git
-cd anyajob
-./setup.sh                # installs Node, LibreOffice, AWS CLI, cloudflared, systemd, cron
-nano .env                 # add Anthropic API key, AWS region, NOTIFY_FROM, BACKUP_BUCKET
-nano data/preferences.json  # her actual profile
-sudo systemctl start anyajob
-```
+> The old `DEPLOY.md` / `GITHUB.md` / `setup.sh` describe the retired EC2 +
+> Cloudflare Tunnel setup. Kept for history; not part of the serverless deploy.
 
 ## Cost
 
 - Claude API: ~$1–5/month (Haiku 4.5 + prompt caching)
-- EC2: free 12 months, then ~$8/month (or Hetzner CX11 €4/mo forever)
+- AWS (Lambda + API Gateway + S3 + EventBridge): ≈ pennies/month at this volume
 - Domain: ~$10/year via Cloudflare
-- Cloudflare Tunnel + Access: free for personal use
+- Cloudflare Access: free for personal use
+
+(Was ~$8–10/month on the always-on EC2 t3.micro before the serverless migration.)
 
 ## Application status pipeline
 

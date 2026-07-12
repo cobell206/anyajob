@@ -1,5 +1,10 @@
 # GitHub setup
 
+> ⚠️ **Historical — pre-serverless.** The push-to-deploy described here wired
+> GitHub Actions to **SSH into EC2**. Production now deploys via CDK
+> (`deploy-infra.yml`), and the repo already exists. See
+> [`ARCHITECTURE.md`](ARCHITECTURE.md). Kept for historical reference only.
+
 How to put this project on GitHub and (optionally) wire up push-to-deploy.
 
 ## 1. Create the repo (private)

@@ -1,5 +1,11 @@
 # AnyaJob — Deploy Tonight
 
+> ⚠️ **Historical — pre-serverless.** This one-night checklist provisioned the
+> original EC2 host + Cloudflare Tunnel + SES, all retired in the 2026-07 move
+> to Lambda + API Gateway + S3. Not current. See
+> [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`README.md`](README.md). Kept for
+> historical reference only.
+
 Step-by-step checklist. Do these in order. ~60–75 min total, then submit the SES request before bed and emails will be live in the morning.
 
 **Login:** Cloudflare Access handles it. When anyone visits the URL, they see a Cloudflare login page, enter their email, and get a one-time PIN. You whitelist which emails are allowed (hers + yours). No passwords, no app auth code. Free for personal use.

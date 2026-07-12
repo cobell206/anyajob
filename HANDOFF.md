@@ -1,5 +1,11 @@
 # HANDOFF.md
 
+> ⚠️ **Partly superseded — pre-serverless (2026-05).** Product/design rationale
+> here may still be useful, but any **infrastructure** description (EC2,
+> Cloudflare Tunnel, systemd, cron, local-disk state) is out of date after the
+> 2026-07 migration. For current architecture and agent guidance, read
+> [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`CLAUDE.md`](CLAUDE.md) **first**.
+
 Context document for Claude Code (or any future contributor) picking this up. Read this first.
 
 ## What this is

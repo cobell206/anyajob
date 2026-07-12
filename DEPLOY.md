@@ -1,5 +1,12 @@
 # Deploy Guide: EC2 + Cloudflare Tunnel + Access
 
+> ⚠️ **Historical — pre-serverless.** This describes the retired EC2 +
+> Cloudflare Tunnel + systemd/cron deployment (before the 2026-07 migration to
+> Lambda + API Gateway + S3). It is **not** how production is deployed now.
+> Current deploy: push to `main` → `deploy-infra.yml`. See
+> [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`README.md`](README.md). Kept for
+> historical reference only.
+
 End-to-end setup, ~30-45 minutes if you've never done it before.
 
 ## Part 1: Anthropic API account (5 min)
