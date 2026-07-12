@@ -409,7 +409,19 @@ function updateColCounts() {
   });
 }
 
-function renderKanban() {
+// Sortable powers only the kanban drag-and-drop, which most visits never
+// open. Lazy-load its (self-hosted) ESM module on first kanban render instead
+// of a render-blocking <script> in every page's <head>. Cached so repeated
+// view switches don't re-import.
+let sortablePromise = null;
+function loadSortable() {
+  if (!sortablePromise) {
+    sortablePromise = import('/vendor/sortable/sortable.esm.js').then((m) => m.default);
+  }
+  return sortablePromise;
+}
+
+async function renderKanban() {
   const board = $('#kanban-board');
   const groups = groupByStatus(allListings);
   board.innerHTML = kanbanColumns().map((col) => {
@@ -437,6 +449,7 @@ function renderKanban() {
     });
   });
 
+  const Sortable = await loadSortable();
   $$('.kanban-cards', board).forEach((el) => {
     Sortable.create(el, {
       group: 'kanban',
