@@ -56,6 +56,29 @@
   top: -1px;
 }
 
+/* Pulse the whole section border in the same pink when review is pending, so
+   it draws the eye even while the accordion is collapsed. The pink ring is
+   layered on top of the panel's base --shadow-xs so the resting shadow stays. */
+.section.has-pending {
+  animation: section-pending-pulse 1.8s ease-in-out infinite;
+}
+@keyframes section-pending-pulse {
+  0%, 100% {
+    border-color: rgba(236, 72, 153, 0.35);
+    box-shadow: var(--shadow-xs), 0 0 0 0 rgba(236, 72, 153, 0);
+  }
+  50% {
+    border-color: rgba(236, 72, 153, 0.95);
+    box-shadow: var(--shadow-xs), 0 0 0 4px rgba(236, 72, 153, 0.16);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .section.has-pending {
+    animation: none;
+    border-color: rgba(236, 72, 153, 0.75);
+  }
+}
+
 /* Source cards */
 .source-list { display: flex; flex-direction: column; gap: 8px; }
 /* .source-card (base + .candidate-card variant), .source-name/.source-meta/
