@@ -15,6 +15,7 @@ import {
   readJsonSafe,
   readJsonStrict,
   writeJson,
+  updateJson,
   writeRaw,
   exists,
   removeFile,
@@ -55,6 +56,39 @@ test(`[${process.env.STORAGE || 'fs'}] readJsonSafe returns fallback on missing`
 
 test(`[${process.env.STORAGE || 'fs'}] readJson throws on missing`, async () => {
   await assert.rejects(() => readJson(MISSING));
+});
+
+test(`[${process.env.STORAGE || 'fs'}] updateJson creates from fallback when absent`, async () => {
+  const K = `__contract_upd_${randomUUID()}.json`;
+  try {
+    const out = await updateJson(K, (cur) => { cur.n = (cur.n || 0) + 1; return cur; }, { fallback: { n: 0 } });
+    assert.deepEqual(out, { n: 1 });
+    assert.deepEqual(await readJson(K), { n: 1 });
+  } finally {
+    await removeFile(K);
+  }
+});
+
+test(`[${process.env.STORAGE || 'fs'}] updateJson read-modify-writes existing + accumulates`, async () => {
+  const K = `__contract_upd_${randomUUID()}.json`;
+  try {
+    await writeJson(K, { items: ['a'] });
+    await updateJson(K, (cur) => { cur.items.push('b'); return cur; });
+    await updateJson(K, (cur) => { cur.items.push('c'); return cur; });
+    assert.deepEqual(await readJson(K), { items: ['a', 'b', 'c'] });
+  } finally {
+    await removeFile(K);
+  }
+});
+
+test(`[${process.env.STORAGE || 'fs'}] updateJson supports an async mutator`, async () => {
+  const K = `__contract_upd_${randomUUID()}.json`;
+  try {
+    await updateJson(K, async (cur) => { await Promise.resolve(); cur.ok = true; return cur; }, { fallback: {} });
+    assert.deepEqual(await readJson(K), { ok: true });
+  } finally {
+    await removeFile(K);
+  }
 });
 
 test(`[${process.env.STORAGE || 'fs'}] readJsonStrict throws on missing`, async () => {

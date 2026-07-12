@@ -19,7 +19,7 @@
 
 // ============================================================================
 // SCORING — runs per new listing during the daily scrape
-// Model: Haiku 4.5 (with prompt caching on the system blocks)
+// Model: Sonnet 4.6 (with prompt caching on the system blocks) — see src/score.js
 // Audience: internal — output drives the score column + the modal rationale
 // ============================================================================
 
@@ -219,7 +219,7 @@ export function buildWeeklyReflectionUser(context) {
 
 // ============================================================================
 // RESUME vs JD ALIGNMENT — runs when she uploads a resume
-// Model: Haiku 4.5
+// Model: Sonnet 4.6 — see src/documents.js
 // Audience: HER. Reads as practical guidance, not deficit-framed feedback.
 // ============================================================================
 

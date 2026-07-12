@@ -127,5 +127,6 @@ but fails harmlessly), `fetch-logs.yml`, `verify-live.yml`,
 ## Cost
 
 Lambda + API Gateway + S3 + EventBridge ≈ pennies/month at this volume;
-Anthropic ~$1–5/mo (Haiku 4.5 + prompt caching); domain ~$10/yr; Cloudflare
+Anthropic ~$1–5/mo (listing/résumé scoring on Sonnet 4.6; briefs, discovery &
+extraction on Haiku 4.5; prompt caching throughout); domain ~$10/yr; Cloudflare
 Access free. (Was ~$8–10/mo on the always-on EC2 t3.micro.)

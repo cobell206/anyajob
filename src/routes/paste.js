@@ -8,7 +8,7 @@
 // flows into future scoring calibration and source discovery.
 
 import { Router } from 'express';
-import { readJson, writeJson } from '../io.js';
+import { readJson, updateJson } from '../io.js';
 import { scoreOne, loadRecentFeedback } from '../score.js';
 import { fingerprint, dedupKey } from '../dedupe.js';
 import { extractSingleListing } from '../sources/smartfetch.js';
@@ -90,29 +90,33 @@ router.post('/', async (req, res) => {
       scoreError = err.message;
     }
 
-    const all = await readJson('listings.json');
-    all.listings.push({
-      ...listing,
-      score,
-      ingestedAt: new Date().toISOString(),
-    });
-    await writeJson('listings.json', all);
+    const record = { ...listing, score, ingestedAt: new Date().toISOString() };
+    await updateJson('listings.json', (all) => {
+      all.listings.push(record);
+      return all;
+    }, { fallback: { listings: [] } });
 
     if (alreadyApplied) {
-      const feedback = await readJson('feedback.json');
       const key = listing.dedupKey;
-      feedback.status[key] = applicationStatus;
-      // Applied date only meaningful for applied/interview/offer; rejected
-      // tracks via rejectAt elsewhere, but we still record when she applied.
-      feedback.appliedDate[key] = appliedDate || new Date().toISOString().slice(0, 10);
-      if (applicationNote) {
-        feedback.notes[key] = applicationNote.slice(0, 2000);
-      }
-      // Treat as a positive calibration example — she chose to apply.
-      // loadRecentFeedback() reads feedback.ratings; this is what feeds
-      // the scoring prompt's calibration block in src/prompts.js.
-      feedback.ratings[key] = 'up';
-      await writeJson('feedback.json', feedback);
+      await updateJson('feedback.json', (feedback) => {
+        // Buckets may be absent on a fresh feedback.json.
+        feedback.status ??= {};
+        feedback.appliedDate ??= {};
+        feedback.notes ??= {};
+        feedback.ratings ??= {};
+        feedback.status[key] = applicationStatus;
+        // Applied date only meaningful for applied/interview/offer; rejected
+        // tracks via rejectAt elsewhere, but we still record when she applied.
+        feedback.appliedDate[key] = appliedDate || new Date().toISOString().slice(0, 10);
+        if (applicationNote) {
+          feedback.notes[key] = applicationNote.slice(0, 2000);
+        }
+        // Treat as a positive calibration example — she chose to apply.
+        // loadRecentFeedback() reads feedback.ratings; this is what feeds
+        // the scoring prompt's calibration block in src/prompts.js.
+        feedback.ratings[key] = 'up';
+        return feedback;
+      }, { fallback: {} });
     }
 
     res.json({ listing, score, scoreError });

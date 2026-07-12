@@ -3,7 +3,7 @@
 // (status, rating, note, dates) before returning.
 
 import { Router } from 'express';
-import { readJson, readJsonSafe, writeJson } from '../io.js';
+import { readJson, readJsonSafe, updateJson } from '../io.js';
 import { scoreOne, loadRecentFeedback, buildIgnoreContext } from '../score.js';
 import { getProfileResumeText } from '../documents.js';
 
@@ -133,12 +133,24 @@ router.post('/listings/:key/rescore', async (req, res) => {
       buildIgnoreContext(),
     ]);
 
+    // Score OUTSIDE the update loop so a concurrent-write retry re-applies the
+    // cheap mutation, never re-runs the (paid, slow) scoring call.
     const score = await scoreOne(data.listings[idx], prefs, examples, resumeText, ignoreContext);
-    data.listings[idx] = { ...data.listings[idx], score };
-    await writeJson('listings.json', data);
+
+    let scored = null;
+    await updateJson('listings.json', (cur) => {
+      const i = (cur.listings || []).findIndex(
+        (l) => (l.dedupKey || l.fingerprint) === key,
+      );
+      if (i >= 0) {
+        cur.listings[i] = { ...cur.listings[i], score };
+        scored = cur.listings[i];
+      }
+      return cur;
+    }, { fallback: { listings: [] } });
 
     const feedback = await readJsonSafe('feedback.json', { fallback: {} });
-    res.json({ listing: hydrate(data.listings[idx], feedback) });
+    res.json({ listing: hydrate(scored || { ...data.listings[idx], score }, feedback) });
   } catch (err) {
     // scoreOne throws on the daily spend cap; surface it so the UI can explain.
     res.status(500).json({ error: err.message });

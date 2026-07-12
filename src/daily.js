@@ -3,7 +3,6 @@
 // Pipeline: fetch → dedupe → pre-filter → score → save → generate summaries.
 
 import 'dotenv/config';
-import { writeJsonAtomic } from './atomic.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { fetchAll } from './sources/index.js';
@@ -11,7 +10,7 @@ import { dedupeListings, saveSeen } from './dedupe.js';
 import { scoreOne, loadRecentFeedback, buildIgnoreContext } from './score.js';
 import { generateDailyBrief, generateWeeklyReflection } from './summaries.js';
 import { getProfileResumeText } from './documents.js';
-import { fbKey, readJson } from './io.js';
+import { fbKey, readJson, updateJson } from './io.js';
 import { classifyLocation } from './location.js';
 import { requiresLawDegree } from './degree.js';
 import { createLogger } from './log.js';
@@ -80,7 +79,7 @@ export async function main() {
   log.info({ startedAt }, 'daily run starting');
 
   const prefs = await readJson(PREFS_PATH);
-  const existing = await readJson(LISTINGS_PATH);
+  let existing = await readJson(LISTINGS_PATH);
 
   // 1. Fetch
   log.info('fetching from all sources');
@@ -148,9 +147,13 @@ export async function main() {
   }
   log.info({ count: scored.length, cost: totalCost.toFixed(4) }, 'scoring complete');
 
-  // 6. Persist
-  existing.listings.push(...scored);
-  await writeJsonAtomic(LISTINGS_PATH, existing);
+  // 6. Persist. Append via updateJson so a browser paste/re-score that lands
+  // mid-scrape isn't clobbered (ETag-guarded on S3). Re-read the merged result
+  // into `existing` so the morning-email section below sees the full roster.
+  existing = await updateJson(LISTINGS_PATH, (cur) => {
+    cur.listings.push(...scored);
+    return cur;
+  }, { fallback: { listings: [] } });
   await saveSeen(seen);
 
   // 7. Generate daily brief

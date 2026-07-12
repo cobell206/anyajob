@@ -69,6 +69,18 @@ const fsBackend = {
       if (err.code !== 'ENOENT') throw err;
     }
   },
+  // Read + version for the optimistic-concurrency path. The fs backend has no
+  // ETag; it's the single-process dev backend, so version is always null and
+  // conditional writes below are unconditional.
+  async readTextMeta(key) {
+    const text = await readFile(join(DATA, key), 'utf-8');
+    return { text, version: null };
+  },
+  async writeTextCond(key, text) {
+    // No cross-process CAS locally — a plain atomic write is correct for a
+    // single dev process. (The S3 backend is where real contention happens.)
+    await this.writeText(key, text);
+  },
 };
 
 // ---- s3 backend: same interface as fs, backed by one object per key.
@@ -122,6 +134,46 @@ function makeS3Backend() {
     async remove(key) {
       // DeleteObject is idempotent — no error if the key is already absent.
       await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: s3key(key) }));
+    },
+    // Read + ETag so updateJson can write conditionally on the object not having
+    // changed since this read.
+    async readTextMeta(key) {
+      try {
+        const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: s3key(key) }));
+        const text = await res.Body.transformToString('utf-8');
+        return { text, version: res.ETag };
+      } catch (err) {
+        if (isMissing(err)) {
+          const e = new Error(`no such object: ${s3key(key)}`);
+          e.code = 'ENOENT';
+          throw e;
+        }
+        throw err;
+      }
+    },
+    // Conditional PutObject. `ifMatch` (an ETag) overwrites only if unchanged;
+    // `ifNoneMatch: '*'` creates only if absent. A concurrent write trips S3's
+    // precondition check (412, occasionally 409 on racing creates) — surface it
+    // as a coded error so updateJson knows to re-read and retry.
+    async writeTextCond(key, text, { ifMatch, ifNoneMatch } = {}) {
+      try {
+        await client.send(new PutObjectCommand({
+          Bucket: bucket,
+          Key: s3key(key),
+          Body: text,
+          ContentType: 'application/json',
+          ...(ifMatch ? { IfMatch: ifMatch } : {}),
+          ...(ifNoneMatch ? { IfNoneMatch: ifNoneMatch } : {}),
+        }));
+      } catch (err) {
+        const status = err?.$metadata?.httpStatusCode;
+        if (err?.name === 'PreconditionFailed' || status === 412 || status === 409) {
+          const e = new Error(`precondition failed for ${s3key(key)}`);
+          e.code = 'PRECONDITION_FAILED';
+          throw e;
+        }
+        throw err;
+      }
     },
   };
 }
@@ -225,6 +277,54 @@ export async function writeRaw(nameOrPath, text) {
 // Atomic write of a JSON value.
 export async function writeJson(nameOrPath, value, { indent = 2 } = {}) {
   await writeRaw(nameOrPath, JSON.stringify(value, null, indent));
+}
+
+// Optimistic-concurrency read-modify-write. Reads the current value, hands it
+// to `mutate` (which returns the value to persist), then writes it back
+// conditionally: on S3 the write is guarded by the ETag read here, so if the
+// daily cron and a browser action both touch e.g. listings.json at once, the
+// loser gets a 412 and we re-read + re-apply instead of clobbering. On fs
+// (single-process dev) the write is unconditional. `mutate` may be async and
+// MUST return the new value (mutating in place and returning it is fine).
+// `fallback` is what `mutate` receives when the file doesn't exist yet.
+export async function updateJson(nameOrPath, mutate, { fallback = null, retries = 5, indent = 2 } = {}) {
+  const key = keyFor(nameOrPath);
+  for (let attempt = 0; ; attempt++) {
+    let current, version;
+    try {
+      const meta = await backend.readTextMeta(key);
+      try {
+        current = JSON.parse(meta.text);
+      } catch (err) {
+        // Mirror readJson's self-healing: recover a leading value from a file
+        // with trailing garbage rather than blowing away the whole object.
+        if (!(err instanceof SyntaxError)) throw err;
+        const recovered = tryParseLeadingJson(meta.text);
+        if (recovered === null) throw err;
+        current = recovered;
+      }
+      version = meta.version;
+    } catch (err) {
+      if (err.code === 'ENOENT') { current = fallback; version = null; }
+      else throw err;
+    }
+
+    const next = await mutate(current);
+    const text = JSON.stringify(next, null, indent);
+    // Existing object → require the ETag; new object → require it stays absent.
+    const cond = version ? { ifMatch: version } : { ifNoneMatch: '*' };
+    try {
+      await backend.writeTextCond(key, text, cond);
+      return next;
+    } catch (err) {
+      if (err.code === 'PRECONDITION_FAILED' && attempt < retries) {
+        // Brief backoff, then re-read the now-current value and re-apply.
+        await new Promise((r) => setTimeout(r, 15 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 // Does a data file exist? (First-run seed checks used fs.existsSync directly;

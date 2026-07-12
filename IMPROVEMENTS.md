@@ -62,15 +62,17 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` won't do
 (listings.json ≈ 27 KB; full read/rewrite is fine). Do **not** migrate to a DB
 without a concrete pain. The items below harden the current model.
 
-### 2.1 Fix lost updates on shared JSON files — `[ ]`
+### 2.1 Fix lost updates on shared JSON files — `[x]`
 - **Priority:** high (correctness)
-- **Problem:** daily cron rewrites `listings.json` / `feedback.json` while the
-  browser may also be writing feedback. Last-writer-wins silently drops one side.
-- **Change (preferred):** S3 conditional writes — thread the read ETag through
-  `src/store.js` and `PutObject` with `If-Match`; retry on `412`.
-- **Change (alternative):** split `feedback.json` into per-key objects
-  (`feedback/{dedupKey}.json`) so a rating and a cron score never touch the same
-  object.
+- **Decision:** S3 conditional writes (ETag CAS), not the per-key split.
+- **Done:** added `updateJson(name, mutator, {fallback})` to `src/store.js` — a
+  read-modify-write that, on S3, guards the `PutObject` with `If-Match` (the ETag
+  from the read) / `If-None-Match:*` for creates, and retries on `412/409`. On fs
+  it's a plain atomic write (single-process dev). Migrated the hot writers:
+  `daily.js` listings append (cron), `routes/listings.js` re-score, `routes/paste.js`
+  (listings + feedback), and all six `routes/feedback.js` writes. Re-score/paste
+  do the paid scoring OUTSIDE the retry loop so a retry never re-spends. Contract
+  tests cover the new helper on both backends.
 
 ### 2.2 If a real DB is ever needed — `[-]` (deferred, documented)
 - **Recommendation:** DynamoDB on-demand — 25 GB perpetually free, no idle cost,
@@ -123,17 +125,23 @@ indirectly. Biggest opportunity area.
 
 ## Loose end to confirm
 
-### Scoring model: doc vs code mismatch — `[ ]`
-- `ARCHITECTURE.md §Cost` says scoring runs on **Haiku 4.5**, but
-  `src/score.js:19` uses `claude-sonnet-4-6` (~10× token cost — the biggest
-  driver of the Anthropic bill).
-- **Action:** decide if Sonnet is intentional (accuracy) → fix the doc; or an
-  oversight → switch to Haiku. Then update whichever is stale.
+### Scoring model: doc vs code mismatch — `[x]`
+- `ARCHITECTURE.md §Cost` said scoring runs on **Haiku 4.5**, but the code uses
+  `claude-sonnet-4-6` for listing + résumé/cover scoring.
+- **Decision:** Sonnet is intentional (better judgment). Fixed the docs, not the
+  code: corrected `ARCHITECTURE.md §Cost` and two stale `// Model: Haiku 4.5`
+  comments in `src/prompts.js` (SCORING, RESUME-vs-JD) to Sonnet 4.6.
 
 ---
 
-## Suggested order
+## Status
 
-1. **1.1 + 1.2** — one small commit, biggest page-load win.
-2. **3.1 + 3.3** — editable goals field wired into both prompts + re-score button.
-3. **2.1** — S3 conditional writes.
+All items complete as of 2026-07-12. **2.2** (DynamoDB) stays intentionally
+not-done — recorded for if the data model ever outgrows S3-JSON.
+
+Shipped across these commits on `main`:
+1. Page load — self-host fonts + lazy Sortable; lazy Anthropic SDK; parallel reads.
+2. Grading — goals + weighting into scoring & discovery; per-listing re-score;
+   target-schools templating.
+3. Data model — `updateJson` ETag CAS + hot-writer migration.
+4. Docs — scoring-model mismatch corrected (Sonnet, intentional).

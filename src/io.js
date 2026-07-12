@@ -11,6 +11,7 @@ export {
   DATA,
   readJson,
   writeJson,
+  updateJson,
   readJsonSafe,
   readJsonStrict,
   readRaw,
