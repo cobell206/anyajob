@@ -110,12 +110,14 @@ indirectly. Biggest opportunity area.
   `_scoredAt` predates `preferences.scoringConfigUpdatedAt` (stamped only when
   goals/weighting actually change).
 
-### 3.4 Template `targetSchools` into the scoring prompt — `[ ]`
+### 3.4 Template `targetSchools` into the scoring prompt — `[x]`
 - **Priority:** low
-- **Where:** `src/prompts.js` (`SCORING_SYSTEM`)
-- **Problem:** hardcodes "Columbia, NYU" / "T14" even though
+- **Where:** `src/prompts.js` (`SCORING_SYSTEM` + `buildSystemBlocks`)
+- **Problem:** hardcoded "Columbia, NYU" / "T14" even though
   `profile.targetSchools` exists and is editable.
-- **Change:** template the schools in so editing them actually changes scoring.
+- **Done:** made the static rubric school-agnostic and added a "HER TARGET
+  SCHOOLS" line built from `profile.targetSchools` — editing them now steers
+  LAW SCHOOL VALUE.
 
 ---
 

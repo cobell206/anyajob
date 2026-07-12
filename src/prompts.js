@@ -23,11 +23,11 @@
 // Audience: internal — output drives the score column + the modal rationale
 // ============================================================================
 
-const SCORING_SYSTEM = `You are an admissions strategist helping evaluate jobs for someone applying to top law schools (Columbia, NYU). Score each job listing on two dimensions:
+const SCORING_SYSTEM = `You are an admissions strategist helping evaluate jobs for someone applying to top law schools (her specific target schools are listed in her profile below). Score each job listing on two dimensions:
 
 1. QUALIFICATION FIT (0-10): How well does this person's background match what the role requires? Consider listed requirements, her years of experience, her current role, and any specialized skills mentioned.
 
-2. LAW SCHOOL VALUE (0-10): How much does this role strengthen her T14 application? High-value signals include:
+2. LAW SCHOOL VALUE (0-10): How much does this role strengthen her application to those target schools? High-value signals include:
    - Direct legal exposure (paralegal at top firms, judicial internships, DA's office, federal agencies)
    - Demonstrated commitment to law as a field (vs. random prestige)
    - Skills admissions committees value: writing, research, client contact, analytical reasoning
@@ -83,6 +83,13 @@ export function buildSystemBlocks(preferences, resumeText = null) {
   const keywordsText = JSON.stringify(preferences.keywords, null, 2);
   const weighting = weightingPolicy(preferences.scoreWeighting);
 
+  // Surface her actual target schools so LAW SCHOOL VALUE is judged against
+  // them, not the schools that used to be hardcoded in the rubric.
+  const schools = preferences.profile?.targetSchools || [];
+  const schoolsLine = schools.length
+    ? `\n\nHER TARGET SCHOOLS (judge LAW SCHOOL VALUE against these): ${schools.join(', ')}`
+    : '';
+
   // Her own free-text statement of what she's optimizing for right now. When
   // present it's authoritative — it should override the general rubric on any
   // conflict, since it's the most current read on her intent.
@@ -99,7 +106,7 @@ export function buildSystemBlocks(preferences, resumeText = null) {
     },
     {
       type: 'text',
-      text: `\n\nAPPLICANT PROFILE:\n${profileText}\n\nHER KEYWORD PREFERENCES:\n${keywordsText}\n\n${weighting}${goalsBlock}`,
+      text: `\n\nAPPLICANT PROFILE:\n${profileText}${schoolsLine}\n\nHER KEYWORD PREFERENCES:\n${keywordsText}\n\n${weighting}${goalsBlock}`,
       cache_control: { type: 'ephemeral' },
     },
   ];
