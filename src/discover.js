@@ -127,13 +127,17 @@ export function buildDiscoveryUserMessage({
 }) {
   const targetSchools = prefs.profile?.targetSchools || [];
 
-  // Her free-text "what matters to me right now" — the same statement that
-  // steers scoring (see buildSystemBlocks in prompts.js). Surfaced high in the
-  // prompt so source discovery aligns with her current intent, not just the
-  // static profile.
-  const goals = (prefs.goals || '').trim();
-  const goalsBlock = goals
-    ? `\n\nWHAT SHE'S OPTIMIZING FOR RIGHT NOW (her own words — prioritize sources that serve this):\n${goals}`
+  // Her current priorities — the same emphasize/deprioritize slots that steer
+  // scoring (see buildSystemBlocks in prompts.js). Surfaced high in the prompt
+  // so source discovery aligns with her current intent, not just the static
+  // profile. (Legacy single `goals` string is treated as emphasis.)
+  const emphasize = (prefs.emphasize || prefs.goals || '').trim();
+  const deprioritize = (prefs.deprioritize || '').trim();
+  const priorityLines = [];
+  if (emphasize) priorityLines.push(`- Emphasize: ${emphasize}`);
+  if (deprioritize) priorityLines.push(`- Avoid / deprioritize: ${deprioritize}`);
+  const goalsBlock = priorityLines.length
+    ? `\n\nHER CURRENT PRIORITIES (favor sources that serve these):\n${priorityLines.join('\n')}`
     : '';
 
   const positiveBlock = formatPositiveSignal(listings, feedback);

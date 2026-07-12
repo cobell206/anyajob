@@ -90,12 +90,18 @@ export function buildSystemBlocks(preferences, resumeText = null) {
     ? `\n\nHER TARGET SCHOOLS (judge LAW SCHOOL VALUE against these): ${schools.join(', ')}`
     : '';
 
-  // Her own free-text statement of what she's optimizing for right now. When
-  // present it's authoritative — it should override the general rubric on any
-  // conflict, since it's the most current read on her intent.
-  const goals = (preferences.goals || '').trim();
-  const goalsBlock = goals
-    ? `\n\nWHAT SHE'S OPTIMIZING FOR RIGHT NOW (her own words — weight this heavily; when it conflicts with the general rubric above, defer to this):\n${goals}`
+  // Her current priorities — two bounded slots (emphasize / deprioritize) she
+  // sets in Settings. These BIAS a role's standing WITHIN the fixed rubric;
+  // they must not change the 0-10 calibration, the two dimensions, or the JSON
+  // output — otherwise scores stop being comparable across roles and days.
+  // Back-compat: a legacy single `goals` string is treated as emphasis.
+  const emphasize = (preferences.emphasize || preferences.goals || '').trim();
+  const deprioritize = (preferences.deprioritize || '').trim();
+  const priorityLines = [];
+  if (emphasize) priorityLines.push(`- Emphasize (nudge these up): ${emphasize}`);
+  if (deprioritize) priorityLines.push(`- Deprioritize / avoid (nudge these down): ${deprioritize}`);
+  const goalsBlock = priorityLines.length
+    ? `\n\nHER CURRENT PRIORITIES — use these to prioritize WITHIN the rubric above. They raise or lower a role's standing, but do NOT change the 0-10 scale, the two dimensions, or the required JSON output format:\n${priorityLines.join('\n')}`
     : '';
 
   const blocks = [

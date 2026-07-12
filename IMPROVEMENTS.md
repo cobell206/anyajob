@@ -136,6 +136,22 @@ indirectly. Biggest opportunity area.
 
 ## Follow-ups (post-review enhancements)
 
+### F2 Structured priority slots + fix injection strength — `[x]`
+- **Where:** `src/prompts.js`, `src/discover.js`, `src/routes/preferences.js`,
+  `public/settings.{html,js,css}`, `data/preferences.example.json`
+- **Context:** the single free-text `goals` box was injected as an *override*
+  ("when it conflicts with the rubric, defer to this") — a real consistency risk,
+  since it let user input alter the fixed 0–10 calibration / JSON contract.
+- **Done:** replaced `goals` with two bounded slots — `emphasize` and
+  `deprioritize` — surfaced as labeled fields in Settings. The prompt now frames
+  them as "prioritize WITHIN the rubric; do NOT change the scale, dimensions, or
+  JSON output," so they bias ranking without destabilizing scores. Same slots
+  feed discovery. Legacy single `goals` string is read as `emphasize` for
+  back-compat and retired on next save. Guidance panel updated (shows when both
+  slots empty) and drops the "this wins" language. `scoringConfigUpdatedAt` now
+  tracks both slots + weighting.
+- **Note:** visual pass pending — Chrome extension wasn't connected.
+
 ### F1 Shimmer the table while listings lazy-load — `[x]`
 - **Where:** `public/roles.js` (`renderSkeleton`), `public/style.css`
 - **Context:** the `__INITIAL` fast-path renders real rows synchronously (no

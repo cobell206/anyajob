@@ -28,7 +28,8 @@ router.post('/', async (req, res) => {
   // so the re-score prompt is only offered when it would actually differ.
   const prev = await readJsonSafe('preferences.json', { fallback: {} });
   const configChanged =
-    (prev.goals || '') !== (incoming.goals || '') ||
+    (prev.emphasize || '') !== (incoming.emphasize || '') ||
+    (prev.deprioritize || '') !== (incoming.deprioritize || '') ||
     (prev.scoreWeighting || '') !== (incoming.scoreWeighting || '');
   incoming.scoringConfigUpdatedAt = configChanged
     ? new Date().toISOString()

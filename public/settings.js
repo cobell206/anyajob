@@ -950,7 +950,9 @@ async function loadPrefs() {
 // Friendly editors for the scoring knobs (goals + weighting). Reads from the
 // shared `prefs` object; kept in sync with the raw JSON editor below.
 function renderGradingSection() {
-  $('#goals').value = prefs?.goals || '';
+  // Back-compat: a legacy single `goals` string seeds the Emphasize field.
+  $('#emphasize').value = prefs?.emphasize || prefs?.goals || '';
+  $('#deprioritize').value = prefs?.deprioritize || '';
   const weight = prefs?.scoreWeighting || 'law-school';
   const radio = document.querySelector(`input[name="weighting"][value="${weight}"]`)
     || document.querySelector('input[name="weighting"][value="law-school"]');
@@ -958,25 +960,30 @@ function renderGradingSection() {
   updateGradingGuidance();
 }
 
-// Show the "how scoring works" guidance only while the goals box is empty.
+// Show the "how scoring works" guidance only while BOTH priority fields are empty.
 function updateGradingGuidance() {
   const guidance = $('#grading-guidance');
   if (!guidance) return;
-  guidance.hidden = $('#goals').value.trim().length > 0;
+  const hasText = $('#emphasize').value.trim().length > 0
+    || $('#deprioritize').value.trim().length > 0;
+  guidance.hidden = hasText;
 }
 
-$('#goals')?.addEventListener('input', updateGradingGuidance);
+$('#emphasize')?.addEventListener('input', updateGradingGuidance);
+$('#deprioritize')?.addEventListener('input', updateGradingGuidance);
 
 $('#save-grading').addEventListener('click', async () => {
   const status = $('#grading-status');
   const btn = $('#save-grading');
   const originalLabel = btn.innerHTML;
-  const goals = $('#goals').value.trim();
+  const emphasize = $('#emphasize').value.trim();
+  const deprioritize = $('#deprioritize').value.trim();
   const scoreWeighting = document.querySelector('input[name="weighting"]:checked')?.value || 'law-school';
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner sm on-primary"></span> Saving…';
   try {
-    const updated = { ...prefs, goals, scoreWeighting };
+    const updated = { ...prefs, emphasize, deprioritize, scoreWeighting };
+    delete updated.goals; // retire the legacy single-field shape on save
     await api('/api/preferences', { method: 'POST', body: updated });
     prefs = updated;
     $('#json').value = JSON.stringify(updated, null, 2);

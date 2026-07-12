@@ -397,10 +397,22 @@
   font-size: 12px; color: var(--muted);
   line-height: 1.5; margin: 2px 0 8px;
 }
-#goals {
-  width: 100%; resize: vertical; min-height: 92px;
-  font-size: 14px; line-height: 1.55;
+.priority-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+.priority-field label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--ink);
 }
+.priority-field textarea {
+  width: 100%; resize: vertical; min-height: 46px;
+  font-size: 14px; line-height: 1.5;
+}
+.priority-tag {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  padding: 2px 7px; border-radius: 999px;
+  color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line);
+}
+.priority-tag.up { color: var(--green-ink, var(--ink)); }
+.priority-tag.down { color: var(--muted); }
 .weighting-options { display: flex; flex-direction: column; gap: 8px; }
 .weighting-opt {
   display: flex; align-items: flex-start; gap: 10px;

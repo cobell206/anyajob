@@ -11,7 +11,8 @@
     "geo": "NYC",
     "additionalContext": "FILL IN — volunteer work, languages, prior legal exposure, etc."
   },
-  "goals": "FILL IN — free text: what matters most in her search right now. Steers both scoring and source discovery. e.g. 'Leaning public-interest over BigLaw this cycle; deprioritize anything requiring relocation; writing-heavy roles are a plus.'",
+  "emphasize": "FILL IN — role types / traits to weight UP, e.g. 'public-interest, writing-heavy roles, judicial internships'. Blank if none.",
+  "deprioritize": "FILL IN — traits to weight DOWN, e.g. 'roles requiring relocation out of NYC, pure admin'. Blank if none.",
   "scoreWeighting": "law-school",
   "keywords": {
     "boost": ["paralegal", "judicial", "pro bono", "policy", "research", "legal assistant"],
