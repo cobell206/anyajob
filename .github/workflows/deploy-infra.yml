@@ -1,9 +1,9 @@
 name: Deploy infra (CDK)
 
-# M5 Part A — deploy the AWS stack (Lambda + API Gateway + buckets/roles) from a
-# push, so the Lambda stays in lockstep with git instead of being hand-deployed
-# from a laptop. Runs alongside "Deploy to EC2" (deploy.yml); both fire on push
-# to main. The EC2 workflow goes away at M7, this one stays.
+# Deploy the AWS stack (Lambda + API Gateway + buckets/roles) on push to main,
+# so the Lambda stays in lockstep with git instead of being hand-deployed from a
+# laptop. This is the ONLY workflow now — the EC2-era workflows were deleted
+# once EC2 was retired.
 #
 # Auth: OIDC into the anyajob-github-deploy role (no stored keys). That role can
 # assume the CDK bootstrap roles and read the Anthropic key SSM param — see
@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20' # matches the Lambda/EC2 runtime
+          node-version: '20' # matches the Lambda runtime
           cache: 'npm'
       - run: npm ci
       - run: npm test
