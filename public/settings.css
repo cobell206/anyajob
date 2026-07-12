@@ -419,6 +419,29 @@
 .weighting-opt strong { font-size: 14px; font-weight: 600; color: var(--ink); }
 .weighting-opt small { font-size: 12px; color: var(--ink-2); line-height: 1.4; }
 
+/* Empty-state guidance under the goals box — explains how scoring works and
+   what to write. Shown only when the box is empty (toggled in settings.js). */
+.grading-guidance {
+  margin-top: 10px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.grading-guidance p { margin: 0 0 8px; }
+.grading-guidance p:last-child { margin-bottom: 0; }
+.grading-guidance strong { color: var(--ink); font-weight: 600; }
+.grading-guidance-lead { color: var(--ink); font-weight: 600; }
+.grading-guidance ul {
+  margin: 0 0 8px; padding-left: 18px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.grading-guidance-examples { font-style: italic; color: var(--ink-2); }
+.grading-guidance-foot { color: var(--muted); }
+
 .prefs-advanced { margin-top: 22px; }
 .prefs-advanced > summary {
   cursor: pointer; font-size: 13px; font-weight: 600;

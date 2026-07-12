@@ -239,6 +239,25 @@
           <p class="grading-hint">Free text. Steers both how roles are scored and what new sources get suggested — when it conflicts with the general rubric, this wins.</p>
           <textarea id="goals" rows="4" placeholder="e.g. Leaning public-interest over BigLaw this cycle; deprioritize anything requiring relocation; writing-heavy roles are a plus."></textarea>
 
+          <!-- Shown only when the goals box is empty: explains how scoring works
+               and what to write here. Hidden as soon as there's any text. -->
+          <div class="grading-guidance" id="grading-guidance" hidden>
+            <p class="grading-guidance-lead">Nothing here yet — here's how scoring works and what this box does.</p>
+            <p><strong>Every role gets two 0–10 scores</strong>, combined into the overall score you sort by:</p>
+            <ul>
+              <li><strong>Qualification fit</strong> — how well your background matches what the role asks for.</li>
+              <li><strong>Law-school value</strong> — how much the role strengthens your application to your target schools (legal exposure, brand-name employers, writing/research, pipeline programs).</li>
+            </ul>
+            <p>The <strong>weighting</strong> below decides how those two combine into the overall number. Your résumé, keyword filters, and past thumbs up/down also feed in automatically.</p>
+            <p><strong>This box adds your own steer in plain language.</strong> Write what matters right now — a lean, a dealbreaker, a tradeoff — and it shapes both scoring and which new sources get suggested. On any conflict with the general rubric, what you write here wins. For example:</p>
+            <ul class="grading-guidance-examples">
+              <li>“Leaning public-interest over BigLaw this cycle.”</li>
+              <li>“Deprioritize anything requiring relocation out of NYC.”</li>
+              <li>“Writing-heavy roles are a plus; pure admin is a minus.”</li>
+            </ul>
+            <p class="grading-guidance-foot">After you save, new roles use this immediately. To apply it to a role already scored, open it and hit <strong>Re-score</strong>.</p>
+          </div>
+
           <h3 class="zone-label" style="margin-top:18px">Score weighting</h3>
           <p class="grading-hint">How the overall score balances the two dimensions.</p>
           <div class="weighting-options" id="weighting-options">

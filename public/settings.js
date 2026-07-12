@@ -955,7 +955,17 @@ function renderGradingSection() {
   const radio = document.querySelector(`input[name="weighting"][value="${weight}"]`)
     || document.querySelector('input[name="weighting"][value="law-school"]');
   if (radio) radio.checked = true;
+  updateGradingGuidance();
 }
+
+// Show the "how scoring works" guidance only while the goals box is empty.
+function updateGradingGuidance() {
+  const guidance = $('#grading-guidance');
+  if (!guidance) return;
+  guidance.hidden = $('#goals').value.trim().length > 0;
+}
+
+$('#goals')?.addEventListener('input', updateGradingGuidance);
 
 $('#save-grading').addEventListener('click', async () => {
   const status = $('#grading-status');
