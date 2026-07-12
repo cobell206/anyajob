@@ -834,6 +834,52 @@ async function loadSummaries() {
   }
 }
 
+// Shimmer placeholders shown while the NETWORK path fetches listings — the
+// __INITIAL fast-path renders real rows synchronously and never sees this.
+// Row/card geometry mirrors the real markup so the swap causes no layout shift.
+function renderSkeleton() {
+  // Kanban has no per-column loading state; don't flash a table skeleton at
+  // kanban users on the (rare) network path — the board just fills in.
+  if (currentView === 'kanban') return;
+  const empty = $('#empty');
+  if (empty) empty.style.display = 'none';
+  $('.table-wrap').style.display = '';
+  $('#kanban-board').hidden = true;
+
+  const tbody = $('#tbody');
+  if (tbody) {
+    tbody.innerHTML = Array.from({ length: 8 }, () => `
+      <tr class="listing-row skeleton-row" aria-hidden="true">
+        <td><span class="skel skel-line" style="width:26px"></span></td>
+        <td><span class="skel skel-line" style="width:70%"></span></td>
+        <td><span class="skel skel-line" style="width:55%"></span></td>
+        <td><span class="skel skel-line" style="width:45%"></span></td>
+        <td><span class="skel skel-line" style="width:44px"></span></td>
+        <td><span class="skel skel-line" style="width:62px"></span></td>
+      </tr>
+    `).join('');
+  }
+
+  const cards = $('#cards');
+  if (cards) {
+    cards.innerHTML = Array.from({ length: 4 }, () => `
+      <div class="card skeleton-card" aria-hidden="true">
+        <div class="card-row">
+          <div style="flex:1;min-width:0">
+            <span class="skel skel-line" style="width:70%;margin-bottom:6px"></span>
+            <span class="skel skel-line-sm" style="width:45%"></span>
+          </div>
+          <span class="skel skel-block" style="width:34px;height:34px"></span>
+        </div>
+        <div class="card-meta">
+          <span class="skel skel-line-sm" style="width:82px"></span>
+          <span class="skel skel-line-sm" style="width:58px"></span>
+        </div>
+      </div>
+    `).join('');
+  }
+}
+
 async function load() {
   // Synchronous fast-path: server-side inline of GET / drops the initial
   // dataset on window.__INITIAL so we can render before any fetch fires.
@@ -853,6 +899,7 @@ async function load() {
     return;
   }
 
+  renderSkeleton();
   const data = await api('/api/listings?days=60');
   allListings = data.listings;
   await Promise.all([loadStats(), loadSummaries(), loadPendingReviewCount()]);

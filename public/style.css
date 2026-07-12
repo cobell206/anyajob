@@ -3396,6 +3396,10 @@ button[disabled] {
 @media (prefers-reduced-motion: reduce) {
   .skel { animation: none; }
 }
+/* Placeholder rows/cards are non-interactive — no hover lift, no pointer,
+   not a tab/click target — until the real listings swap in. */
+.skeleton-row, .skeleton-card { cursor: default; pointer-events: none; }
+.skeleton-row td { vertical-align: middle; }
 
 /* Resume vs JD alignment box */
 .align-box {

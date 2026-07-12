@@ -134,6 +134,20 @@ indirectly. Biggest opportunity area.
 
 ---
 
+## Follow-ups (post-review enhancements)
+
+### F1 Shimmer the table while listings lazy-load — `[x]`
+- **Where:** `public/roles.js` (`renderSkeleton`), `public/style.css`
+- **Context:** the `__INITIAL` fast-path renders real rows synchronously (no
+  loading state). The **network fallback** in `load()` (direct asset reload /
+  when the server inline didn't happen) left the table empty during the fetch.
+- **Done:** render `.skel` shimmer rows + card placeholders (mirroring the real
+  geometry, so no layout shift) before the `await api('/api/listings')`; `render()`
+  swaps in the real rows. Reuses the existing `.skel` keyframe; reduced-motion
+  drops the animation. Skipped for kanban view. `reloadData()` intentionally
+  keeps existing rows (no blank flash on refresh).
+- **Note:** visual pass pending — Chrome extension wasn't connected to drive it.
+
 ## Status
 
 All items complete as of 2026-07-12. **2.2** (DynamoDB) stays intentionally
