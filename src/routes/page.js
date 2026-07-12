@@ -48,11 +48,16 @@ function hydrate(listing, feedback) {
 }
 
 async function computeInitialData() {
-  const [{ listings = [] } = {}, feedback = {}, discoveries = {}] = await Promise.all([
+  // All four data files are read concurrently — none depends on another, and
+  // on Lambda each is a separate S3 GET, so serializing them would stack the
+  // round-trips onto the HTML's critical path. summaries uses readJsonSafe
+  // (missing file → null and the front-end skips the brief).
+  const [{ listings = [] } = {}, feedback = {}, discoveries = {}, summaries] = await Promise.all([
     readJson('listings.json').catch(() => ({ listings: [] })),
     readJson('feedback.json').catch(() => ({})),
     // Best-effort: missing file → empty object → 0 pending, pill stays hidden.
     readJson('discoveries.json').catch(() => ({})),
+    readJsonSafe(SUMMARIES_PATH, { fallback: null }),
   ]);
 
   // 60-day window matches what index.html requests via /api/listings?days=60.
@@ -76,9 +81,6 @@ async function computeInitialData() {
     const d = feedback.appliedDate?.[fbKey(l)];
     if (d && d >= weekCutoff) appliedThisWeek++;
   }
-
-  // Summaries: best-effort. Missing file → null and front-end skips the brief.
-  const summaries = await readJsonSafe(SUMMARIES_PATH, { fallback: null });
 
   // Pending source candidates: just the count + the run's summary copy so the
   // roles page can paint the pending-review pill without an extra fetch. The

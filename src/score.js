@@ -3,7 +3,7 @@
 // daily cap, returns parsed JSON. Uses prompt caching for the static blocks.
 
 import 'dotenv/config';
-import Anthropic from '@anthropic-ai/sdk';
+import { getAnthropic } from './anthropic.js';
 import { writeJsonAtomic } from './atomic.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -26,7 +26,6 @@ const PRICING = {
   output: 15.0 / 1_000_000,
 };
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function loadSpend() {
   return readJsonSafe(SPEND_PATH, { fallback: { byDay: {} } });
@@ -111,7 +110,7 @@ export async function scoreOne(listing, preferences, examples = [], resumeText =
   const systemBlocks = buildSystemBlocks(preferences, resumeText);
   const userMsg = buildUserMessage(listing, examples, ignoreContext);
 
-  const response = await client.messages.create({
+  const response = await (await getAnthropic()).messages.create({
     model: MODEL,
     max_tokens: 1200,
     system: systemBlocks,

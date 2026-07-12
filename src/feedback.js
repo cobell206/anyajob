@@ -11,7 +11,7 @@
 import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, extname } from 'node:path';
-import Anthropic from '@anthropic-ai/sdk';
+import { getAnthropic } from './anthropic.js';
 import {
   buildResumeFeedbackBlocks,
   buildResumeFeedbackUser,
@@ -33,7 +33,6 @@ const log = createLogger('feedback');
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DOCS_INDEX = join(__dirname, '..', 'data', 'documents.json');
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = 'claude-sonnet-4-6';
 
 // Pull résumé text via the shared extractor (pdf-parse / txt).
@@ -112,7 +111,7 @@ export async function generateResumeFeedback({ lens = 'law-school' } = {}) {
   log.info({ lens, isPdf, extractedChars, pdfBytes: isPdf ? meta.sizeBytes : null },
     'generating résumé feedback');
 
-  const response = await client.messages.create({
+  const response = await (await getAnthropic()).messages.create({
     model: MODEL,
     max_tokens: 4000,
     system,

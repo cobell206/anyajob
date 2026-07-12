@@ -16,17 +16,12 @@
 import 'dotenv/config';
 import fetch from 'node-fetch';
 import * as cheerio from 'cheerio';
-import Anthropic from '@anthropic-ai/sdk';
+import { getAnthropic } from '../anthropic.js';
 import { SMARTFETCH_EXTRACTION_SYSTEM, SINGLE_LISTING_EXTRACTION_SYSTEM } from '../prompts.js';
 
 const MODEL = 'claude-haiku-4-5-20251001';
 const MAX_HTML_CHARS = 60000; // ~15k tokens of stripped HTML
 
-let _client = null;
-function client() {
-  if (!_client) _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  return _client;
-}
 
 // Extraction prompt lives in src/prompts.js (SMARTFETCH_EXTRACTION_SYSTEM)
 
@@ -167,7 +162,7 @@ ${stripped}
 
 Return JSON only.`;
 
-  const response = await client().messages.create({
+  const response = await (await getAnthropic()).messages.create({
     model: MODEL,
     max_tokens: 2000,
     system: [{ type: 'text', text: SMARTFETCH_EXTRACTION_SYSTEM, cache_control: { type: 'ephemeral' } }],
@@ -221,7 +216,7 @@ export async function extractSingleListing(url) {
 
   const userMsg = `Source URL: ${url}\n\nCLEANED HTML:\n${stripped}\n\nReturn JSON only.`;
 
-  const response = await client().messages.create({
+  const response = await (await getAnthropic()).messages.create({
     model: MODEL,
     max_tokens: 4000,
     system: [{ type: 'text', text: SINGLE_LISTING_EXTRACTION_SYSTEM, cache_control: { type: 'ephemeral' } }],

@@ -10,7 +10,7 @@
 // iteration on the agentic loop and limit max_tokens.
 
 import 'dotenv/config';
-import Anthropic from '@anthropic-ai/sdk';
+import { getAnthropic } from './anthropic.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -29,11 +29,6 @@ const FEEDBACK_PATH = join(__dirname, '..', 'data', 'feedback.json');
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
-let _client = null;
-function client() {
-  if (!_client) _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  return _client;
-}
 
 // Discovery prompt lives in src/prompts.js (DISCOVERY_SYSTEM)
 
@@ -216,7 +211,7 @@ export async function discoverSources({ maxCandidates = 12, hint = '' } = {}) {
     maxCandidates,
   });
 
-  const response = await client().messages.create({
+  const response = await (await getAnthropic()).messages.create({
     model: MODEL,
     // Web search adds tool-use commentary between rounds, then the final JSON
     // blob — needs more headroom than score.js. 8k is enough for 15 searches

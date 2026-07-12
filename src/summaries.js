@@ -4,7 +4,7 @@
 // Weekly reflection: ~$0.003 per run, generated Sunday mornings.
 
 import 'dotenv/config';
-import Anthropic from '@anthropic-ai/sdk';
+import { getAnthropic } from './anthropic.js';
 import { writeJsonAtomic } from './atomic.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -29,7 +29,6 @@ const PRICING = {
   output: 5.0 / 1_000_000,
 };
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -113,7 +112,7 @@ export async function generateDailyBrief() {
     },
   };
 
-  const response = await client.messages.create({
+  const response = await (await getAnthropic()).messages.create({
     model: MODEL,
     max_tokens: 200,
     system: DAILY_BRIEF_SYSTEM,
@@ -210,7 +209,7 @@ export async function generateWeeklyReflection() {
     },
   };
 
-  const response = await client.messages.create({
+  const response = await (await getAnthropic()).messages.create({
     model: MODEL,
     max_tokens: 400,
     system: WEEKLY_REFLECTION_SYSTEM,

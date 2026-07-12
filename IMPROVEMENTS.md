@@ -32,23 +32,27 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[-]` won't do
   `<link>` + preconnects from all four pages; added a `preload` for the latin
   file. No external font requests remain.
 
-### 1.3 Lazy-import the Anthropic SDK in web paths — `[ ]`
+### 1.3 Lazy-import the Anthropic SDK in web paths — `[x]`
 - **Priority:** medium (cold-start latency)
 - **Problem:** single user ⇒ `anyajob-web` Lambda is usually cold; she pays init
-  cost most visits. The `@anthropic-ai/sdk` is only needed by scoring/worker
-  paths, not the web request path.
-- **Change:** confirm heavy deps (Anthropic SDK especially) aren't imported at
-  module top-level on the web path; lazy-`import()` inside the handlers that use
-  them so cold web requests don't parse them.
-- **Note:** do NOT use provisioned concurrency — not free-tier-friendly for the
-  benefit.
+  cost most visits. `server.js` statically wires every route, and seven modules
+  (`score`, `feedback`, `documents`, `summaries`, `discover`, `repair`,
+  `sources/smartfetch`) statically `import Anthropic` — so a plain listings
+  request parsed the whole SDK at cold start (several even constructed a client
+  at module scope).
+- **Done:** added `src/anthropic.js` — a cached, lazy `getAnthropic()` that
+  `import()`s the SDK on first real use. Converted all seven modules to
+  `await getAnthropic()` and removed every module-scope client. Verified
+  `server.js` imports in ~200ms with `ANTHROPIC_API_KEY` unset and the SDK
+  unevaluated; only reference left is the one dynamic `import()`.
+- **Note:** did NOT use provisioned concurrency — not free-tier-friendly.
 
-### 1.4 Parallelize the initial S3 reads — `[ ]`
+### 1.4 Parallelize the initial S3 reads — `[x]`
 - **Priority:** low
-- **Where:** `src/routes/page.js:81`
-- **Problem:** `summaries` is a separate `await` after the `Promise.all`.
-- **Change:** fold it into the same `Promise.all` so all four S3 GETs run
-  concurrently on the HTML critical path.
+- **Where:** `src/routes/page.js`
+- **Problem:** `summaries` was a separate `await` after the `Promise.all`.
+- **Done:** folded `summaries` into the same `Promise.all`, so all four data
+  reads (S3 GETs on Lambda) run concurrently on the HTML critical path.
 
 ---
 

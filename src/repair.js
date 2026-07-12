@@ -12,15 +12,10 @@
 // Costs ~$0.05–0.15 per call (web_search + Haiku tokens).
 
 import 'dotenv/config';
-import Anthropic from '@anthropic-ai/sdk';
+import { getAnthropic } from './anthropic.js';
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
-let _client = null;
-function client() {
-  if (!_client) _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  return _client;
-}
 
 const SYSTEM = `You help repair a broken job source in a personal job-tracking tool. The tool fetches careers pages and extracts listings. A source has stopped working (404 or 403). Your job: figure out the right replacement URL.
 
@@ -68,7 +63,7 @@ ERROR: ${errMsg}
 
 Use web_search to find the right replacement. Return JSON only.`;
 
-  const response = await client().beta.messages.create({
+  const response = await (await getAnthropic()).beta.messages.create({
     model: MODEL,
     max_tokens: 4000,
     betas: ['web-search-2025-03-05'],

@@ -9,7 +9,7 @@ import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, extname } from 'node:path';
 import { createHash } from 'node:crypto';
-import Anthropic from '@anthropic-ai/sdk';
+import { getAnthropic } from './anthropic.js';
 import { RESUME_ALIGNMENT_SYSTEM, COVER_LETTER_ALIGNMENT_SYSTEM } from './prompts.js';
 import { writeJsonAtomic } from './atomic.js';
 import { readJson, readJsonSafe, fbKey } from './io.js';
@@ -160,7 +160,6 @@ export async function deleteDocument(fingerprint, slot, fileToDelete = null) {
 
 // ---------- Resume vs JD scoring ----------
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = 'claude-sonnet-4-6';
 
 function hashBuffer(buf) {
@@ -315,7 +314,7 @@ ${resumeText}${candidateNotesBlock}${priorBlock}
 
 Return JSON only.`;
 
-  const response = await client.messages.create({
+  const response = await (await getAnthropic()).messages.create({
     model: MODEL,
     max_tokens: 2000,
     system: [{ type: 'text', text: RESUME_ALIGNMENT_SYSTEM, cache_control: { type: 'ephemeral' } }],
@@ -381,7 +380,7 @@ ${coverText}${candidateNotesBlock}${priorBlock}
 
 Return JSON only.`;
 
-  const response = await client.messages.create({
+  const response = await (await getAnthropic()).messages.create({
     model: MODEL,
     max_tokens: 2000,
     system: [{ type: 'text', text: COVER_LETTER_ALIGNMENT_SYSTEM, cache_control: { type: 'ephemeral' } }],
