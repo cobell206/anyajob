@@ -116,9 +116,11 @@ and why there's a custom bundle script instead of a plain `cdk` asset.
 ## What's dead / vestigial
 
 EC2 is **stopped** (instance `i-0fb0c9e04b10c9993`; EBS retained as rollback
-until termination). These workflows are EC2-era or one-shot migrations and no
-longer do anything useful: `deploy.yml` ("Deploy to EC2" — still fires on push
-but fails harmlessly), `fetch-logs.yml`, `verify-live.yml`,
+until termination). `deploy.yml` ("Deploy to EC2") was the only EC2 workflow
+that fired on push — it SSHed to the stopped host and failed every push, so it
+was **deleted** (2026-07). The remaining EC2-era / one-shot-migration workflows
+are all `workflow_dispatch`-only (manual), so they never run on their own and
+are harmless clutter: `fetch-logs.yml`, `verify-live.yml`,
 `disable-ec2-crons.yml`, `disable-backup-cron.yml`, `cutover-to-s3.yml`,
 `s3-migrate.yml`, `read-cron-env.yml`, `check-daily-runtime.yml`,
 `migrate-degree.yml`, `migrate-location.yml`, `clear-parse-failed.yml`. Only
