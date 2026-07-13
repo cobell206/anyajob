@@ -1290,6 +1290,10 @@ td {
 .status-interview { color: #6d28d9; background: #ede9fe; }
 .status-offer { color: var(--green-ink); background: var(--green-soft); }
 .status-offer::before { background: var(--green); box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.2); }
+/* 'declined' = employer rejected the application. Red text/dot to read as a
+   negative outcome, but on a neutral surface so it's clearly distinct from
+   'Ignored' (status-rejected), which is red-on-red. */
+.status-declined { color: var(--bad); background: var(--surface-2); }
 .status-rejected { color: var(--bad); background: var(--bad-soft); }
 
 /* ============ MOBILE CARDS ============ */

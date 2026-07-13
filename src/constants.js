@@ -10,6 +10,9 @@ export const VALID_STATUSES = [
   'applied',
   'interview',
   'offer',
+  'declined', // employer rejected the application (a real outcome; stays in the
+              // main table). Distinct from 'rejected', which means she dismissed
+              // the listing and is surfaced in the UI as "Ignored".
   'rejected',
   'pass',
 ];

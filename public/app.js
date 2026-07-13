@@ -68,6 +68,10 @@ export const STATUSES = [
   { value: 'applied', label: 'Applied' },
   { value: 'interview', label: 'Interview' },
   { value: 'offer', label: 'Offer' },
+  // 'declined' = employer turned down the application (a real outcome that
+  // stays in the main roster). Separate from 'rejected' below, which means she
+  // dismissed the listing and is labeled "Ignored".
+  { value: 'declined', label: 'Rejected' },
   { value: 'rejected', label: 'Ignored', pickerLabel: 'Ignore' },
 ];
 

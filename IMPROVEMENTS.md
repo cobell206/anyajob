@@ -136,6 +136,20 @@ indirectly. Biggest opportunity area.
 
 ## Follow-ups (post-review enhancements)
 
+### F4 "Rejected" application-outcome status — `[x]`
+- **Where:** `src/constants.js`, `public/app.js` (`STATUSES`), `public/style.css`
+- **Context:** the pipeline (Applied → Interview → Offer) had no terminal "didn't
+  get it" state. The value `rejected` was already taken — it means she *dismissed
+  the listing* and is surfaced as "Ignored".
+- **Decision:** new value `declined`, labeled **"Rejected"**, **stays in the main
+  table** (not moved to /ignored).
+- **Done:** added `declined` to `VALID_STATUSES` and `STATUSES` (before the
+  Ignored entry). Everything is driven off `STATUSES`, so the filter pill, kanban
+  column, and modal picker all pick it up automatically; added a `.status-declined`
+  badge (red text on a neutral surface, distinct from Ignored's red-on-red). It
+  stays counted in the roster (`total = length − rejected`). Verified the status
+  route accepts `declined` (400s on invalid) and the role stays in `/api/listings`.
+
 ### F3 Keep guidance visible + live prompt preview — `[x]`
 - **Where:** `public/settings.{html,js,css}`
 - **Context:** the guidance panel hid once either priority field had text; wanted
